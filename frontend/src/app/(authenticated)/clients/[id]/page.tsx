@@ -4,47 +4,32 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
+interface ClientEmail { id: number; email: string; label: string | null; isPrimary: boolean; }
+interface ClientPhone { id: number; phone: string; label: string | null; isPrimary: boolean; }
+interface ClientAddress { id: number; address: string; label: string | null; isPrimary: boolean; }
+interface Contact { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; role: string | null; notes: string | null; }
+interface PassportCopy { id: number; label: string; originalName: string; mimeType: string; fileSize: number; uploadedAt: string; }
+
 interface Client {
   id: number;
   type: 'company' | 'person';
   name: string;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
   taxId: string | null;
   notes: string | null;
+  emails: ClientEmail[];
+  phones: ClientPhone[];
+  addresses: ClientAddress[];
   contacts: Contact[];
   passportCopies: PassportCopy[];
 }
 
-interface Contact {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  phone: string | null;
-  role: string | null;
-  notes: string | null;
-}
-
-interface PassportCopy {
-  id: number;
-  label: string;
-  originalName: string;
-  mimeType: string;
-  fileSize: number;
-  uploadedAt: string;
-}
-
-type Tab = 'info' | 'contacts' | 'passports' | 'jobs';
+type Tab = 'overview' | 'contacts' | 'passports' | 'jobs';
 
 export default function ClientDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [client, setClient] = useState<Client | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>('info');
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   const loadClient = () => {
     api.get<Client>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
@@ -53,17 +38,13 @@ export default function ClientDetailPage() {
   useEffect(() => { loadClient(); }, [id]);
 
   if (!client) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
   }
 
   const tabs: { id: Tab; label: string; show: boolean }[] = [
-    { id: 'info', label: 'Info', show: true },
-    { id: 'contacts', label: 'Contacts', show: client.type === 'company' },
-    { id: 'passports', label: 'Passport Copies', show: true },
+    { id: 'overview', label: 'Overview', show: true },
+    { id: 'contacts', label: `Contacts (${client.contacts.length})`, show: client.type === 'company' },
+    { id: 'passports', label: `Passport Copies (${client.passportCopies.length})`, show: true },
     { id: 'jobs', label: 'Jobs', show: true },
   ];
 
@@ -81,18 +62,17 @@ export default function ClientDetailPage() {
           <button onClick={() => router.push('/clients')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">
             ← Back to Clients
           </button>
-          <h1 className="text-2xl font-bold text-text">{client.name}</h1>
-          <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold mt-1 inline-block ${
-            client.type === 'company' ? 'bg-primary-light text-primary' : 'bg-warning-light text-warning'
-          }`}>
-            {client.type === 'company' ? 'Company' : 'Person'}
-          </span>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-text">{client.name}</h1>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+              client.type === 'company' ? 'bg-primary-light text-primary' : 'bg-warning-light text-warning'
+            }`}>
+              {client.type === 'company' ? 'Company' : 'Person'}
+            </span>
+          </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => router.push(`/jobs?clientId=${client.id}`)}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover"
-          >
+          <button onClick={() => router.push(`/jobs?clientId=${client.id}`)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
             + New Job
           </button>
           <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">
@@ -108,9 +88,7 @@ export default function ClientDetailPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? 'border-primary text-primary'
-                : 'border-transparent text-text-secondary hover:text-text'
+              activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'
             }`}
           >
             {tab.label}
@@ -118,67 +96,205 @@ export default function ClientDetailPage() {
         ))}
       </div>
 
-      {activeTab === 'info' && <InfoTab client={client} onUpdate={loadClient} />}
+      {activeTab === 'overview' && <OverviewTab client={client} onUpdate={loadClient} />}
       {activeTab === 'contacts' && client.type === 'company' && <ContactsTab clientId={client.id} contacts={client.contacts} onUpdate={loadClient} />}
       {activeTab === 'passports' && <PassportsTab clientId={client.id} copies={client.passportCopies} onUpdate={loadClient} />}
-      {activeTab === 'jobs' && <JobsTab clientId={client.id} />}
+      {activeTab === 'jobs' && <JobsTab />}
     </div>
   );
 }
 
-// ── Info Tab ──
+// ── Overview Tab ──
 
-function InfoTab({ client, onUpdate }: { client: Client; onUpdate: () => void }) {
-  const [form, setForm] = useState({
-    name: client.name,
-    email: client.email || '',
-    phone: client.phone || '',
-    address: client.address || '',
-    taxId: client.taxId || '',
-    notes: client.notes || '',
-  });
+function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({ name: client.name, taxId: client.taxId || '', notes: client.notes || '' });
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setMessage('');
-    try {
-      await api.patch(`/clients/${client.id}`, form);
-      onUpdate();
-      setMessage('Saved');
-      setTimeout(() => setMessage(''), 3000);
-    } finally {
-      setSaving(false);
-    }
+    await api.patch(`/clients/${client.id}`, form);
+    setSaving(false);
+    setEditing(false);
+    onUpdate();
   };
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-lg">
-      <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
-        <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-        <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
-        <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
-        <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
-        <Field label="Tax ID" value={form.taxId} onChange={(v) => setForm({ ...form, taxId: v })} />
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">Notes</label>
-          <textarea
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            rows={3}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-          />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Client Info Card */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-semibold text-text">Client Information</h3>
+          {!editing && (
+            <button onClick={() => setEditing(true)} className="text-sm text-primary hover:text-primary-hover font-medium">
+              Edit
+            </button>
+          )}
         </div>
+
+        {editing ? (
+          <form onSubmit={handleSave} className="space-y-4">
+            <Field label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+            <Field label="Tax ID" value={form.taxId} onChange={(v) => setForm({ ...form, taxId: v })} />
+            <div>
+              <label className="block text-sm font-medium text-text mb-1.5">Notes</label>
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3}
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+            </div>
+            <div className="flex gap-2">
+              <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+              <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-3">
+            <InfoRow label="Name" value={client.name} />
+            <InfoRow label="Type" value={client.type === 'company' ? 'Company' : 'Person'} />
+            <InfoRow label="Tax ID" value={client.taxId} />
+            <InfoRow label="Notes" value={client.notes} />
+          </div>
+        )}
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <button type="submit" disabled={saving} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-        {message && <span className="text-sm text-success">{message}</span>}
+
+      {/* Emails Card */}
+      <MultiValueCard
+        title="Emails"
+        items={client.emails.map((e) => ({ id: e.id, value: e.email, label: e.label }))}
+        placeholder="email@example.com"
+        inputType="email"
+        onAdd={async (value, label) => {
+          await api.post(`/clients/${client.id}/emails`, { email: value, label });
+          onUpdate();
+        }}
+        onRemove={async (itemId) => {
+          await api.delete(`/clients/${client.id}/emails/${itemId}`);
+          onUpdate();
+        }}
+      />
+
+      {/* Phones Card */}
+      <MultiValueCard
+        title="Phone Numbers"
+        items={client.phones.map((p) => ({ id: p.id, value: p.phone, label: p.label }))}
+        placeholder="+1 234 567 8900"
+        onAdd={async (value, label) => {
+          await api.post(`/clients/${client.id}/phones`, { phone: value, label });
+          onUpdate();
+        }}
+        onRemove={async (itemId) => {
+          await api.delete(`/clients/${client.id}/phones/${itemId}`);
+          onUpdate();
+        }}
+      />
+
+      {/* Addresses Card */}
+      <MultiValueCard
+        title="Addresses"
+        items={client.addresses.map((a) => ({ id: a.id, value: a.address, label: a.label }))}
+        placeholder="123 Main St, City, Country"
+        onAdd={async (value, label) => {
+          await api.post(`/clients/${client.id}/addresses`, { address: value, label });
+          onUpdate();
+        }}
+        onRemove={async (itemId) => {
+          await api.delete(`/clients/${client.id}/addresses/${itemId}`);
+          onUpdate();
+        }}
+      />
+    </div>
+  );
+}
+
+// ── Multi-Value Card (emails, phones, addresses) ──
+
+function MultiValueCard({ title, items, placeholder, inputType = 'text', onAdd, onRemove }: {
+  title: string;
+  items: { id: number; value: string; label: string | null }[];
+  placeholder: string;
+  inputType?: string;
+  onAdd: (value: string, label: string) => Promise<void>;
+  onRemove: (id: number) => Promise<void>;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [value, setValue] = useState('');
+  const [label, setLabel] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    await onAdd(value, label);
+    setValue('');
+    setLabel('');
+    setAdding(false);
+    setSaving(false);
+  };
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="font-semibold text-text">{title}</h3>
+        {!adding && (
+          <button onClick={() => setAdding(true)} className="text-sm text-primary hover:text-primary-hover font-medium">
+            + Add
+          </button>
+        )}
       </div>
-    </form>
+
+      {/* Existing items */}
+      {items.length === 0 && !adding && (
+        <p className="text-sm text-text-muted">No {title.toLowerCase()} added yet.</p>
+      )}
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div key={item.id} className="flex justify-between items-center py-2 px-3 bg-bg rounded-lg group">
+            <div>
+              <span className="text-sm text-text">{item.value}</span>
+              {item.label && <span className="text-xs text-text-muted ml-2">({item.label})</span>}
+            </div>
+            <button
+              onClick={() => onRemove(item.id)}
+              className="text-xs text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Add form */}
+      {adding && (
+        <form onSubmit={handleAdd} className="mt-3 p-3 border border-border rounded-lg bg-bg">
+          <div className="flex gap-2">
+            <input
+              type={inputType}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={placeholder}
+              required
+              className="flex-1 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Label (optional)"
+              className="w-36 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button type="submit" disabled={saving} className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover disabled:opacity-50">
+              {saving ? 'Adding...' : 'Add'}
+            </button>
+            <button type="button" onClick={() => setAdding(false)} className="px-3 py-1.5 bg-surface border border-border text-text-secondary rounded-lg text-xs">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -221,14 +337,10 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: number; conta
   };
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-3xl">
       <div className="flex justify-end mb-4">
-        <button
-          onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' }); }}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover"
-        >
-          + Add Contact
-        </button>
+        <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' }); }}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Contact</button>
       </div>
 
       {showForm && (
@@ -241,45 +353,33 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: number; conta
             <Field label="Role/Title" value={form.role} onChange={(v) => setForm({ ...form, role: v })} />
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-              {editingId ? 'Update' : 'Add Contact'}
-            </button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">
-              Cancel
-            </button>
+            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">{editingId ? 'Update' : 'Add Contact'}</button>
+            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
           </div>
         </form>
       )}
 
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Name</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Email</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Phone</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Role</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {contacts.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-text-muted">No contacts yet.</td></tr>
-            )}
-            {contacts.map((c) => (
-              <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg/50">
-                <td className="px-4 py-3 font-medium text-text">{c.firstName} {c.lastName}</td>
-                <td className="px-4 py-3 text-text-secondary">{c.email || '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{c.phone || '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{c.role || '—'}</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => handleEdit(c)} className="text-primary hover:text-primary-hover text-sm mr-3">Edit</button>
-                  <button onClick={() => handleDelete(c.id)} className="text-danger hover:text-danger/80 text-sm">Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Contact cards */}
+      {contacts.length === 0 && !showForm && (
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No contacts yet.</div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {contacts.map((c) => (
+          <div key={c.id} className="bg-surface border border-border rounded-xl p-5">
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <div className="font-semibold text-text">{c.firstName} {c.lastName}</div>
+                {c.role && <div className="text-xs text-text-muted mt-0.5">{c.role}</div>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleEdit(c)} className="text-xs text-primary hover:text-primary-hover">Edit</button>
+                <button onClick={() => handleDelete(c.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+              </div>
+            </div>
+            {c.email && <div className="text-sm text-text-secondary mb-1">{c.email}</div>}
+            {c.phone && <div className="text-sm text-text-secondary">{c.phone}</div>}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -333,21 +433,13 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
         <div className="flex gap-4 items-end">
           <div className="flex-1">
             <label className="block text-sm font-medium text-text mb-1.5">Label</label>
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Client Passport"
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Client Passport"
+              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
           <div className="flex-1">
             <label className="block text-sm font-medium text-text mb-1.5">File</label>
-            <input
-              type="file"
-              accept="image/*,.pdf"
-              required
-              className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium"
-            />
+            <input type="file" accept="image/*,.pdf" required
+              className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
           <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
             {uploading ? 'Uploading...' : 'Upload'}
@@ -355,42 +447,27 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
         </div>
       </form>
 
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Label</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">File</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Size</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Uploaded</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {copies.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-text-muted">No passport copies uploaded yet.</td></tr>
-            )}
-            {copies.map((pc) => (
-              <tr key={pc.id} className="border-b border-border last:border-0 hover:bg-bg/50">
-                <td className="px-4 py-3 font-medium text-text">{pc.label}</td>
-                <td className="px-4 py-3 text-text-secondary">{pc.originalName}</td>
-                <td className="px-4 py-3 text-text-secondary">{formatSize(pc.fileSize)}</td>
-                <td className="px-4 py-3 text-text-secondary">{new Date(pc.uploadedAt).toLocaleDateString()}</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => handleDelete(pc.id)} className="text-danger hover:text-danger/80 text-sm">Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {copies.length === 0 && (
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No passport copies uploaded yet.</div>
+      )}
+      <div className="space-y-3">
+        {copies.map((pc) => (
+          <div key={pc.id} className="bg-surface border border-border rounded-xl p-4 flex justify-between items-center">
+            <div>
+              <div className="font-medium text-text text-sm">{pc.label}</div>
+              <div className="text-xs text-text-muted mt-0.5">{pc.originalName} — {formatSize(pc.fileSize)} — {new Date(pc.uploadedAt).toLocaleDateString()}</div>
+            </div>
+            <button onClick={() => handleDelete(pc.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ── Jobs Tab (placeholder for Phase 7) ──
+// ── Jobs Tab (placeholder) ──
 
-function JobsTab({ clientId }: { clientId: number }) {
+function JobsTab() {
   return (
     <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
       Jobs for this client will appear here after Phase 7.
@@ -400,19 +477,23 @@ function JobsTab({ clientId }: { clientId: number }) {
 
 // ── Shared ──
 
+function InfoRow({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="flex justify-between py-2 border-b border-border last:border-0">
+      <span className="text-sm text-text-secondary">{label}</span>
+      <span className="text-sm text-text font-medium">{value || '—'}</span>
+    </div>
+  );
+}
+
 function Field({ label, value, onChange, type = 'text', required = false }: {
   label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean;
 }) {
   return (
     <div>
       <label className="block text-sm font-medium text-text mb-1.5">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required={required}
-        className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-      />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required}
+        className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
     </div>
   );
 }

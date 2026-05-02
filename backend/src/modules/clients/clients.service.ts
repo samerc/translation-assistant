@@ -4,12 +4,20 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, ILike } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Client } from './entities/client.entity.js';
 import { Contact } from './entities/contact.entity.js';
 import { PassportCopy } from './entities/passport-copy.entity.js';
+import { ClientEmail } from './entities/client-email.entity.js';
+import { ClientPhone } from './entities/client-phone.entity.js';
+import { ClientAddress } from './entities/client-address.entity.js';
 import { CreateClientDto, UpdateClientDto } from './dto/client.dto.js';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto.js';
+import {
+  CreateClientEmailDto,
+  CreateClientPhoneDto,
+  CreateClientAddressDto,
+} from './dto/client-detail.dto.js';
 
 @Injectable()
 export class ClientsService {
@@ -20,6 +28,12 @@ export class ClientsService {
     private readonly contactRepository: Repository<Contact>,
     @InjectRepository(PassportCopy)
     private readonly passportCopyRepository: Repository<PassportCopy>,
+    @InjectRepository(ClientEmail)
+    private readonly emailRepository: Repository<ClientEmail>,
+    @InjectRepository(ClientPhone)
+    private readonly phoneRepository: Repository<ClientPhone>,
+    @InjectRepository(ClientAddress)
+    private readonly addressRepository: Repository<ClientAddress>,
   ) {}
 
   // ── Clients ──
@@ -43,12 +57,13 @@ export class ClientsService {
 
     const qb = this.clientRepository
       .createQueryBuilder('client')
-      .loadRelationCountAndMap('client.contactsCount', 'client.contacts')
-      .loadRelationCountAndMap('client.passportCopiesCount', 'client.passportCopies');
+      .leftJoinAndSelect('client.emails', 'emails')
+      .leftJoinAndSelect('client.phones', 'phones')
+      .loadRelationCountAndMap('client.contactsCount', 'client.contacts');
 
     if (search) {
       qb.andWhere(
-        '(client.name LIKE :search OR client.email LIKE :search OR client.phone LIKE :search)',
+        '(client.name LIKE :search OR emails.email LIKE :search OR phones.phone LIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -57,7 +72,7 @@ export class ClientsService {
       qb.andWhere('client.type = :type', { type });
     }
 
-    const allowedSortFields = ['name', 'type', 'email', 'createdAt', 'updatedAt'];
+    const allowedSortFields = ['name', 'type', 'createdAt', 'updatedAt'];
     const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'name';
     qb.orderBy(`client.${safeSortBy}`, sortOrder === 'DESC' ? 'DESC' : 'ASC');
 
@@ -70,7 +85,7 @@ export class ClientsService {
   async findOne(id: number): Promise<Client> {
     const client = await this.clientRepository.findOne({
       where: { id },
-      relations: ['contacts', 'passportCopies'],
+      relations: ['emails', 'phones', 'addresses', 'contacts', 'passportCopies'],
     });
     if (!client) throw new NotFoundException('Client not found');
     return client;
@@ -92,6 +107,48 @@ export class ClientsService {
   async remove(id: number): Promise<void> {
     const client = await this.findOne(id);
     await this.clientRepository.remove(client);
+  }
+
+  // ── Emails ──
+
+  async addEmail(clientId: number, dto: CreateClientEmailDto): Promise<ClientEmail> {
+    await this.findOne(clientId);
+    const email = this.emailRepository.create({ ...dto, clientId });
+    return this.emailRepository.save(email);
+  }
+
+  async removeEmail(clientId: number, emailId: number): Promise<void> {
+    const email = await this.emailRepository.findOne({ where: { id: emailId, clientId } });
+    if (!email) throw new NotFoundException('Email not found');
+    await this.emailRepository.remove(email);
+  }
+
+  // ── Phones ──
+
+  async addPhone(clientId: number, dto: CreateClientPhoneDto): Promise<ClientPhone> {
+    await this.findOne(clientId);
+    const phone = this.phoneRepository.create({ ...dto, clientId });
+    return this.phoneRepository.save(phone);
+  }
+
+  async removePhone(clientId: number, phoneId: number): Promise<void> {
+    const phone = await this.phoneRepository.findOne({ where: { id: phoneId, clientId } });
+    if (!phone) throw new NotFoundException('Phone not found');
+    await this.phoneRepository.remove(phone);
+  }
+
+  // ── Addresses ──
+
+  async addAddress(clientId: number, dto: CreateClientAddressDto): Promise<ClientAddress> {
+    await this.findOne(clientId);
+    const address = this.addressRepository.create({ ...dto, clientId });
+    return this.addressRepository.save(address);
+  }
+
+  async removeAddress(clientId: number, addressId: number): Promise<void> {
+    const address = await this.addressRepository.findOne({ where: { id: addressId, clientId } });
+    if (!address) throw new NotFoundException('Address not found');
+    await this.addressRepository.remove(address);
   }
 
   // ── Contacts ──
@@ -136,7 +193,7 @@ export class ClientsService {
   // ── Passport Copies ──
 
   async findPassportCopies(clientId: number): Promise<PassportCopy[]> {
-    await this.findOne(clientId); // verify client exists
+    await this.findOne(clientId);
     return this.passportCopyRepository.find({
       where: { clientId },
       order: { uploadedAt: 'DESC' },
@@ -166,6 +223,5 @@ export class ClientsService {
     });
     if (!pc) throw new NotFoundException('Passport copy not found');
     await this.passportCopyRepository.remove(pc);
-    // File deletion from disk would be handled here
   }
 }

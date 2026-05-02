@@ -4,12 +4,15 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
+interface ClientEmail { id: number; email: string; label: string | null; }
+interface ClientPhone { id: number; phone: string; label: string | null; }
+
 interface Client {
   id: number;
   type: 'company' | 'person';
   name: string;
-  email: string | null;
-  phone: string | null;
+  emails: ClientEmail[];
+  phones: ClientPhone[];
   contactsCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -33,7 +36,7 @@ export default function ClientsPage() {
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ type: 'company' as 'company' | 'person', name: '', email: '', phone: '', address: '', taxId: '', notes: '' });
+  const [form, setForm] = useState({ type: 'company' as 'company' | 'person', name: '', taxId: '', notes: '' });
   const router = useRouter();
 
   const loadClients = () => {
@@ -66,14 +69,11 @@ export default function ClientsPage() {
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     const body: Record<string, string> = { type: form.type, name: form.name };
-    if (form.email) body.email = form.email;
-    if (form.phone) body.phone = form.phone;
-    if (form.address) body.address = form.address;
     if (form.taxId) body.taxId = form.taxId;
     if (form.notes) body.notes = form.notes;
     await api.post('/clients', body);
     setShowForm(false);
-    setForm({ type: 'company', name: '', email: '', phone: '', address: '', taxId: '', notes: '' });
+    setForm({ type: 'company', name: '', taxId: '', notes: '' });
     loadClients();
   };
 
@@ -120,23 +120,6 @@ export default function ClientsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Email</label>
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Phone</label>
-              <input
-                value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
               <label className="block text-sm font-medium text-text mb-1.5">Tax ID</label>
               <input
                 value={form.taxId}
@@ -144,15 +127,8 @@ export default function ClientsPage() {
                 className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Address</label>
-              <input
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
           </div>
+          <p className="text-xs text-text-muted mt-3">Emails, phones, and addresses can be added after creating the client.</p>
           <div className="flex gap-2 mt-4">
             <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
               Create Client
@@ -195,9 +171,7 @@ export default function ClientsPage() {
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('type')}>
                 Type <SortIcon field="type" />
               </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('email')}>
-                Email <SortIcon field="email" />
-              </th>
+              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Email</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Phone</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Contacts</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
@@ -229,8 +203,8 @@ export default function ClientsPage() {
                     {client.type === 'company' ? 'Company' : 'Person'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-text-secondary">{client.email || '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{client.phone || '—'}</td>
+                <td className="px-4 py-3 text-text-secondary">{client.emails?.[0]?.email || '—'}</td>
+                <td className="px-4 py-3 text-text-secondary">{client.phones?.[0]?.phone || '—'}</td>
                 <td className="px-4 py-3 text-text-secondary">{client.type === 'company' ? (client.contactsCount || 0) : '—'}</td>
                 <td className="px-4 py-3 text-text-secondary">{new Date(client.createdAt).toLocaleDateString()}</td>
               </tr>

@@ -4,7 +4,6 @@ import {
   IsIn,
   MinLength,
   MaxLength,
-  IsEmail,
 } from 'class-validator';
 
 export class CreateClientDto {
@@ -15,19 +14,6 @@ export class CreateClientDto {
   @MinLength(1)
   @MaxLength(255)
   name: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  phone?: string;
-
-  @IsOptional()
-  @IsString()
-  address?: string;
 
   @IsOptional()
   @IsString()
@@ -45,19 +31,6 @@ export class UpdateClientDto {
   @MinLength(1)
   @MaxLength(255)
   name?: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  phone?: string;
-
-  @IsOptional()
-  @IsString()
-  address?: string;
 
   @IsOptional()
   @IsString()

@@ -20,6 +20,11 @@ import { randomUUID } from 'crypto';
 import { ClientsService } from './clients.service.js';
 import { CreateClientDto, UpdateClientDto } from './dto/client.dto.js';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto.js';
+import {
+  CreateClientEmailDto,
+  CreateClientPhoneDto,
+  CreateClientAddressDto,
+} from './dto/client-detail.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 
@@ -82,6 +87,48 @@ export class ClientsController {
     return this.clientsService.remove(id);
   }
 
+  // ── Emails ──
+
+  @Post(':id/emails')
+  @RequirePermissions('clients:update')
+  addEmail(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientEmailDto) {
+    return this.clientsService.addEmail(id, dto);
+  }
+
+  @Delete(':id/emails/:emailId')
+  @RequirePermissions('clients:update')
+  removeEmail(@Param('id', ParseIntPipe) id: number, @Param('emailId', ParseIntPipe) emailId: number) {
+    return this.clientsService.removeEmail(id, emailId);
+  }
+
+  // ── Phones ──
+
+  @Post(':id/phones')
+  @RequirePermissions('clients:update')
+  addPhone(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientPhoneDto) {
+    return this.clientsService.addPhone(id, dto);
+  }
+
+  @Delete(':id/phones/:phoneId')
+  @RequirePermissions('clients:update')
+  removePhone(@Param('id', ParseIntPipe) id: number, @Param('phoneId', ParseIntPipe) phoneId: number) {
+    return this.clientsService.removePhone(id, phoneId);
+  }
+
+  // ── Addresses ──
+
+  @Post(':id/addresses')
+  @RequirePermissions('clients:update')
+  addAddress(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientAddressDto) {
+    return this.clientsService.addAddress(id, dto);
+  }
+
+  @Delete(':id/addresses/:addressId')
+  @RequirePermissions('clients:update')
+  removeAddress(@Param('id', ParseIntPipe) id: number, @Param('addressId', ParseIntPipe) addressId: number) {
+    return this.clientsService.removeAddress(id, addressId);
+  }
+
   // ── Contacts ──
 
   @Get(':id/contacts')
@@ -92,10 +139,7 @@ export class ClientsController {
 
   @Post(':id/contacts')
   @RequirePermissions('clients:create')
-  createContact(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateContactDto,
-  ) {
+  createContact(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateContactDto) {
     return this.clientsService.createContact(id, dto);
   }
 
