@@ -42,6 +42,14 @@ translation-assistant/
 - `docker compose up -d` — Start MariaDB
 - `docker compose down` — Stop all containers
 
+## Auth
+- JWT access tokens (15 min TTL) + refresh tokens (7 days)
+- Refresh token rotation with bcrypt hashing
+- Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run)
+- 3 default roles: Admin (all permissions), Translator (CRUD on core resources), Viewer (read-only)
+- RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
+- Auth endpoints rate-limited (5 login attempts / 3 register attempts per minute)
+
 ## Conventions
 - All API routes prefixed with `/api/`
 - RBAC permissions follow `resource:action` format (e.g., `clients:create`)
@@ -61,7 +69,7 @@ Light + dark mode supported (separate toggle from palette).
 
 ## Build Phases
 - [x] Phase 1: Project setup
-- [ ] Phase 2: Auth & Users
+- [x] Phase 2: Auth & Users (JWT, RBAC, login, user/role management, seeder)
 - [ ] Phase 3: Settings
 - [ ] Phase 4: Clients
 - [ ] Phase 5: Templates

@@ -4,7 +4,8 @@
       "Bash(npm --version)",
       "Bash(npm install:*)",
       "Bash(npx npm-check-updates:*)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "Bash(npx nest:*)"
     ]
   }
 }

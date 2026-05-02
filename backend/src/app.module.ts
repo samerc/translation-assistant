@@ -3,8 +3,11 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
-import { appConfig } from './config/app.config';
-import { databaseConfig } from './config/database.config';
+import { appConfig } from './config/app.config.js';
+import { databaseConfig } from './config/database.config.js';
+import { AuthModule } from './modules/auth/auth.module.js';
+import { UsersModule } from './modules/users/users.module.js';
+import { RolesModule } from './modules/roles/roles.module.js';
 
 @Module({
   imports: [
@@ -21,6 +24,9 @@ import { databaseConfig } from './config/database.config';
         },
       ],
     }),
+    AuthModule,
+    UsersModule,
+    RolesModule,
   ],
   controllers: [],
   providers: [

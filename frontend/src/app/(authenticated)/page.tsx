@@ -1,5 +1,6 @@
 'use client';
 
+import { useAuth } from '@/lib/auth-context';
 import { useTheme, Palette } from '@/lib/theme-context';
 
 const palettes: { id: Palette; name: string; color: string }[] = [
@@ -10,11 +11,15 @@ const palettes: { id: Palette; name: string; color: string }[] = [
 ];
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { palette, setPalette } = useTheme();
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-text mb-6">Dashboard</h1>
+      <h1 className="text-2xl font-bold text-text mb-1">
+        Welcome back, {user?.firstName}
+      </h1>
+      <p className="text-text-secondary mb-6">Here&apos;s your overview</p>
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -48,7 +53,6 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Color swatches */}
         <div className="flex gap-3 flex-wrap">
           <Swatch label="Primary" className="bg-primary" />
           <Swatch label="Accent" className="bg-accent" />
