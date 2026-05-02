@@ -7,11 +7,15 @@ import {
   Body,
   Param,
   Query,
+  Res,
   ParseIntPipe,
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  NotFoundException,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -24,6 +28,9 @@ import {
   CreateClientEmailDto,
   CreateClientPhoneDto,
   CreateClientAddressDto,
+  EMAIL_LABELS,
+  PHONE_LABELS,
+  ADDRESS_LABELS,
 } from './dto/client-detail.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -40,6 +47,18 @@ const uploadStorage = diskStorage({
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
+
+  // ── Labels (predefined) ──
+
+  @Get('labels')
+  @RequirePermissions('clients:read')
+  getLabels() {
+    return {
+      email: EMAIL_LABELS,
+      phone: PHONE_LABELS,
+      address: ADDRESS_LABELS,
+    };
+  }
 
   // ── Clients ──
 
@@ -179,6 +198,39 @@ export class ClientsController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.clientsService.createPassportCopy(id, label || 'Passport', file);
+  }
+
+  @Get(':id/passports/:copyId/file')
+  async viewPassportCopy(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('copyId', ParseIntPipe) copyId: number,
+    @Query('token') token: string,
+    @Res() res: Response,
+  ) {
+    // File viewing uses query token since browser tabs can't set headers
+    if (!token) {
+      res.status(401).json({ message: 'Token required' });
+      return;
+    }
+
+    // Verify token manually
+    const { JwtService } = await import('@nestjs/jwt');
+    const jwt = new JwtService({ secret: process.env.JWT_SECRET });
+    try {
+      jwt.verify(token);
+    } catch {
+      res.status(401).json({ message: 'Invalid token' });
+      return;
+    }
+
+    const pc = await this.clientsService.getPassportCopy(id, copyId);
+    if (!existsSync(pc.filePath)) {
+      throw new NotFoundException('File not found on disk');
+    }
+    res.setHeader('Content-Type', pc.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${pc.originalName}"`);
+    const stream = createReadStream(pc.filePath);
+    stream.pipe(res);
   }
 
   @Delete(':id/passports/:copyId')

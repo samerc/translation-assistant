@@ -217,6 +217,14 @@ export class ClientsService {
     return this.passportCopyRepository.save(pc);
   }
 
+  async getPassportCopy(clientId: number, copyId: number): Promise<PassportCopy> {
+    const pc = await this.passportCopyRepository.findOne({
+      where: { id: copyId, clientId },
+    });
+    if (!pc) throw new NotFoundException('Passport copy not found');
+    return pc;
+  }
+
   async removePassportCopy(clientId: number, copyId: number): Promise<void> {
     const pc = await this.passportCopyRepository.findOne({
       where: { id: copyId, clientId },

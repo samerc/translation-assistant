@@ -165,8 +165,9 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         items={client.emails.map((e) => ({ id: e.id, value: e.email, label: e.label }))}
         placeholder="email@example.com"
         inputType="email"
+        labelOptions={['Work', 'Personal', 'Other']}
         onAdd={async (value, label) => {
-          await api.post(`/clients/${client.id}/emails`, { email: value, label });
+          await api.post(`/clients/${client.id}/emails`, { email: value, label: label || undefined });
           onUpdate();
         }}
         onRemove={async (itemId) => {
@@ -180,8 +181,9 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         title="Phone Numbers"
         items={client.phones.map((p) => ({ id: p.id, value: p.phone, label: p.label }))}
         placeholder="+1 234 567 8900"
+        labelOptions={['Work', 'Mobile', 'Home', 'Fax', 'Other']}
         onAdd={async (value, label) => {
-          await api.post(`/clients/${client.id}/phones`, { phone: value, label });
+          await api.post(`/clients/${client.id}/phones`, { phone: value, label: label || undefined });
           onUpdate();
         }}
         onRemove={async (itemId) => {
@@ -195,8 +197,9 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         title="Addresses"
         items={client.addresses.map((a) => ({ id: a.id, value: a.address, label: a.label }))}
         placeholder="123 Main St, City, Country"
+        labelOptions={['Work', 'Home', 'Billing', 'Shipping', 'Other']}
         onAdd={async (value, label) => {
-          await api.post(`/clients/${client.id}/addresses`, { address: value, label });
+          await api.post(`/clients/${client.id}/addresses`, { address: value, label: label || undefined });
           onUpdate();
         }}
         onRemove={async (itemId) => {
@@ -210,11 +213,12 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
 
 // ── Multi-Value Card (emails, phones, addresses) ──
 
-function MultiValueCard({ title, items, placeholder, inputType = 'text', onAdd, onRemove }: {
+function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOptions, onAdd, onRemove }: {
   title: string;
   items: { id: number; value: string; label: string | null }[];
   placeholder: string;
   inputType?: string;
+  labelOptions: string[];
   onAdd: (value: string, label: string) => Promise<void>;
   onRemove: (id: number) => Promise<void>;
 }) {
@@ -251,9 +255,11 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', onAdd, 
       <div className="space-y-2">
         {items.map((item) => (
           <div key={item.id} className="flex justify-between items-center py-2 px-3 bg-bg rounded-lg group">
-            <div>
+            <div className="flex items-center gap-2">
+              {item.label && (
+                <span className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium">{item.label}</span>
+              )}
               <span className="text-sm text-text">{item.value}</span>
-              {item.label && <span className="text-xs text-text-muted ml-2">({item.label})</span>}
             </div>
             <button
               onClick={() => onRemove(item.id)}
@@ -269,6 +275,16 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', onAdd, 
       {adding && (
         <form onSubmit={handleAdd} className="mt-3 p-3 border border-border rounded-lg bg-bg">
           <div className="flex gap-2">
+            <select
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              className="w-32 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="">Label...</option>
+              {labelOptions.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
             <input
               type={inputType}
               value={value}
@@ -276,12 +292,6 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', onAdd, 
               placeholder={placeholder}
               required
               className="flex-1 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Label (optional)"
-              className="w-36 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div className="flex gap-2 mt-2">
@@ -457,7 +467,19 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
               <div className="font-medium text-text text-sm">{pc.label}</div>
               <div className="text-xs text-text-muted mt-0.5">{pc.originalName} — {formatSize(pc.fileSize)} — {new Date(pc.uploadedAt).toLocaleDateString()}</div>
             </div>
-            <button onClick={() => handleDelete(pc.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const token = localStorage.getItem('accessToken');
+                  const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports/${pc.id}/file`;
+                  window.open(`${url}?token=${token}`, '_blank');
+                }}
+                className="text-xs text-primary hover:text-primary-hover font-medium"
+              >
+                View
+              </button>
+              <button onClick={() => handleDelete(pc.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+            </div>
           </div>
         ))}
       </div>
