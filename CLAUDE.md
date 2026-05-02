@@ -37,8 +37,9 @@ translation-assistant/
 ```
 
 ## Commands
-- `cd backend && npm run start:dev` — Start backend in dev mode (port 3005)
-- `cd frontend && npm run dev` — Start frontend in dev mode (port 3000)
+- `npm run dev` — Start both backend + frontend (from project root)
+- `cd backend && npm run start:dev` — Start backend only (port 3005)
+- `cd frontend && npm run dev` — Start frontend only (port 3000)
 - `docker compose up -d` — Start MariaDB
 - `docker compose down` — Stop all containers
 
@@ -70,7 +71,7 @@ Light + dark mode supported (separate toggle from palette).
 ## Build Phases
 - [x] Phase 1: Project setup
 - [x] Phase 2: Auth & Users (JWT, RBAC, login, user/role management, seeder)
-- [ ] Phase 3: Settings
+- [x] Phase 3: Settings (app config, languages, file upload limits)
 - [ ] Phase 4: Clients
 - [ ] Phase 5: Templates
 - [ ] Phase 6: Document Designer

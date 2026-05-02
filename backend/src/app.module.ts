@@ -8,6 +8,7 @@ import { databaseConfig } from './config/database.config.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
+import { SettingsModule } from './modules/settings/settings.module.js';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RolesModule } from './modules/roles/roles.module.js';
     AuthModule,
     UsersModule,
     RolesModule,
+    SettingsModule,
   ],
   controllers: [],
   providers: [
