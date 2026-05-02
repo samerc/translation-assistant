@@ -1,0 +1,148 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { randomUUID } from 'crypto';
+import { ClientsService } from './clients.service.js';
+import { CreateClientDto, UpdateClientDto } from './dto/client.dto.js';
+import { CreateContactDto, UpdateContactDto } from './dto/contact.dto.js';
+import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+
+const uploadStorage = diskStorage({
+  destination: join(process.cwd(), 'uploads', 'passports'),
+  filename: (_req, file, cb) => {
+    const uniqueName = `${randomUUID()}${extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+@Controller('clients')
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+export class ClientsController {
+  constructor(private readonly clientsService: ClientsService) {}
+
+  // ── Clients ──
+
+  @Get()
+  @RequirePermissions('clients:read')
+  findAll(
+    @Query('search') search?: string,
+    @Query('type') type?: 'company' | 'person',
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.clientsService.findAll({
+      search,
+      type,
+      sortBy,
+      sortOrder,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get(':id')
+  @RequirePermissions('clients:read')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.clientsService.findOne(id);
+  }
+
+  @Post()
+  @RequirePermissions('clients:create')
+  create(@Body() dto: CreateClientDto) {
+    return this.clientsService.create(dto);
+  }
+
+  @Patch(':id')
+  @RequirePermissions('clients:update')
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateClientDto) {
+    return this.clientsService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('clients:delete')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.clientsService.remove(id);
+  }
+
+  // ── Contacts ──
+
+  @Get(':id/contacts')
+  @RequirePermissions('clients:read')
+  findContacts(@Param('id', ParseIntPipe) id: number) {
+    return this.clientsService.findContacts(id);
+  }
+
+  @Post(':id/contacts')
+  @RequirePermissions('clients:create')
+  createContact(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateContactDto,
+  ) {
+    return this.clientsService.createContact(id, dto);
+  }
+
+  @Patch(':id/contacts/:contactId')
+  @RequirePermissions('clients:update')
+  updateContact(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('contactId', ParseIntPipe) contactId: number,
+    @Body() dto: UpdateContactDto,
+  ) {
+    return this.clientsService.updateContact(id, contactId, dto);
+  }
+
+  @Delete(':id/contacts/:contactId')
+  @RequirePermissions('clients:delete')
+  removeContact(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('contactId', ParseIntPipe) contactId: number,
+  ) {
+    return this.clientsService.removeContact(id, contactId);
+  }
+
+  // ── Passport Copies ──
+
+  @Get(':id/passports')
+  @RequirePermissions('clients:read')
+  findPassportCopies(@Param('id', ParseIntPipe) id: number) {
+    return this.clientsService.findPassportCopies(id);
+  }
+
+  @Post(':id/passports')
+  @RequirePermissions('clients:create')
+  @UseInterceptors(FileInterceptor('file', { storage: uploadStorage }))
+  createPassportCopy(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('label') label: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.clientsService.createPassportCopy(id, label || 'Passport', file);
+  }
+
+  @Delete(':id/passports/:copyId')
+  @RequirePermissions('clients:delete')
+  removePassportCopy(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('copyId', ParseIntPipe) copyId: number,
+  ) {
+    return this.clientsService.removePassportCopy(id, copyId);
+  }
+}

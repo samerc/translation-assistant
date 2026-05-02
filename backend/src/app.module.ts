@@ -9,6 +9,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
 import { SettingsModule } from './modules/settings/settings.module.js';
+import { ClientsModule } from './modules/clients/clients.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { SettingsModule } from './modules/settings/settings.module.js';
     UsersModule,
     RolesModule,
     SettingsModule,
+    ClientsModule,
   ],
   controllers: [],
   providers: [
