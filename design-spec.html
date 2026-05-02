@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Translation Assistant — Full Design Specification</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.6; }
+
+  /* Navigation */
+  .nav { position: fixed; top: 0; left: 0; width: 260px; height: 100vh; background: #fff; border-right: 1px solid #e2e8f0; padding: 20px; overflow-y: auto; z-index: 10; }
+  .nav h3 { font-size: 14px; color: #4F46E5; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px; }
+  .nav h3:first-child { margin-top: 0; }
+  .nav a { display: block; padding: 6px 12px; color: #475569; text-decoration: none; font-size: 14px; border-radius: 6px; margin-bottom: 2px; }
+  .nav a:hover { background: #EEF2FF; color: #4F46E5; }
+  .nav .logo { font-size: 18px; font-weight: 700; color: #4F46E5; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+
+  /* Main content */
+  .main { margin-left: 260px; padding: 40px 60px; max-width: 1100px; }
+  h1 { font-size: 32px; color: #1e293b; margin-bottom: 8px; }
+  h2 { font-size: 24px; color: #4F46E5; margin: 50px 0 16px; padding-top: 20px; border-top: 2px solid #EEF2FF; }
+  h3 { font-size: 18px; color: #334155; margin: 30px 0 12px; }
+  h4 { font-size: 15px; color: #475569; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; color: #475569; }
+  .subtitle { font-size: 16px; color: #64748b; margin-bottom: 30px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 14px; }
+  th { background: #4F46E5; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+  td { padding: 10px 14px; border-bottom: 1px solid #e2e8f0; }
+  tr:hover td { background: #f1f5f9; }
+  .tag { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .tag-primary { background: #EEF2FF; color: #4F46E5; }
+  .tag-success { background: #ECFDF5; color: #059669; }
+  .tag-warning { background: #FFFBEB; color: #D97706; }
+  .tag-danger { background: #FFF1F2; color: #E11D48; }
+
+  /* Cards */
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin: 16px 0; }
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card h4 { margin-top: 0; color: #4F46E5; }
+
+  /* Color swatches */
+  .color-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 16px 0; }
+  .color-swatch { text-align: center; }
+  .color-swatch .box { width: 100%; height: 64px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.08); margin-bottom: 6px; }
+  .color-swatch .label { font-size: 12px; font-weight: 600; color: #334155; }
+  .color-swatch .hex { font-size: 11px; color: #94a3b8; font-family: monospace; }
+
+  /* Flow diagrams */
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+  .flow-step { background: #EEF2FF; color: #4F46E5; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+  .flow-arrow { color: #cbd5e1; font-size: 18px; }
+  .flow-step.optional { background: #fff; border: 2px dashed #c7d2fe; }
+
+  /* Entity diagrams */
+  .entity { background: #fff; border: 2px solid #e2e8f0; border-radius: 10px; overflow: hidden; margin: 12px 0; }
+  .entity-header { background: #4F46E5; color: #fff; padding: 8px 16px; font-weight: 700; font-size: 14px; }
+  .entity-fields { padding: 12px 16px; font-size: 13px; font-family: monospace; }
+  .entity-fields div { padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+  .entity-fields .pk { color: #D97706; font-weight: 700; }
+  .entity-fields .fk { color: #4F46E5; }
+  .entity-fields .type { color: #94a3b8; }
+  .entity-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 16px 0; }
+
+  /* App mockup */
+  .mockup { border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin: 20px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .mockup-topbar { height: 48px; background: #4F46E5; display: flex; align-items: center; padding: 0 20px; justify-content: space-between; }
+  .mockup-topbar .left { display: flex; align-items: center; gap: 12px; color: #fff; font-weight: 700; font-size: 15px; }
+  .mockup-topbar .right { display: flex; align-items: center; gap: 16px; }
+  .mockup-topbar .search { background: rgba(255,255,255,0.15); border: none; border-radius: 8px; padding: 6px 14px; color: #c7d2fe; font-size: 13px; width: 240px; }
+  .mockup-topbar .icon { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+  .mockup-body { display: flex; min-height: 400px; }
+  .mockup-sidebar { width: 200px; background: #312e81; padding: 16px 0; }
+  .mockup-sidebar .item { padding: 10px 20px; color: #c7d2fe; font-size: 13px; display: flex; align-items: center; gap: 10px; cursor: default; }
+  .mockup-sidebar .item:hover { background: rgba(255,255,255,0.08); }
+  .mockup-sidebar .item.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; border-left: 3px solid #818CF8; }
+  .mockup-sidebar .item .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .mockup-content { flex: 1; background: #f8fafc; padding: 24px; }
+
+  /* Dashboard cards mockup */
+  .dash-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .dash-card { background: #fff; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0; }
+  .dash-card .value { font-size: 28px; font-weight: 700; color: #1e293b; }
+  .dash-card .label { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+  .dash-card .trend { font-size: 12px; margin-top: 6px; }
+
+  /* Data table mockup */
+  .mock-table { background: #fff; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; }
+  .mock-table-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid #e2e8f0; }
+  .mock-table-header .title { font-weight: 700; font-size: 15px; color: #1e293b; }
+  .mock-btn { padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; }
+  .mock-btn-primary { background: #4F46E5; color: #fff; }
+  .mock-table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; padding: 12px 18px; border-bottom: 1px solid #f1f5f9; font-size: 13px; align-items: center; }
+  .mock-table-row.header { background: #f8fafc; font-weight: 600; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Wireframe boxes */
+  .wireframe { border: 2px dashed #c7d2fe; border-radius: 10px; padding: 20px; margin: 16px 0; background: #fafaff; }
+  .wireframe-label { font-size: 12px; color: #818CF8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+
+  /* Lists */
+  ul { margin: 8px 0 16px 20px; color: #475569; }
+  li { margin-bottom: 6px; font-size: 14px; }
+  li strong { color: #334155; }
+
+  /* Code blocks */
+  code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #4F46E5; }
+  pre { background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 10px; font-size: 13px; overflow-x: auto; margin: 12px 0; }
+
+  /* Security section */
+  .security-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .security-item { background: #fff; border-left: 4px solid #4F46E5; padding: 16px; border-radius: 0 8px 8px 0; }
+  .security-item h4 { margin: 0 0 6px; color: #4F46E5; font-size: 14px; }
+  .security-item p { margin: 0; font-size: 13px; }
+
+  /* Phase timeline */
+  .timeline { position: relative; padding-left: 30px; margin: 20px 0; }
+  .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e2e8f0; }
+  .timeline-item { position: relative; margin-bottom: 20px; }
+  .timeline-item::before { content: ''; position: absolute; left: -24px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #4F46E5; border: 2px solid #fff; }
+  .timeline-item.future::before { background: #e2e8f0; }
+  .timeline-item .phase { font-weight: 700; color: #4F46E5; font-size: 14px; }
+  .timeline-item .desc { color: #64748b; font-size: 13px; }
+
+  /* Dark mode preview */
+  .dark-mockup .mockup-topbar { background: #1e1b4b; }
+  .dark-mockup .mockup-sidebar { background: #0f0d2e; }
+  .dark-mockup .mockup-content { background: #0f172a; }
+  .dark-mockup .dash-card { background: #1e293b; border-color: #334155; }
+  .dark-mockup .dash-card .value { color: #f1f5f9; }
+  .dark-mockup .dash-card .label { color: #64748b; }
+  .dark-mockup .mock-table { background: #1e293b; border-color: #334155; }
+  .dark-mockup .mock-table-header { border-color: #334155; }
+  .dark-mockup .mock-table-header .title { color: #f1f5f9; }
+  .dark-mockup .mock-table-row { border-color: #293548; color: #cbd5e1; }
+  .dark-mockup .mock-table-row.header { background: #1a2332; color: #94a3b8; }
+
+  /* Print */
+  @media print { .nav { display: none; } .main { margin-left: 0; } }
+</style>
+</head>
+<body>
+
+<!-- Side Navigation -->
+<div class="nav">
+  <div class="logo">Translation Assistant</div>
+  <h3>Overview</h3>
+  <a href="#purpose">Purpose & Scope</a>
+  <a href="#stack">Tech Stack</a>
+  <a href="#palette">Color Palette</a>
+  <h3>Data Model</h3>
+  <a href="#users">Users & RBAC</a>
+  <a href="#clients">Clients & Contacts</a>
+  <a href="#templates">Templates & Languages</a>
+  <a href="#jobs">Jobs & Documents</a>
+  <a href="#files">File Management</a>
+  <a href="#invoicing">Invoicing</a>
+  <a href="#settings">Settings & Notifications</a>
+  <h3>Workflows</h3>
+  <a href="#wf-template">Template Creation</a>
+  <a href="#wf-job">Job Lifecycle</a>
+  <a href="#wf-document">Document Translation</a>
+  <a href="#wf-clone">Clone Document</a>
+  <a href="#wf-invoice">Invoice Generation</a>
+  <h3>UI Design</h3>
+  <a href="#layout">App Layout</a>
+  <a href="#dashboard">Dashboard</a>
+  <a href="#clients-ui">Clients Page</a>
+  <a href="#jobs-ui">Jobs Page</a>
+  <a href="#doc-ui">Document Fill Page</a>
+  <a href="#gt-popup">Google Translate Popup</a>
+  <a href="#designer-ui">Template Designer</a>
+  <a href="#multipage">Multi-Page Templates</a>
+  <a href="#dark-mode">Dark Mode</a>
+  <h3>Technical</h3>
+  <a href="#security">Security</a>
+  <a href="#api">API Structure</a>
+  <a href="#build-plan">Build Plan</a>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+<h1>Translation Assistant</h1>
+<p class="subtitle">Full Design Specification — v1.1 | May 2026</p>
+
+<!-- ==================== PURPOSE ==================== -->
+<h2 id="purpose">Purpose & Scope</h2>
+<p>An internal, multi-user web application for freelance translators with two core modules:</p>
+<div class="card-grid">
+  <div class="card">
+    <h4>Freelance Job Management</h4>
+    <ul>
+      <li>Client & contact management</li>
+      <li>Job tracking with status workflow</li>
+      <li>Invoicing & payment tracking</li>
+      <li>Calendar with deadlines</li>
+      <li>Reporting & analytics</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>Document Translation</h4>
+    <ul>
+      <li>Dynamic template creation with multi-page support</li>
+      <li>Block-based document designer</li>
+      <li>Multi-language field labels</li>
+      <li>Google Translate popup helper (per field)</li>
+      <li>Word (.docx) export</li>
+      <li>Clone from existing documents</li>
+      <li>Free-form jobs (upload source + translated files directly)</li>
+      <li>Side-by-side source file viewer</li>
+    </ul>
+  </div>
+</div>
+
+<h3>Platform</h3>
+<ul>
+  <li><strong>Primary:</strong> Web application</li>
+  <li><strong>Planned:</strong> Mobile app (React Native)</li>
+  <li><strong>Users:</strong> Multiple users, invite-only, RBAC</li>
+  <li><strong>Clients:</strong> No client access — internal tool only</li>
+  <li><strong>Deployment:</strong> VPS with Docker</li>
+</ul>
+
+<!-- ==================== TECH STACK ==================== -->
+<h2 id="stack">Tech Stack</h2>
+<table>
+  <tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+  <tr><td>Backend</td><td>NestJS (TypeScript)</td><td>REST API, business logic, auth</td></tr>
+  <tr><td>Frontend (Web)</td><td>React + Next.js</td><td>Web application</td></tr>
+  <tr><td>Frontend (Mobile)</td><td>React Native</td><td>Mobile app (future)</td></tr>
+  <tr><td>Database</td><td>MariaDB</td><td>All relational data</td></tr>
+  <tr><td>ORM</td><td>Prisma or TypeORM</td><td>Database queries & migrations</td></tr>
+  <tr><td>Auth</td><td>JWT + Refresh Tokens</td><td>Authentication & session management</td></tr>
+  <tr><td>Word Export</td><td>docx (npm)</td><td>.docx file generation</td></tr>
+  <tr><td>Translation</td><td>Google Cloud Translation API</td><td>Per-field translation suggestions</td></tr>
+  <tr><td>Image Compression</td><td>sharp (npm)</td><td>Auto-compress uploaded images</td></tr>
+  <tr><td>File Storage</td><td>Local disk (VPS)</td><td>Passport copies, source/translated files, exports</td></tr>
+  <tr><td>UI Components</td><td>Ant Design or shadcn/ui</td><td>Tables, forms, calendars, drag-and-drop</td></tr>
+  <tr><td>Containerization</td><td>Docker + Docker Compose</td><td>Deployment</td></tr>
+</table>
+
+<!-- ==================== COLOR PALETTE ==================== -->
+<h2 id="palette">Color Palettes</h2>
+<p>Four palettes are available. Each user selects their preferred palette in profile settings. Default is <strong>Indigo Minimal</strong>. Light/dark mode is a separate toggle.</p>
+<h4>Available Palettes: Ocean Blue, Indigo Minimal (default), Teal Focus, Slate & Amber</h4>
+<h4>Indigo Minimal (Default)</h4>
+<div class="color-grid">
+  <div class="color-swatch">
+    <div class="box" style="background:#4F46E5"></div>
+    <div class="label">Primary</div>
+    <div class="hex">#4F46E5</div>
+  </div>
+  <div class="color-swatch">
+    <div class="box" style="background:#818CF8"></div>
+    <div class="label">Accent</div>
+    <div class="hex">#818CF8</div>
+  </div>
+  <div class="color-swatch">
+    <div class="box" style="background:#059669"></div>
+    <div class="label">Success</div>
+    <div class="hex">#059669</div>
+  </div>
+  <div class="color-swatch">
+    <div class="box" style="background:#D97706"></div>
+    <div class="label">Warning</div>
+    <div class="hex">#D97706</div>
+  </div>
+  <div class="color-swatch">
+    <div class="box" style="background:#E11D48"></div>
+    <div class="label">Danger</div>
+    <div class="hex">#E11D48</div>
+  </div>
+  <div class="color-swatch">
+    <div class="box" style="background:#6B7280"></div>
+    <div class="label">Neutral</div>
+    <div class="hex">#6B7280</div>
+  </div>
+</div>
+
+<h4>Extended Palette</h4>
+<table>
+  <tr><th>Usage</th><th>Light Mode</th><th>Dark Mode</th></tr>
+  <tr><td>Background</td><td>#F8FAFC</td><td>#0F172A</td></tr>
+  <tr><td>Surface / Cards</td><td>#FFFFFF</td><td>#1E293B</td></tr>
+  <tr><td>Border</td><td>#E2E8F0</td><td>#334155</td></tr>
+  <tr><td>Text Primary</td><td>#1E293B</td><td>#F1F5F9</td></tr>
+  <tr><td>Text Secondary</td><td>#64748B</td><td>#94A3B8</td></tr>
+  <tr><td>Sidebar BG</td><td>#312E81</td><td>#0F0D2E</td></tr>
+  <tr><td>Sidebar Text</td><td>#C7D2FE</td><td>#C7D2FE</td></tr>
+  <tr><td>Sidebar Active</td><td>#818CF8</td><td>#818CF8</td></tr>
+</table>
+
+<!-- ==================== DATA MODEL ==================== -->
+<h2 id="users">Data Model — Users & RBAC</h2>
+
+<div class="entity-grid">
+  <div class="entity">
+    <div class="entity-header">User</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>email <span class="type">VARCHAR UNIQUE</span></div>
+      <div>password <span class="type">VARCHAR (hashed)</span></div>
+      <div>firstName <span class="type">VARCHAR</span></div>
+      <div>lastName <span class="type">VARCHAR</span></div>
+      <div>avatar <span class="type">VARCHAR NULL</span></div>
+      <div>isActive <span class="type">BOOLEAN</span></div>
+      <div><span class="fk">roleId → Role</span></div>
+      <div>colorPalette <span class="type">ENUM (default: indigo)</span></div>
+      <div>darkMode <span class="type">BOOLEAN</span></div>
+      <div>createdAt <span class="type">TIMESTAMP</span></div>
+      <div>updatedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">Role</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>name <span class="type">VARCHAR</span></div>
+      <div>description <span class="type">TEXT</span></div>
+      <div>permissions[] <span class="fk">→ Permission (M2M)</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">Permission</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>resource <span class="type">VARCHAR</span></div>
+      <div>action <span class="type">VARCHAR</span></div>
+      <div>description <span class="type">TEXT</span></div>
+    </div>
+  </div>
+</div>
+<p><strong>RBAC Logic:</strong> Roles are custom-defined (e.g., Admin, Translator, Viewer). Each role has a set of permissions. Permissions are resource + action pairs (e.g., <code>clients:create</code>, <code>jobs:update</code>, <code>templates:delete</code>).</p>
+
+<h2 id="clients">Data Model — Clients & Contacts</h2>
+<div class="entity-grid">
+  <div class="entity">
+    <div class="entity-header">Client</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>type <span class="type">ENUM: company | person</span></div>
+      <div>name <span class="type">VARCHAR (required)</span></div>
+      <div>email <span class="type">VARCHAR NULL</span></div>
+      <div>phone <span class="type">VARCHAR NULL</span></div>
+      <div>address <span class="type">TEXT NULL</span></div>
+      <div>taxId <span class="type">VARCHAR NULL</span></div>
+      <div>notes <span class="type">TEXT NULL</span></div>
+      <div>contacts[] <span class="fk">→ Contact</span></div>
+      <div>passportCopies[] <span class="fk">→ PassportCopy</span></div>
+      <div>createdAt <span class="type">TIMESTAMP</span></div>
+      <div>updatedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">Contact</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">clientId → Client</span></div>
+      <div>firstName <span class="type">VARCHAR</span></div>
+      <div>lastName <span class="type">VARCHAR</span></div>
+      <div>email <span class="type">VARCHAR NULL</span></div>
+      <div>phone <span class="type">VARCHAR NULL</span></div>
+      <div>role <span class="type">VARCHAR NULL</span></div>
+      <div>notes <span class="type">TEXT NULL</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">PassportCopy</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">clientId → Client</span></div>
+      <div>label <span class="type">VARCHAR</span></div>
+      <div>filePath <span class="type">VARCHAR</span></div>
+      <div>uploadedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+</div>
+<p><strong>Rules:</strong> Only company-type clients can have contacts. Person-type clients are direct. Passport copies are reference images for correct name spellings — not included in exports. Jobs are always assigned to a client, with an optional contact person link for filtering.</p>
+
+<h2 id="templates">Data Model — Templates & Languages</h2>
+<div class="entity-grid">
+  <div class="entity">
+    <div class="entity-header">Language</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>code <span class="type">VARCHAR (e.g., "ar")</span></div>
+      <div>name <span class="type">VARCHAR (e.g., "Arabic")</span></div>
+      <div>direction <span class="type">ENUM: ltr | rtl</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">Template</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>name <span class="type">VARCHAR</span></div>
+      <div>description <span class="type">TEXT NULL</span></div>
+      <div>pricePerPage <span class="type">DECIMAL</span></div>
+      <div>discountedPricePerPage <span class="type">DECIMAL NULL</span></div>
+      <div>fields[] <span class="fk">→ TemplateField</span></div>
+      <div>layout <span class="fk">→ TemplateLayout</span></div>
+      <div>createdAt <span class="type">TIMESTAMP</span></div>
+      <div>updatedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">TemplateField</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">templateId → Template</span></div>
+      <div>fieldKey <span class="type">VARCHAR</span></div>
+      <div>fieldType <span class="type">ENUM: text | number | date | image | textarea</span></div>
+      <div>sortOrder <span class="type">INT</span></div>
+      <div>required <span class="type">BOOLEAN</span></div>
+      <div>labels[] <span class="fk">→ TemplateFieldLabel</span></div>
+    </div>
+  </div>
+</div>
+<div class="entity-grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="entity">
+    <div class="entity-header">TemplateFieldLabel</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">templateFieldId → TemplateField</span></div>
+      <div><span class="fk">languageId → Language</span></div>
+      <div>label <span class="type">VARCHAR</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">TemplateLayout</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">templateId → Template</span></div>
+      <div>layoutJson <span class="type">JSON</span></div>
+      <div>updatedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+</div>
+<p><strong>Rules:</strong> Each template field has labels in all defined languages. The layout JSON stores the block-based document design (rows, columns, field placements, headers, footers, static text, date placeholders).</p>
+
+<h2 id="jobs">Data Model — Jobs & Documents</h2>
+<div class="entity-grid">
+  <div class="entity">
+    <div class="entity-header">Job</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>type <span class="type">ENUM: template | freeform</span></div>
+      <div>title <span class="type">VARCHAR</span></div>
+      <div>description <span class="type">TEXT NULL</span></div>
+      <div><span class="fk">clientId → Client</span></div>
+      <div><span class="fk">contactId → Contact NULL</span></div>
+      <div><span class="fk">sourceLanguageId → Language</span></div>
+      <div><span class="fk">targetLanguageId → Language</span></div>
+      <div>status <span class="type">ENUM</span></div>
+      <div>deadline <span class="type">DATE NULL</span></div>
+      <div>pageCount <span class="type">INT</span></div>
+      <div>pricePerPage <span class="type">DECIMAL</span></div>
+      <div>discountedPricePerPage <span class="type">DECIMAL NULL</span></div>
+      <div>useDiscountedPrice <span class="type">BOOLEAN</span></div>
+      <div>calculatedTotal <span class="type">DECIMAL</span></div>
+      <div>finalPrice <span class="type">DECIMAL NULL</span></div>
+      <div>isFreeOfCharge <span class="type">BOOLEAN</span></div>
+      <div>freeOfChargeReason <span class="type">TEXT NULL</span></div>
+      <div>paymentCurrency <span class="type">VARCHAR NULL</span></div>
+      <div>paymentAmount <span class="type">DECIMAL NULL</span></div>
+      <div>notes <span class="type">TEXT NULL</span></div>
+      <div>assignedUsers[] <span class="fk">→ JobUser (M2M)</span></div>
+      <div>documents[] <span class="fk">→ Document</span></div>
+      <div>sourceFiles[] <span class="fk">→ JobFile</span></div>
+      <div>translatedFiles[] <span class="fk">→ JobFile</span></div>
+      <div>createdAt <span class="type">TIMESTAMP</span></div>
+      <div>updatedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">Document</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">jobId → Job</span></div>
+      <div><span class="fk">templateId → Template</span></div>
+      <div>templateVersion <span class="type">JSON</span></div>
+      <div>status <span class="type">ENUM: draft | completed</span></div>
+      <div><span class="fk">clonedFromId → Document NULL</span></div>
+      <div>fieldValues[] <span class="fk">→ DocumentFieldValue</span></div>
+      <div>exports[] <span class="fk">→ DocumentExport</span></div>
+      <div>createdAt <span class="type">TIMESTAMP</span></div>
+      <div>updatedAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">DocumentFieldValue</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">documentId → Document</span></div>
+      <div><span class="fk">templateFieldId → TemplateField</span></div>
+      <div>pageNumber <span class="type">INT (default: 1)</span></div>
+      <div>entryIndex <span class="type">INT NULL</span></div>
+      <div>value <span class="type">TEXT</span></div>
+    </div>
+  </div>
+</div>
+<div class="entity-grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="entity">
+    <div class="entity-header">DocumentPage</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">documentId → Document</span></div>
+      <div>pageNumber <span class="type">INT</span></div>
+      <div>fixedFieldValues <span class="type">JSON</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">TemplateRepeatableField</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">templateId → Template</span></div>
+      <div>fieldKey <span class="type">VARCHAR</span></div>
+      <div>fieldType <span class="type">ENUM</span></div>
+      <div>sortOrder <span class="type">INT</span></div>
+      <div>labels[] <span class="fk">→ TemplateFieldLabel</span></div>
+    </div>
+  </div>
+</div>
+<p><strong>Multi-page support:</strong> <code>DocumentPage</code> stores per-page fixed values (e.g., document number for each page). <code>DocumentFieldValue.pageNumber</code> tracks which page an entry belongs to. <code>entryIndex</code> tracks position within a repeatable zone (NULL for fixed fields). <code>TemplateRepeatableField</code> defines fields that appear in the repeatable zone of each page.</p>
+
+<div class="entity-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+  <div class="entity">
+    <div class="entity-header">JobUser</div>
+    <div class="entity-fields">
+      <div><span class="fk">jobId → Job</span></div>
+      <div><span class="fk">userId → User</span></div>
+      <div>permissionLevel <span class="type">ENUM: view | edit</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">JobFile</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">jobId → Job</span></div>
+      <div>category <span class="type">ENUM: source | translated</span></div>
+      <div>fileName <span class="type">VARCHAR</span></div>
+      <div>filePath <span class="type">VARCHAR</span></div>
+      <div>fileSize <span class="type">INT</span></div>
+      <div>mimeType <span class="type">VARCHAR</span></div>
+      <div><span class="fk">linkedFromJobId → Job NULL</span></div>
+      <div>uploadedAt <span class="type">TIMESTAMP</span></div>
+      <div><span class="fk">uploadedByUserId → User</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">DocumentExport</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">documentId → Document</span></div>
+      <div>filePath <span class="type">VARCHAR</span></div>
+      <div>exportedAt <span class="type">TIMESTAMP</span></div>
+      <div><span class="fk">exportedByUserId → User</span></div>
+    </div>
+  </div>
+</div>
+
+<h3>Job Status Flow</h3>
+<div class="flow">
+  <div class="flow-step optional">Quote</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step optional">Accepted</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">In Progress</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Delivered</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step optional">Invoiced</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Paid</div>
+</div>
+<p><em>Dashed = optional step (can be skipped).</em> A client can call directly and skip quote/accepted. Invoicing is optional.</p>
+
+<h3>Pricing Calculation</h3>
+<div class="card">
+  <p><strong>Formula:</strong> <code>calculatedTotal = pageCount × (useDiscountedPrice ? discountedPricePerPage : pricePerPage)</code></p>
+  <p><strong>Override:</strong> <code>finalPrice</code> — if set, overrides calculatedTotal.</p>
+  <p><strong>Different currency:</strong> If client pays in a non-base currency, <code>paymentCurrency</code> and <code>paymentAmount</code> store the actual amount received.</p>
+  <p><strong>Multiple language pairs:</strong> Each pair = separate job.</p>
+</div>
+
+<h2 id="files">File Management</h2>
+<div class="card">
+  <h4 style="margin-top: 0;">Upload Rules</h4>
+  <ul>
+    <li><strong>Max upload size:</strong> 5MB (configurable in Settings)</li>
+    <li><strong>Allowed/forbidden file types:</strong> configurable in Settings</li>
+    <li><strong>Images:</strong> auto-compressed on upload using <code>sharp</code></li>
+    <li><strong>PDFs:</strong> best-effort compression of embedded images</li>
+    <li><strong>Other files:</strong> stored as-is</li>
+  </ul>
+  <h4>Source File Linking</h4>
+  <ul>
+    <li>Source files can be <strong>linked</strong> (not copied) from another job to save disk space</li>
+    <li><code>linkedFromJobId</code> tracks the origin job</li>
+    <li>On job deletion: warn user. If files are linked by other jobs, move ownership to the linked job</li>
+  </ul>
+  <h4>Job File Categories</h4>
+  <ul>
+    <li><strong>Source files:</strong> original documents (uploaded or linked from another job)</li>
+    <li><strong>Translated files:</strong> uploaded translations (free-form jobs) or generated .docx exports (template-based jobs)</li>
+    <li>Source files are optional — translator may work from physical paper</li>
+  </ul>
+</div>
+
+<h2 id="invoicing">Data Model — Invoicing</h2>
+<div class="entity-grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="entity">
+    <div class="entity-header">Invoice</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div>invoiceNumber <span class="type">VARCHAR UNIQUE (auto)</span></div>
+      <div><span class="fk">clientId → Client</span></div>
+      <div><span class="fk">jobs[] → Job (M2M via InvoiceJob)</span></div>
+      <div>currency <span class="type">VARCHAR</span></div>
+      <div>subtotal <span class="type">DECIMAL</span></div>
+      <div>taxRate <span class="type">DECIMAL NULL</span></div>
+      <div>taxAmount <span class="type">DECIMAL NULL</span></div>
+      <div>total <span class="type">DECIMAL</span></div>
+      <div>status <span class="type">ENUM: draft | sent | paid | overdue</span></div>
+      <div>issuedAt <span class="type">DATE</span></div>
+      <div>dueDate <span class="type">DATE NULL</span></div>
+      <div>paidAt <span class="type">DATE NULL</span></div>
+      <div>items[] <span class="fk">→ InvoiceItem</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">InvoiceItem</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">invoiceId → Invoice</span></div>
+      <div>description <span class="type">VARCHAR</span></div>
+      <div>quantity <span class="type">DECIMAL</span></div>
+      <div>rate <span class="type">DECIMAL</span></div>
+      <div>amount <span class="type">DECIMAL</span></div>
+    </div>
+  </div>
+</div>
+<p><strong>Rules:</strong> Invoice can cover multiple jobs (via InvoiceJob join table). Invoice number is auto-generated and sequential. Printing/generating is optional per job.</p>
+
+<h2 id="settings">Data Model — Settings & Notifications</h2>
+<div class="entity-grid">
+  <div class="entity">
+    <div class="entity-header">AppSettings</div>
+    <div class="entity-fields">
+      <div>baseCurrency <span class="type">VARCHAR</span></div>
+      <div>companyName <span class="type">VARCHAR</span></div>
+      <div>companyAddress <span class="type">TEXT</span></div>
+      <div>companyLogo <span class="type">VARCHAR NULL</span></div>
+      <div>invoicePrefix <span class="type">VARCHAR NULL</span></div>
+      <div>maxUploadSizeMb <span class="type">INT (default: 5)</span></div>
+      <div>allowedFileTypes <span class="type">JSON</span></div>
+      <div>forbiddenFileTypes <span class="type">JSON</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">NotificationPreference</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">userId → User</span></div>
+      <div>eventType <span class="type">VARCHAR</span></div>
+      <div>emailEnabled <span class="type">BOOLEAN</span></div>
+      <div>pushEnabled <span class="type">BOOLEAN</span></div>
+    </div>
+  </div>
+  <div class="entity">
+    <div class="entity-header">Notification</div>
+    <div class="entity-fields">
+      <div><span class="pk">id</span> <span class="type">INT PK</span></div>
+      <div><span class="fk">userId → User</span></div>
+      <div>type <span class="type">VARCHAR</span></div>
+      <div>title <span class="type">VARCHAR</span></div>
+      <div>message <span class="type">TEXT</span></div>
+      <div>isRead <span class="type">BOOLEAN</span></div>
+      <div>data <span class="type">JSON</span></div>
+      <div>createdAt <span class="type">TIMESTAMP</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== WORKFLOWS ==================== -->
+<h2 id="wf-template">Workflow — Template Creation</h2>
+<div class="flow">
+  <div class="flow-step">Create Template</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Define Fields</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Add Labels per Language</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Design Export Layout</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Save</div>
+</div>
+<div class="card">
+  <ol>
+    <li>Admin creates a new template (e.g., "Birth Certificate"), sets name, description, default price per page</li>
+    <li>Adds fields: Full Name (text), Date of Birth (date), Place of Birth (text), Father's Name (text), etc.</li>
+    <li>For each field, enters the label in every defined language (e.g., "Full Name" in English, "الاسم الكامل" in Arabic)</li>
+    <li>Opens the document designer — arranges fields in rows/columns, adds header text, footer, static text, date placeholders</li>
+    <li>Saves. Template is ready to use in jobs.</li>
+  </ol>
+</div>
+
+<h2 id="wf-job">Workflow — Job Lifecycle</h2>
+<h4>Template-Based Job</h4>
+<div class="flow">
+  <div class="flow-step">Create Job (template)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Assign Client + Language Pair</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Add Documents</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Translate (fill template)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Export .docx</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Deliver</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step optional">Invoice</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Paid</div>
+</div>
+<h4>Free-Form Job</h4>
+<div class="flow">
+  <div class="flow-step">Create Job (free-form)</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Assign Client + Language Pair</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step optional">Upload Source Files</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Translate Externally</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Upload Translated Files</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Deliver</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step optional">Invoice</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Paid</div>
+</div>
+<div class="card">
+  <h4 style="margin-top: 0;">Template-Based:</h4>
+  <ol>
+    <li>Create a job — select type "template", client, optional contact, source/target language</li>
+    <li>Set page count and price (auto-populated from template, can override)</li>
+    <li>Optionally upload source files or link from another job (for side-by-side reference)</li>
+    <li>Add one or more documents to the job — each based on a template</li>
+    <li>Translator fills in each document's fields (with GT popup helper)</li>
+    <li>Export completed documents to Word (.docx)</li>
+    <li>Mark job as delivered</li>
+    <li>Optionally generate an invoice (can cover multiple jobs for same client)</li>
+    <li>Track payment (or mark as free of charge)</li>
+  </ol>
+  <h4>Free-Form:</h4>
+  <ol>
+    <li>Create a job — select type "free-form", client, optional contact, source/target language</li>
+    <li>Set page count and price</li>
+    <li>Upload source files (or link from another job). Source files are optional.</li>
+    <li>Translate files externally (on PC, on paper, etc.)</li>
+    <li>Upload translated files</li>
+    <li>Mark job as delivered → invoice → paid</li>
+  </ol>
+  <h4>Pro Bono Jobs:</h4>
+  <p>Either type can be marked as "Free of Charge" with an optional reason. Price is set to 0, excluded from revenue reports (shown separately), no invoice expected.</p>
+  <h4>Create from Client:</h4>
+  <p>Jobs can be created from the client detail page — the client field is auto-filled.</p>
+</div>
+
+<h2 id="wf-document">Workflow — Document Translation</h2>
+<div class="card">
+  <ol>
+    <li>Open a document within a job</li>
+    <li>Optionally open side-by-side view (split panel: left = source file viewer, right = template form)</li>
+    <li>See all template fields with label in target language (primary) and source language (small text underneath)</li>
+    <li>For each field:
+      <ul>
+        <li>Type the translation directly (target language) — user references the original document beside them</li>
+        <li>Optionally click <span class="tag tag-primary">GT</span> to open Google Translate popup: enter source text → get translation → copy to field</li>
+      </ul>
+    </li>
+    <li>Reference passport copies (accessible from sidebar) for correct name spellings</li>
+    <li>Save progress at any time (auto-save recommended)</li>
+    <li>For multi-page documents: click "+ Add Page" to add additional pages, each with its own fields</li>
+    <li>When all fields are filled, mark as completed and export</li>
+  </ol>
+</div>
+
+<h2 id="wf-clone">Workflow — Clone Document</h2>
+<div class="flow">
+  <div class="flow-step">New Document</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Click "Load from Existing"</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Search / Browse</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Select Source</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Modify Fields</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Save & Export</div>
+</div>
+<div class="card">
+  <p><strong>Use case:</strong> Family extracts or similar documents where most fields are the same. Clone copies all field values; user edits only what's different.</p>
+  <p><strong>Filter by:</strong> template type, client, date, language pair.</p>
+</div>
+
+<h2 id="wf-invoice">Workflow — Invoice Generation</h2>
+<div class="card">
+  <ol>
+    <li>From a job or from the Invoices section, click "Create Invoice"</li>
+    <li>Select client (auto-filled if coming from a job)</li>
+    <li>Add one or more jobs to the invoice</li>
+    <li>Invoice items are auto-populated from job details (description, pages, rate, total)</li>
+    <li>Optionally add tax rate</li>
+    <li>Invoice number is auto-generated (sequential)</li>
+    <li>Save as draft, then mark as sent</li>
+    <li>Track payment: mark as paid when payment received</li>
+    <li>Overdue status applied automatically based on due date</li>
+  </ol>
+</div>
+
+<!-- ==================== UI DESIGN ==================== -->
+<h2 id="layout">UI Design — App Layout</h2>
+
+<div class="mockup">
+  <div class="mockup-topbar">
+    <div class="left">
+      <span>Translation Assistant</span>
+    </div>
+    <div class="right">
+      <input class="search" placeholder="Search clients, jobs, documents..." disabled>
+      <div class="icon" title="Notifications"></div>
+      <div class="icon" title="User Menu"></div>
+    </div>
+  </div>
+  <div class="mockup-body">
+    <div class="mockup-sidebar">
+      <div class="item active"><div class="dot"></div> Dashboard</div>
+      <div class="item"><div class="dot"></div> Clients</div>
+      <div class="item"><div class="dot"></div> Jobs</div>
+      <div class="item"><div class="dot"></div> Templates</div>
+      <div class="item"><div class="dot"></div> Calendar</div>
+      <div class="item"><div class="dot"></div> Invoices</div>
+      <div class="item"><div class="dot"></div> Reports</div>
+      <div class="item" style="margin-top: auto;"><div class="dot"></div> Settings</div>
+    </div>
+    <div class="mockup-content">
+      <p style="color: #94a3b8; text-align: center; margin-top: 140px; font-size: 14px;">Main content area — changes per section</p>
+    </div>
+  </div>
+</div>
+<p><strong>Layout:</strong> Collapsible sidebar (icons only when collapsed) + top bar with search, notifications, user menu. Sidebar is always visible on desktop; slide-out drawer on mobile.</p>
+
+<h2 id="dashboard">UI Design — Dashboard</h2>
+<div class="mockup">
+  <div class="mockup-topbar">
+    <div class="left">Translation Assistant</div>
+    <div class="right">
+      <input class="search" placeholder="Search..." disabled>
+      <div class="icon"></div>
+      <div class="icon"></div>
+    </div>
+  </div>
+  <div class="mockup-body">
+    <div class="mockup-sidebar">
+      <div class="item active"><div class="dot"></div> Dashboard</div>
+      <div class="item"><div class="dot"></div> Clients</div>
+      <div class="item"><div class="dot"></div> Jobs</div>
+      <div class="item"><div class="dot"></div> Templates</div>
+    </div>
+    <div class="mockup-content">
+      <div class="dash-cards">
+        <div class="dash-card">
+          <div class="value">12</div>
+          <div class="label">Active Jobs</div>
+          <div class="trend" style="color:#059669">↑ 3 this week</div>
+        </div>
+        <div class="dash-card">
+          <div class="value">$4,250</div>
+          <div class="label">Revenue (May)</div>
+          <div class="trend" style="color:#059669">↑ 12% vs Apr</div>
+        </div>
+        <div class="dash-card">
+          <div class="value">3</div>
+          <div class="label">Pending Invoices</div>
+          <div class="trend" style="color:#D97706">$1,800 total</div>
+        </div>
+        <div class="dash-card">
+          <div class="value">2</div>
+          <div class="label">Due This Week</div>
+          <div class="trend" style="color:#E11D48">1 overdue</div>
+        </div>
+      </div>
+      <div class="mock-table">
+        <div class="mock-table-header">
+          <span class="title">Recent Jobs</span>
+          <button class="mock-btn mock-btn-primary">+ New Job</button>
+        </div>
+        <div class="mock-table-row header">
+          <span>Client / Job</span><span>Language</span><span>Status</span><span>Deadline</span><span>Total</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Al-Rashid Corp — Birth Certificate</span><span>AR → EN</span><span><span class="tag tag-primary">In Progress</span></span><span>May 5</span><span>$120</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Marie Dupont — Family Extract</span><span>FR → EN</span><span><span class="tag tag-success">Delivered</span></span><span>May 3</span><span>$85</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Hassan Trading — Contract</span><span>AR → EN</span><span><span class="tag tag-warning">Quote</span></span><span>—</span><span>$340</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Legal Associates — Court Order</span><span>AR → EN</span><span><span class="tag tag-danger">Overdue</span></span><span>Apr 28</span><span>$200</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 id="clients-ui">UI Design — Clients Page</h2>
+<div class="mockup">
+  <div class="mockup-topbar">
+    <div class="left">Translation Assistant</div>
+    <div class="right">
+      <input class="search" placeholder="Search..." disabled>
+      <div class="icon"></div><div class="icon"></div>
+    </div>
+  </div>
+  <div class="mockup-body">
+    <div class="mockup-sidebar">
+      <div class="item"><div class="dot"></div> Dashboard</div>
+      <div class="item active"><div class="dot"></div> Clients</div>
+      <div class="item"><div class="dot"></div> Jobs</div>
+      <div class="item"><div class="dot"></div> Templates</div>
+    </div>
+    <div class="mockup-content">
+      <div class="mock-table">
+        <div class="mock-table-header">
+          <span class="title">Clients</span>
+          <div style="display:flex; gap: 8px;">
+            <select style="padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;">
+              <option>All Types</option>
+              <option>Company</option>
+              <option>Person</option>
+            </select>
+            <button class="mock-btn mock-btn-primary">+ New Client</button>
+          </div>
+        </div>
+        <div class="mock-table-row header" style="grid-template-columns: 2fr 1fr 1.5fr 1fr 1fr;">
+          <span>Name</span><span>Type</span><span>Email</span><span>Jobs</span><span>Last Activity</span>
+        </div>
+        <div class="mock-table-row" style="grid-template-columns: 2fr 1fr 1.5fr 1fr 1fr;">
+          <span>Al-Rashid Corporation</span><span><span class="tag tag-primary">Company</span></span><span>info@alrashid.com</span><span>8</span><span>May 1</span>
+        </div>
+        <div class="mock-table-row" style="grid-template-columns: 2fr 1fr 1.5fr 1fr 1fr;">
+          <span>Marie Dupont</span><span><span class="tag tag-warning">Person</span></span><span>marie@email.com</span><span>3</span><span>Apr 28</span>
+        </div>
+        <div class="mock-table-row" style="grid-template-columns: 2fr 1fr 1.5fr 1fr 1fr;">
+          <span>Hassan Trading LLC</span><span><span class="tag tag-primary">Company</span></span><span>hassan@trading.com</span><span>12</span><span>Apr 25</span>
+        </div>
+      </div>
+      <div class="wireframe" style="margin-top: 24px;">
+        <div class="wireframe-label">Client Detail View (tabs)</div>
+        <div style="display: flex; gap: 16px; margin-bottom: 12px;">
+          <span style="font-weight:700; color:#4F46E5; border-bottom: 2px solid #4F46E5; padding-bottom: 4px; font-size: 14px;">Info</span>
+          <span style="color:#94a3b8; font-size: 14px;">Contacts</span>
+          <span style="color:#94a3b8; font-size: 14px;">Passport Copies</span>
+          <span style="color:#94a3b8; font-size: 14px;">Jobs</span>
+          <span style="color:#94a3b8; font-size: 14px;">Invoices</span>
+        </div>
+        <p style="font-size: 13px; color: #64748b;">Client info form (name, email, phone, address, tax ID, notes). Company-type clients show the Contacts tab for managing people within the company. Passport Copies tab shows uploaded reference images.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 id="jobs-ui">UI Design — Jobs Page</h2>
+<div class="mockup">
+  <div class="mockup-topbar">
+    <div class="left">Translation Assistant</div>
+    <div class="right">
+      <input class="search" placeholder="Search..." disabled>
+      <div class="icon"></div><div class="icon"></div>
+    </div>
+  </div>
+  <div class="mockup-body">
+    <div class="mockup-sidebar">
+      <div class="item"><div class="dot"></div> Dashboard</div>
+      <div class="item"><div class="dot"></div> Clients</div>
+      <div class="item active"><div class="dot"></div> Jobs</div>
+      <div class="item"><div class="dot"></div> Templates</div>
+    </div>
+    <div class="mockup-content">
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <select style="padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;"><option>All Statuses</option></select>
+        <select style="padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;"><option>All Clients</option></select>
+        <select style="padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;"><option>All Languages</option></select>
+        <input type="date" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;">
+        <input type="date" style="padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 13px;">
+      </div>
+      <div class="mock-table">
+        <div class="mock-table-header">
+          <span class="title">Jobs</span>
+          <button class="mock-btn mock-btn-primary">+ New Job</button>
+        </div>
+        <div class="mock-table-row header">
+          <span>Job</span><span>Client</span><span>Languages</span><span>Status</span><span>Total</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Birth Certificate #127</span><span>Al-Rashid Corp</span><span>AR → EN</span><span><span class="tag tag-primary">In Progress</span></span><span>$120</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Family Extract #126</span><span>Marie Dupont</span><span>FR → EN</span><span><span class="tag tag-success">Delivered</span></span><span>$85</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Commercial Contract #125</span><span>Hassan Trading</span><span>AR → EN</span><span><span class="tag tag-warning">Quote</span></span><span>$340</span>
+        </div>
+      </div>
+      <div class="wireframe" style="margin-top: 24px;">
+        <div class="wireframe-label">Job Detail View (tabs)</div>
+        <div style="display: flex; gap: 16px; margin-bottom: 12px;">
+          <span style="font-weight:700; color:#4F46E5; border-bottom: 2px solid #4F46E5; padding-bottom: 4px; font-size: 14px;">Details</span>
+          <span style="color:#94a3b8; font-size: 14px;">Documents</span>
+          <span style="color:#94a3b8; font-size: 14px;">Source Files</span>
+          <span style="color:#94a3b8; font-size: 14px;">Translated Files</span>
+          <span style="color:#94a3b8; font-size: 14px;">Invoice</span>
+        </div>
+        <p style="font-size: 13px; color: #64748b;">
+          <strong>Details:</strong> job info, type (template/free-form), pricing, pro bono toggle, status, assigned users.<br>
+          <strong>Documents:</strong> template-based documents in this job with status (template jobs only).<br>
+          <strong>Source Files:</strong> uploaded or linked source documents. Can link from another job.<br>
+          <strong>Translated Files:</strong> uploaded translations (free-form) or generated exports (template).<br>
+          <strong>Invoice:</strong> linked invoice (if any), or button to create one.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 id="doc-ui">UI Design — Document Translation Page</h2>
+<p>Single-input flow: each field has one input for the target language translation. The user references the original document beside them (physical paper or side-by-side source viewer). Google Translate is a popup helper, not inline.</p>
+
+<h4>Standard View (no source file)</h4>
+<div class="mockup">
+  <div class="mockup-topbar">
+    <div class="left">Translation Assistant — Birth Certificate #127</div>
+    <div class="right">
+      <button class="mock-btn" style="background:#059669; color:#fff;">Save</button>
+      <button class="mock-btn mock-btn-primary">Export .docx</button>
+    </div>
+  </div>
+  <div class="mockup-body" style="min-height: 460px;">
+    <div class="mockup-sidebar" style="width: 220px;">
+      <div style="padding: 16px; color: #c7d2fe; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Client Reference</div>
+      <div style="padding: 0 16px 12px; color: #e0e7ff; font-size: 13px;">Al-Rashid Corporation</div>
+      <div style="padding: 0 16px 16px; color: #a5b4fc; font-size: 12px;">AR → EN</div>
+      <div style="border-top: 1px solid rgba(255,255,255,0.1); padding: 16px; color: #c7d2fe; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Passport Copies</div>
+      <div style="padding: 0 16px;">
+        <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; margin-bottom: 8px; color: #e0e7ff; font-size: 12px; cursor: pointer;">Client Passport</div>
+        <div style="background: rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; margin-bottom: 8px; color: #e0e7ff; font-size: 12px; cursor: pointer;">Wife Passport</div>
+      </div>
+      <div style="border-top: 1px solid rgba(255,255,255,0.1); padding: 16px; color: #c7d2fe; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Actions</div>
+      <div class="item" style="font-size: 12px;">Open Source File</div>
+      <div class="item" style="font-size: 12px;">Load from Existing</div>
+    </div>
+    <div class="mockup-content" style="padding: 32px 40px;">
+      <div style="max-width: 600px;">
+        <!-- Field 1 -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 2px;">Full Name</div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">الاسم الكامل</div>
+            </div>
+            <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 11px; padding: 4px 10px;">GT</button>
+          </div>
+          <div style="border: 2px solid #4F46E5; border-radius: 8px; padding: 10px; font-size: 14px; background: #fff;">Mohammed Ahmad Al-Rashid</div>
+        </div>
+        <!-- Field 2 -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 2px;">Date of Birth</div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">تاريخ الولادة</div>
+            </div>
+            <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 11px; padding: 4px 10px;">GT</button>
+          </div>
+          <div style="border: 2px solid #4F46E5; border-radius: 8px; padding: 10px; font-size: 14px; background: #fff;">15 / 03 / 1985</div>
+        </div>
+        <!-- Field 3 -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 2px;">Place of Birth</div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">مكان الولادة</div>
+            </div>
+            <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 11px; padding: 4px 10px;">GT</button>
+          </div>
+          <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 14px; background: #fff; color: #94a3b8;">Type translation...</div>
+        </div>
+        <!-- Field 4 -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <div style="font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 2px;">Father's Name</div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 8px;">اسم الأب</div>
+            </div>
+            <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 11px; padding: 4px 10px;">GT</button>
+          </div>
+          <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 14px; background: #fff; color: #94a3b8;">Type translation...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h4>Side-by-Side View (with source file)</h4>
+<div class="mockup">
+  <div class="mockup-topbar">
+    <div class="left">Translation Assistant — Birth Certificate #127</div>
+    <div class="right">
+      <button class="mock-btn" style="background:#059669; color:#fff;">Save</button>
+      <button class="mock-btn mock-btn-primary">Export .docx</button>
+    </div>
+  </div>
+  <div class="mockup-body" style="min-height: 400px;">
+    <div style="flex: 1; background: #1e293b; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; border-right: 2px solid #e2e8f0;">
+      <div style="font-size: 13px; margin-bottom: 12px; color: #64748b;">SOURCE FILE VIEWER</div>
+      <div style="background: #fff; width: 80%; height: 280px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 13px;">
+        PDF / Image preview with zoom & page navigation
+      </div>
+    </div>
+    <div style="flex: 1; background: #f8fafc; padding: 24px; overflow-y: auto;">
+      <div style="max-width: 500px;">
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <div style="font-weight: 700; font-size: 13px; color: #1e293b; margin-bottom: 2px;">Full Name</div>
+              <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">الاسم الكامل</div>
+            </div>
+            <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 10px; padding: 3px 8px;">GT</button>
+          </div>
+          <div style="border: 2px solid #4F46E5; border-radius: 6px; padding: 8px; font-size: 13px; background: #fff;">Mohammed Ahmad Al-Rashid</div>
+        </div>
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <div>
+              <div style="font-weight: 700; font-size: 13px; color: #1e293b; margin-bottom: 2px;">Date of Birth</div>
+              <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">تاريخ الولادة</div>
+            </div>
+            <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 10px; padding: 3px 8px;">GT</button>
+          </div>
+          <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; font-size: 13px; background: #fff; color: #94a3b8;">Type translation...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 id="gt-popup">UI Design — Google Translate Popup</h2>
+<p>The GT popup is a modal helper. Click the GT button on any field to open it. Type source text, get translation, copy to field.</p>
+<div class="wireframe" style="max-width: 500px; margin: 20px auto;">
+  <div style="background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.15);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <div style="font-weight: 700; font-size: 16px; color: #1e293b;">Google Translate Helper</div>
+      <div style="color: #94a3b8; cursor: pointer; font-size: 18px;">✕</div>
+    </div>
+    <div style="margin-bottom: 16px;">
+      <div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">Source (Arabic)</div>
+      <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 14px; direction: rtl; background: #f8fafc;">محمد أحمد الراشد</div>
+    </div>
+    <div style="text-align: center; margin-bottom: 16px;">
+      <button class="mock-btn mock-btn-primary" style="padding: 8px 24px;">Translate ↓</button>
+    </div>
+    <div style="margin-bottom: 20px;">
+      <div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">Translation (English)</div>
+      <div style="border: 2px solid #059669; border-radius: 8px; padding: 10px; font-size: 14px; background: #ECFDF5;">Mohammed Ahmed Al-Rashed</div>
+    </div>
+    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+      <button class="mock-btn" style="background: #f1f5f9; color: #64748b;">Close</button>
+      <button class="mock-btn" style="background: #059669; color: #fff;">Copy to Field</button>
+    </div>
+  </div>
+</div>
+
+<h2 id="designer-ui">UI Design — Template Designer</h2>
+<div class="wireframe">
+  <div class="wireframe-label">Block-Based Document Designer</div>
+  <div style="display: grid; grid-template-columns: 1fr 200px; gap: 16px;">
+    <div>
+      <div style="font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 12px;">Toolbar</div>
+      <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Header</button>
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Text Block</button>
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Field</button>
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Row</button>
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Footer</button>
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Date</button>
+        <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5;">+ Divider</button>
+      </div>
+      <div style="font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 12px;">Document Preview (drag to reorder)</div>
+      <div style="background: #fff; border: 2px solid #e2e8f0; border-radius: 8px; padding: 24px; min-height: 300px;">
+        <div style="border: 2px dashed #c7d2fe; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #fafaff; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 13px; color: #4F46E5; font-weight: 600;">⬍ HEADER — "Republic of Lebanon — Birth Certificate"</span>
+          <span style="font-size: 11px; color: #94a3b8;">drag to move</span>
+        </div>
+        <div style="border: 2px dashed #c7d2fe; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #fafaff;">
+          <span style="font-size: 13px; color: #4F46E5; font-weight: 600;">⬍ ROW — [Full Name] [Date of Birth]</span>
+        </div>
+        <div style="border: 2px dashed #c7d2fe; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #fafaff;">
+          <span style="font-size: 13px; color: #4F46E5; font-weight: 600;">⬍ ROW — [Place of Birth] [Nationality]</span>
+        </div>
+        <div style="border: 2px dashed #c7d2fe; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #fafaff;">
+          <span style="font-size: 13px; color: #4F46E5; font-weight: 600;">⬍ ROW — [Father's Name] [Mother's Name]</span>
+        </div>
+        <div style="border: 2px dashed #c7d2fe; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #fafaff;">
+          <span style="font-size: 13px; color: #818CF8; font-weight: 600;">⬍ TEXT — "This is a certified translation of..."</span>
+        </div>
+        <div style="border: 2px dashed #c7d2fe; border-radius: 6px; padding: 12px; background: #fafaff;">
+          <span style="font-size: 13px; color: #4F46E5; font-weight: 600;">⬍ FOOTER — [Date Placeholder] — "Translator Signature"</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 12px;">Properties</div>
+      <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-size: 13px;">
+        <div style="margin-bottom: 12px;">
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Block Type</div>
+          <div style="font-weight: 600;">Row</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Columns</div>
+          <div>2</div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Field 1</div>
+          <select style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;"><option>Full Name</option></select>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Field 2</div>
+          <select style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;"><option>Date of Birth</option></select>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Font Size</div>
+          <input type="number" value="14" style="width: 100%; padding: 6px; border-radius: 6px; border: 1px solid #e2e8f0; font-size: 12px;">
+        </div>
+        <div>
+          <div style="color: #64748b; font-size: 11px; margin-bottom: 4px;">Alignment</div>
+          <div style="display: flex; gap: 4px;">
+            <button class="mock-btn" style="background:#EEF2FF; color:#4F46E5; font-size: 11px; padding: 4px 10px;">L</button>
+            <button class="mock-btn" style="background:#4F46E5; color:#fff; font-size: 11px; padding: 4px 10px;">C</button>
+            <button class="mock-btn" style="background:#EEF2FF; color:#4F46E5; font-size: 11px; padding: 4px 10px;">R</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 id="multipage">UI Design — Multi-Page Documents</h2>
+<p>Templates define a page blueprint. When filling a document, the user can add additional pages. Each page has its own fixed fields (e.g., document number) and repeatable entries (e.g., names in a family extract).</p>
+<div class="wireframe">
+  <div class="wireframe-label">Multi-Page Document — Family Extract Example</div>
+  <div style="display: flex; gap: 16px;">
+    <!-- Page 1 -->
+    <div style="flex: 1; background: #fff; border: 2px solid #4F46E5; border-radius: 10px; padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 700; color: #4F46E5; font-size: 14px;">Page 1</span>
+        <span style="font-size: 11px; color: #94a3b8;">Active</span>
+      </div>
+      <div style="margin-bottom: 10px;">
+        <div style="font-size: 11px; color: #64748b;">Document Number</div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; font-size: 13px; margin-top: 4px;">455567</div>
+      </div>
+      <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">Entries:</div>
+      <div style="background: #f8fafc; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 12px;">1. Mohammed Ahmad — 15/03/1985</div>
+      <div style="background: #f8fafc; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 12px;">2. Sarah Ahmad — 22/07/1988</div>
+      <div style="background: #f8fafc; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 12px;">3. Ali Ahmad — 10/01/1990</div>
+      <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 11px; width: 100%;">+ Add Entry</button>
+    </div>
+    <!-- Page 2 -->
+    <div style="flex: 1; background: #fff; border: 2px solid #e2e8f0; border-radius: 10px; padding: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-weight: 700; color: #334155; font-size: 14px;">Page 2</span>
+        <span style="font-size: 11px; color: #E11D48; cursor: pointer;">Remove</span>
+      </div>
+      <div style="margin-bottom: 10px;">
+        <div style="font-size: 11px; color: #64748b;">Document Number</div>
+        <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; font-size: 13px; margin-top: 4px;">455566</div>
+      </div>
+      <div style="font-size: 11px; color: #64748b; margin-bottom: 6px;">Entries:</div>
+      <div style="background: #f8fafc; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 12px;">4. Fatima Ahmad — 03/05/1993</div>
+      <div style="background: #f8fafc; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 12px;">5. Khaled Ahmad — 18/11/1995</div>
+      <button class="mock-btn" style="background: #EEF2FF; color: #4F46E5; font-size: 11px; width: 100%;">+ Add Entry</button>
+    </div>
+  </div>
+  <div style="margin-top: 12px; text-align: center;">
+    <button class="mock-btn mock-btn-primary">+ Add Page</button>
+  </div>
+</div>
+<div class="card">
+  <h4 style="margin-top: 0;">How it works:</h4>
+  <ul>
+    <li>Template defines a <strong>page blueprint</strong> — the default structure for any page</li>
+    <li>Each page has its own <strong>fixed fields</strong> (e.g., document number — unique per page)</li>
+    <li>Each page has a <strong>repeatable zone</strong> for entries (e.g., names, dates)</li>
+    <li>User clicks "+ Add Page" to add pages — each new page uses the same blueprint</li>
+    <li>User clicks "+ Add Entry" within a page to add entries to that specific page</li>
+    <li>On export, each page generates as a separate page in the Word document</li>
+    <li>The number of entries per page matches the original document exactly</li>
+  </ul>
+</div>
+
+<h2 id="dark-mode">UI Design — Dark Mode</h2>
+<div class="mockup dark-mockup">
+  <div class="mockup-topbar">
+    <div class="left">Translation Assistant</div>
+    <div class="right">
+      <input class="search" placeholder="Search..." disabled style="background: rgba(255,255,255,0.08); color: #94a3b8;">
+      <div class="icon"></div>
+      <div class="icon"></div>
+    </div>
+  </div>
+  <div class="mockup-body">
+    <div class="mockup-sidebar">
+      <div class="item active"><div class="dot"></div> Dashboard</div>
+      <div class="item"><div class="dot"></div> Clients</div>
+      <div class="item"><div class="dot"></div> Jobs</div>
+      <div class="item"><div class="dot"></div> Templates</div>
+    </div>
+    <div class="mockup-content">
+      <div class="dash-cards">
+        <div class="dash-card">
+          <div class="value">12</div>
+          <div class="label">Active Jobs</div>
+        </div>
+        <div class="dash-card">
+          <div class="value">$4,250</div>
+          <div class="label">Revenue (May)</div>
+        </div>
+        <div class="dash-card">
+          <div class="value">3</div>
+          <div class="label">Pending Invoices</div>
+        </div>
+        <div class="dash-card">
+          <div class="value">2</div>
+          <div class="label">Due This Week</div>
+        </div>
+      </div>
+      <div class="mock-table">
+        <div class="mock-table-header">
+          <span class="title">Recent Jobs</span>
+          <button class="mock-btn mock-btn-primary">+ New Job</button>
+        </div>
+        <div class="mock-table-row header">
+          <span>Client / Job</span><span>Language</span><span>Status</span><span>Deadline</span><span>Total</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Al-Rashid Corp — Birth Cert</span><span>AR → EN</span><span><span class="tag tag-primary">In Progress</span></span><span>May 5</span><span>$120</span>
+        </div>
+        <div class="mock-table-row">
+          <span>Marie Dupont — Family Extract</span><span>FR → EN</span><span><span class="tag tag-success">Delivered</span></span><span>May 3</span><span>$85</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECURITY ==================== -->
+<h2 id="security">Security</h2>
+<div class="security-grid">
+  <div class="security-item">
+    <h4>Authentication</h4>
+    <p>JWT + refresh token rotation. Tokens stored in httpOnly cookies. Short access token TTL (15 min), long refresh TTL (7 days). Bcrypt password hashing.</p>
+  </div>
+  <div class="security-item">
+    <h4>Authorization</h4>
+    <p>RBAC enforced on every API endpoint. Permission checks at controller level via guards. Job-level sharing with explicit permission grants (view/edit).</p>
+  </div>
+  <div class="security-item">
+    <h4>Input Validation</h4>
+    <p>All inputs validated with class-validator (NestJS). Parameterized queries via ORM — no raw SQL. File upload validation (type, size limits).</p>
+  </div>
+  <div class="security-item">
+    <h4>API Security</h4>
+    <p>Helmet for HTTP headers. CORS restricted to app domain. Rate limiting on auth endpoints. CSRF protection for cookie-based auth.</p>
+  </div>
+  <div class="security-item">
+    <h4>Data Protection</h4>
+    <p>Sensitive fields encrypted at rest. Passport copies stored outside web root. File access through authenticated API only — no direct URL access.</p>
+  </div>
+  <div class="security-item">
+    <h4>Audit & Logging</h4>
+    <p>All auth events logged. Failed login tracking. API request logging (sanitized — no passwords/tokens in logs).</p>
+  </div>
+</div>
+
+<!-- ==================== API STRUCTURE ==================== -->
+<h2 id="api">API Structure</h2>
+<table>
+  <tr><th>Module</th><th>Endpoints</th><th>Key Operations</th></tr>
+  <tr><td>Auth</td><td><code>/api/auth/*</code></td><td>Login, register (invite), refresh, logout, change password</td></tr>
+  <tr><td>Users</td><td><code>/api/users/*</code></td><td>CRUD, invite, activate/deactivate, assign role</td></tr>
+  <tr><td>Roles</td><td><code>/api/roles/*</code></td><td>CRUD, assign permissions</td></tr>
+  <tr><td>Clients</td><td><code>/api/clients/*</code></td><td>CRUD, contacts, passport copies upload</td></tr>
+  <tr><td>Languages</td><td><code>/api/languages/*</code></td><td>CRUD</td></tr>
+  <tr><td>Templates</td><td><code>/api/templates/*</code></td><td>CRUD, fields, labels, layout</td></tr>
+  <tr><td>Jobs</td><td><code>/api/jobs/*</code></td><td>CRUD, status transitions, assign users, share, pro bono</td></tr>
+  <tr><td>Files</td><td><code>/api/files/*</code></td><td>Upload, download, link from job, compress, delete</td></tr>
+  <tr><td>Documents</td><td><code>/api/documents/*</code></td><td>CRUD, field values, clone, export</td></tr>
+  <tr><td>Translate</td><td><code>/api/translate</code></td><td>Google Translate proxy (single field)</td></tr>
+  <tr><td>Invoices</td><td><code>/api/invoices/*</code></td><td>CRUD, add jobs, payment status</td></tr>
+  <tr><td>Calendar</td><td><code>/api/calendar/*</code></td><td>Events (deadlines, schedules)</td></tr>
+  <tr><td>Notifications</td><td><code>/api/notifications/*</code></td><td>List, mark read, preferences</td></tr>
+  <tr><td>Reports</td><td><code>/api/reports/*</code></td><td>Revenue, jobs, clients analytics</td></tr>
+  <tr><td>Settings</td><td><code>/api/settings/*</code></td><td>App settings, base currency, company info</td></tr>
+</table>
+
+<!-- ==================== BUILD PLAN ==================== -->
+<h2 id="build-plan">Build Plan</h2>
+<div class="timeline">
+  <div class="timeline-item">
+    <div class="phase">Phase 1 — Project Setup</div>
+    <div class="desc">NestJS backend, Next.js frontend, Docker Compose, MariaDB, Tailwind with Indigo theme, CLAUDE.md</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 2 — Auth & Users</div>
+    <div class="desc">Invite-only registration, login, JWT + refresh tokens, RBAC (roles, permissions)</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 3 — Settings</div>
+    <div class="desc">Base currency, company info, language management</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 4 — Clients</div>
+    <div class="desc">Companies, persons, contacts, passport copy uploads</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 5 — Templates</div>
+    <div class="desc">Template CRUD, field definitions, field labels per language</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 6 — Document Designer</div>
+    <div class="desc">Block-based layout builder with drag-and-drop, preview</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 7 — Jobs</div>
+    <div class="desc">Job CRUD, status workflow, pricing, user assignment/sharing</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 8 — Documents</div>
+    <div class="desc">Fill documents, Google Translate per field, clone from existing</div>
+  </div>
+  <div class="timeline-item">
+    <div class="phase">Phase 9 — Word Export</div>
+    <div class="desc">Generate .docx from layout + field values</div>
+  </div>
+  <div class="timeline-item future">
+    <div class="phase">Phase 10 — Invoicing</div>
+    <div class="desc">Invoice generation, multi-job, payment tracking</div>
+  </div>
+  <div class="timeline-item future">
+    <div class="phase">Phase 11 — Calendar</div>
+    <div class="desc">Deadlines, schedule view</div>
+  </div>
+  <div class="timeline-item future">
+    <div class="phase">Phase 12 — Notifications</div>
+    <div class="desc">Email + push, configurable preferences</div>
+  </div>
+  <div class="timeline-item future">
+    <div class="phase">Phase 13 — Reporting</div>
+    <div class="desc">Revenue, jobs per client, filters</div>
+  </div>
+  <div class="timeline-item future">
+    <div class="phase">Phase 14 — Search</div>
+    <div class="desc">Global search across entities</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top: 30px; border-left: 4px solid #4F46E5;">
+  <h4 style="margin-top: 0;">Core MVP = Phases 1–9</h4>
+  <p style="margin-bottom: 0;">Delivers a fully usable app: manage clients, create templates, handle jobs, translate documents, and export to Word. Phases 10–14 add business operations (invoicing, calendar, notifications, reporting, search).</p>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Translation Assistant — Color Palette Options</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; padding: 40px; color: #1e293b; }
+  h1 { text-align: center; margin-bottom: 10px; font-size: 28px; }
+  .subtitle { text-align: center; color: #64748b; margin-bottom: 40px; font-size: 16px; }
+  .palettes { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; max-width: 1200px; margin: 0 auto; }
+  .palette { background: #fff; border-radius: 16px; padding: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .palette h2 { font-size: 20px; margin-bottom: 4px; }
+  .palette .feel { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+  .colors { display: flex; flex-direction: column; gap: 10px; }
+  .color-row { display: flex; align-items: center; gap: 14px; }
+  .swatch { width: 56px; height: 56px; border-radius: 12px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.08); }
+  .color-info { display: flex; flex-direction: column; }
+  .color-label { font-weight: 600; font-size: 14px; }
+  .color-hex { font-size: 13px; color: #64748b; font-family: monospace; }
+  .divider { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+
+  /* Mini preview */
+  .preview { margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+  .preview-topbar { height: 40px; display: flex; align-items: center; padding: 0 16px; color: #fff; font-size: 13px; font-weight: 600; }
+  .preview-body { display: flex; height: 160px; }
+  .preview-sidebar { width: 50px; padding: 12px 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .preview-sidebar .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.5); }
+  .preview-sidebar .dot.active { background: #fff; }
+  .preview-content { flex: 1; background: #f8fafc; padding: 16px; }
+  .preview-card { background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  .preview-card .bar { height: 8px; border-radius: 4px; margin-bottom: 6px; }
+  .preview-card .bar.short { width: 40%; }
+  .preview-card .bar.medium { width: 65%; }
+  .preview-card .bar.long { width: 85%; }
+  .preview-card .bar.muted { background: #e2e8f0; }
+  .preview-badges { display: flex; gap: 6px; margin-top: 8px; }
+  .preview-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; color: #fff; font-weight: 600; }
+
+  /* Dark mode preview */
+  .dark-section { margin-top: 50px; max-width: 1200px; margin-left: auto; margin-right: auto; }
+  .dark-section h2 { text-align: center; margin-bottom: 20px; }
+  .dark-previews { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+  .dark-preview { border-radius: 12px; overflow: hidden; border: 1px solid #334155; }
+  .dark-preview .preview-topbar { background: #0f172a; }
+  .dark-preview .preview-sidebar { background: #1e293b; }
+  .dark-preview .preview-content { background: #0f172a; }
+  .dark-preview .preview-card { background: #1e293b; }
+  .dark-preview .preview-card .bar.muted { background: #334155; }
+  .dark-preview .label { color: #94a3b8; font-size: 12px; text-align: center; padding: 8px; background: #0f172a; }
+</style>
+</head>
+<body>
+
+<h1>Translation Assistant — Color Palettes</h1>
+<p class="subtitle">Pick the palette that feels right. Each one includes a mini app preview.</p>
+
+<div class="palettes">
+
+  <!-- Option A -->
+  <div class="palette">
+    <h2>Option A — Ocean Blue</h2>
+    <p class="feel">Classic professional. Trust & reliability.</p>
+    <div class="colors">
+      <div class="color-row">
+        <div class="swatch" style="background:#1E40AF"></div>
+        <div class="color-info"><span class="color-label">Primary</span><span class="color-hex">#1E40AF</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#3B82F6"></div>
+        <div class="color-info"><span class="color-label">Accent</span><span class="color-hex">#3B82F6</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#16A34A"></div>
+        <div class="color-info"><span class="color-label">Success</span><span class="color-hex">#16A34A</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#F59E0B"></div>
+        <div class="color-info"><span class="color-label">Warning</span><span class="color-hex">#F59E0B</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#DC2626"></div>
+        <div class="color-info"><span class="color-label">Danger</span><span class="color-hex">#DC2626</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#475569"></div>
+        <div class="color-info"><span class="color-label">Neutral</span><span class="color-hex">#475569 (slate)</span></div>
+      </div>
+    </div>
+    <div class="preview">
+      <div class="preview-topbar" style="background:#1E40AF">
+        Translation Assistant
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="background:#1e3a8a">
+          <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#3B82F6"></div>
+            <div class="bar medium muted"></div>
+            <div class="bar short muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#16A34A">Paid</span>
+              <span class="preview-badge" style="background:#3B82F6">In Progress</span>
+              <span class="preview-badge" style="background:#F59E0B">Pending</span>
+              <span class="preview-badge" style="background:#DC2626">Overdue</span>
+            </div>
+          </div>
+          <div class="preview-card">
+            <div class="bar medium" style="background:#1E40AF"></div>
+            <div class="bar short muted"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="palette">
+    <h2>Option B — Indigo Minimal</h2>
+    <p class="feel">Modern & calm. Clean lines.</p>
+    <div class="colors">
+      <div class="color-row">
+        <div class="swatch" style="background:#4F46E5"></div>
+        <div class="color-info"><span class="color-label">Primary</span><span class="color-hex">#4F46E5</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#818CF8"></div>
+        <div class="color-info"><span class="color-label">Accent</span><span class="color-hex">#818CF8</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#059669"></div>
+        <div class="color-info"><span class="color-label">Success</span><span class="color-hex">#059669</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#D97706"></div>
+        <div class="color-info"><span class="color-label">Warning</span><span class="color-hex">#D97706</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#E11D48"></div>
+        <div class="color-info"><span class="color-label">Danger</span><span class="color-hex">#E11D48</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#6B7280"></div>
+        <div class="color-info"><span class="color-label">Neutral</span><span class="color-hex">#6B7280 (cool gray)</span></div>
+      </div>
+    </div>
+    <div class="preview">
+      <div class="preview-topbar" style="background:#4F46E5">
+        Translation Assistant
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="background:#3730a3">
+          <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#818CF8"></div>
+            <div class="bar medium muted"></div>
+            <div class="bar short muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#059669">Paid</span>
+              <span class="preview-badge" style="background:#4F46E5">In Progress</span>
+              <span class="preview-badge" style="background:#D97706">Pending</span>
+              <span class="preview-badge" style="background:#E11D48">Overdue</span>
+            </div>
+          </div>
+          <div class="preview-card">
+            <div class="bar medium" style="background:#4F46E5"></div>
+            <div class="bar short muted"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="palette">
+    <h2>Option C — Teal Focus</h2>
+    <p class="feel">Fresh & distinctive. Stands out.</p>
+    <div class="colors">
+      <div class="color-row">
+        <div class="swatch" style="background:#0D9488"></div>
+        <div class="color-info"><span class="color-label">Primary</span><span class="color-hex">#0D9488</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#2DD4BF"></div>
+        <div class="color-info"><span class="color-label">Accent</span><span class="color-hex">#2DD4BF</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#16A34A"></div>
+        <div class="color-info"><span class="color-label">Success</span><span class="color-hex">#16A34A</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#F59E0B"></div>
+        <div class="color-info"><span class="color-label">Warning</span><span class="color-hex">#F59E0B</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#DC2626"></div>
+        <div class="color-info"><span class="color-label">Danger</span><span class="color-hex">#DC2626</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#64748b"></div>
+        <div class="color-info"><span class="color-label">Neutral</span><span class="color-hex">#64748B (warm gray)</span></div>
+      </div>
+    </div>
+    <div class="preview">
+      <div class="preview-topbar" style="background:#0D9488">
+        Translation Assistant
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="background:#0f766e">
+          <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#2DD4BF"></div>
+            <div class="bar medium muted"></div>
+            <div class="bar short muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#16A34A">Paid</span>
+              <span class="preview-badge" style="background:#0D9488">In Progress</span>
+              <span class="preview-badge" style="background:#F59E0B">Pending</span>
+              <span class="preview-badge" style="background:#DC2626">Overdue</span>
+            </div>
+          </div>
+          <div class="preview-card">
+            <div class="bar medium" style="background:#0D9488"></div>
+            <div class="bar short muted"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option D -->
+  <div class="palette">
+    <h2>Option D — Slate & Amber</h2>
+    <p class="feel">Elegant & warm. Premium feel.</p>
+    <div class="colors">
+      <div class="color-row">
+        <div class="swatch" style="background:#334155"></div>
+        <div class="color-info"><span class="color-label">Primary</span><span class="color-hex">#334155</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#F59E0B"></div>
+        <div class="color-info"><span class="color-label">Accent</span><span class="color-hex">#F59E0B</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#16A34A"></div>
+        <div class="color-info"><span class="color-label">Success</span><span class="color-hex">#16A34A</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#F97316"></div>
+        <div class="color-info"><span class="color-label">Warning</span><span class="color-hex">#F97316</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#DC2626"></div>
+        <div class="color-info"><span class="color-label">Danger</span><span class="color-hex">#DC2626</span></div>
+      </div>
+      <div class="color-row">
+        <div class="swatch" style="background:#94a3b8"></div>
+        <div class="color-info"><span class="color-label">Neutral</span><span class="color-hex">#94A3B8 (warm gray)</span></div>
+      </div>
+    </div>
+    <div class="preview">
+      <div class="preview-topbar" style="background:#334155">
+        <span>Translation Assistant</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="background:#1e293b">
+          <div class="dot active" style="background:#F59E0B"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#F59E0B"></div>
+            <div class="bar medium muted"></div>
+            <div class="bar short muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#16A34A">Paid</span>
+              <span class="preview-badge" style="background:#334155">In Progress</span>
+              <span class="preview-badge" style="background:#F97316">Pending</span>
+              <span class="preview-badge" style="background:#DC2626">Overdue</span>
+            </div>
+          </div>
+          <div class="preview-card">
+            <div class="bar medium" style="background:#334155"></div>
+            <div class="bar short muted"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Dark mode previews -->
+<div class="dark-section">
+  <h2>Dark Mode Previews</h2>
+  <div class="dark-previews">
+    <div class="dark-preview">
+      <div class="preview-topbar" style="background:#1e3a8a; border-bottom: 1px solid #1E40AF;">
+        <span style="color:#93c5fd">A — Ocean Blue</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="border-right: 1px solid #334155;">
+          <div class="dot" style="background:#3B82F6"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#3B82F6"></div>
+            <div class="bar medium muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#16A34A">Paid</span>
+              <span class="preview-badge" style="background:#3B82F6">Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dark-preview">
+      <div class="preview-topbar" style="background:#312e81; border-bottom: 1px solid #4F46E5;">
+        <span style="color:#c7d2fe">B — Indigo Minimal</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="border-right: 1px solid #334155;">
+          <div class="dot" style="background:#818CF8"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#818CF8"></div>
+            <div class="bar medium muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#059669">Paid</span>
+              <span class="preview-badge" style="background:#4F46E5">Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dark-preview">
+      <div class="preview-topbar" style="background:#134e4a; border-bottom: 1px solid #0D9488;">
+        <span style="color:#5eead4">C — Teal Focus</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="border-right: 1px solid #334155;">
+          <div class="dot" style="background:#2DD4BF"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#2DD4BF"></div>
+            <div class="bar medium muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#16A34A">Paid</span>
+              <span class="preview-badge" style="background:#0D9488">Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dark-preview">
+      <div class="preview-topbar" style="background:#0f172a; border-bottom: 1px solid #334155;">
+        <span style="color:#F59E0B">D — Slate & Amber</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-sidebar" style="border-right: 1px solid #334155;">
+          <div class="dot" style="background:#F59E0B"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="preview-content">
+          <div class="preview-card">
+            <div class="bar long" style="background:#F59E0B"></div>
+            <div class="bar medium muted"></div>
+            <div class="preview-badges">
+              <span class="preview-badge" style="background:#16A34A">Paid</span>
+              <span class="preview-badge" style="background:#334155; border: 1px solid #475569;">Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
