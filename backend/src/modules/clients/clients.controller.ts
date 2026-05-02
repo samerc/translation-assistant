@@ -16,7 +16,6 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
-import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -29,8 +28,10 @@ import {
   CreateClientPhoneDto,
   CreateClientAddressDto,
 } from './dto/client-detail.dto.js';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+import { Public } from '../../common/decorators/public.decorator.js';
 
 const uploadStorage = diskStorage({
   destination: join(process.cwd(), 'uploads', 'passports'),
@@ -41,7 +42,7 @@ const uploadStorage = diskStorage({
 });
 
 @Controller('clients')
-@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
@@ -204,6 +205,7 @@ export class ClientsController {
   }
 
   @Get(':id/passports/:copyId/file')
+  @Public()
   async viewPassportCopy(
     @Param('id', ParseIntPipe) id: number,
     @Param('copyId', ParseIntPipe) copyId: number,
