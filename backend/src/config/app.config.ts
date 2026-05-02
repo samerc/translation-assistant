@@ -1,5 +1,5 @@
 export const appConfig = () => ({
-  port: parseInt(process.env.PORT || '3001', 10),
+  port: parseInt(process.env.PORT || '3005', 10),
   jwt: {
     secret: process.env.JWT_SECRET || 'change-this-secret-in-production',
     accessTokenTtl: parseInt(process.env.JWT_ACCESS_TTL || '900', 10), // 15 minutes

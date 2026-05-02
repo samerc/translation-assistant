@@ -9,7 +9,7 @@ Internal multi-user web application for freelance translators. Two core modules:
 - **Backend:** NestJS (TypeScript) — `./backend/`
 - **Frontend:** React + Next.js — `./frontend/`
 - **Database:** MariaDB (via Docker)
-- **ORM:** TBD (Prisma or TypeORM)
+- **ORM:** TypeORM
 - **Auth:** JWT + refresh tokens, RBAC
 - **File uploads:** Local disk, compressed with `sharp` (images)
 - **Word export:** `docx` npm library
@@ -37,8 +37,8 @@ translation-assistant/
 ```
 
 ## Commands
-- `cd backend && npm run start:dev` — Start backend in dev mode
-- `cd frontend && npm run dev` — Start frontend in dev mode
+- `cd backend && npm run start:dev` — Start backend in dev mode (port 3005)
+- `cd frontend && npm run dev` — Start frontend in dev mode (port 3000)
 - `docker compose up -d` — Start MariaDB
 - `docker compose down` — Stop all containers
 
