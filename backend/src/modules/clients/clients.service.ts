@@ -117,6 +117,13 @@ export class ClientsService {
     return this.emailRepository.save(email);
   }
 
+  async updateEmail(clientId: number, emailId: number, dto: Partial<CreateClientEmailDto>): Promise<ClientEmail> {
+    const email = await this.emailRepository.findOne({ where: { id: emailId, clientId } });
+    if (!email) throw new NotFoundException('Email not found');
+    Object.assign(email, dto);
+    return this.emailRepository.save(email);
+  }
+
   async removeEmail(clientId: number, emailId: number): Promise<void> {
     const email = await this.emailRepository.findOne({ where: { id: emailId, clientId } });
     if (!email) throw new NotFoundException('Email not found');
@@ -131,6 +138,13 @@ export class ClientsService {
     return this.phoneRepository.save(phone);
   }
 
+  async updatePhone(clientId: number, phoneId: number, dto: Partial<CreateClientPhoneDto>): Promise<ClientPhone> {
+    const phone = await this.phoneRepository.findOne({ where: { id: phoneId, clientId } });
+    if (!phone) throw new NotFoundException('Phone not found');
+    Object.assign(phone, dto);
+    return this.phoneRepository.save(phone);
+  }
+
   async removePhone(clientId: number, phoneId: number): Promise<void> {
     const phone = await this.phoneRepository.findOne({ where: { id: phoneId, clientId } });
     if (!phone) throw new NotFoundException('Phone not found');
@@ -142,6 +156,13 @@ export class ClientsService {
   async addAddress(clientId: number, dto: CreateClientAddressDto): Promise<ClientAddress> {
     await this.findOne(clientId);
     const address = this.addressRepository.create({ ...dto, clientId });
+    return this.addressRepository.save(address);
+  }
+
+  async updateAddress(clientId: number, addressId: number, dto: Partial<CreateClientAddressDto>): Promise<ClientAddress> {
+    const address = await this.addressRepository.findOne({ where: { id: addressId, clientId } });
+    if (!address) throw new NotFoundException('Address not found');
+    Object.assign(address, dto);
     return this.addressRepository.save(address);
   }
 

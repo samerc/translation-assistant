@@ -175,6 +175,10 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
           await api.post(`/clients/${client.id}/emails`, { email: value, label: label || undefined });
           onUpdate();
         }}
+        onEdit={async (itemId, value, label) => {
+          await api.patch(`/clients/${client.id}/emails/${itemId}`, { email: value, label: label || undefined });
+          onUpdate();
+        }}
         onRemove={async (itemId) => {
           await api.delete(`/clients/${client.id}/emails/${itemId}`);
           onUpdate();
@@ -189,6 +193,10 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         labelOptions={labels.phone}
         onAdd={async (value, label) => {
           await api.post(`/clients/${client.id}/phones`, { phone: value, label: label || undefined });
+          onUpdate();
+        }}
+        onEdit={async (itemId, value, label) => {
+          await api.patch(`/clients/${client.id}/phones/${itemId}`, { phone: value, label: label || undefined });
           onUpdate();
         }}
         onRemove={async (itemId) => {
@@ -207,6 +215,10 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
           await api.post(`/clients/${client.id}/addresses`, { address: value, label: label || undefined });
           onUpdate();
         }}
+        onEdit={async (itemId, value, label) => {
+          await api.patch(`/clients/${client.id}/addresses/${itemId}`, { address: value, label: label || undefined });
+          onUpdate();
+        }}
         onRemove={async (itemId) => {
           await api.delete(`/clients/${client.id}/addresses/${itemId}`);
           onUpdate();
@@ -218,16 +230,18 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
 
 // ── Multi-Value Card (emails, phones, addresses) ──
 
-function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOptions, onAdd, onRemove }: {
+function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOptions, onAdd, onEdit, onRemove }: {
   title: string;
   items: { id: number; value: string; label: string | null }[];
   placeholder: string;
   inputType?: string;
   labelOptions: string[];
   onAdd: (value: string, label: string) => Promise<void>;
+  onEdit: (id: number, value: string, label: string) => Promise<void>;
   onRemove: (id: number) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
   const [saving, setSaving] = useState(false);
@@ -242,19 +256,46 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
     setSaving(false);
   };
 
+  const handleEdit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (editingId === null) return;
+    setSaving(true);
+    await onEdit(editingId, value, label);
+    setValue('');
+    setLabel('');
+    setEditingId(null);
+    setSaving(false);
+  };
+
+  const startEdit = (item: { id: number; value: string; label: string | null }) => {
+    setEditingId(item.id);
+    setValue(item.value);
+    setLabel(item.label || '');
+    setAdding(false);
+  };
+
+  const cancelForm = () => {
+    setAdding(false);
+    setEditingId(null);
+    setValue('');
+    setLabel('');
+  };
+
+  const isFormOpen = adding || editingId !== null;
+
   return (
     <div className="bg-surface border border-border rounded-xl p-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-semibold text-text">{title}</h3>
-        {!adding && (
-          <button onClick={() => setAdding(true)} className="text-sm text-primary hover:text-primary-hover font-medium">
+        {!isFormOpen && (
+          <button onClick={() => { setAdding(true); setEditingId(null); setValue(''); setLabel(''); }} className="text-sm text-primary hover:text-primary-hover font-medium">
             + Add
           </button>
         )}
       </div>
 
       {/* Existing items */}
-      {items.length === 0 && !adding && (
+      {items.length === 0 && !isFormOpen && (
         <p className="text-sm text-text-muted">No {title.toLowerCase()} added yet.</p>
       )}
       <div className="space-y-2">
@@ -266,19 +307,21 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
               )}
               <span className="text-sm text-text">{item.value}</span>
             </div>
-            <button
-              onClick={() => onRemove(item.id)}
-              className="text-xs text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              Remove
-            </button>
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button onClick={() => startEdit(item)} className="text-xs text-primary hover:text-primary-hover">
+                Edit
+              </button>
+              <button onClick={() => onRemove(item.id)} className="text-xs text-danger hover:text-danger/80">
+                Remove
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Add form */}
-      {adding && (
-        <form onSubmit={handleAdd} className="mt-3 p-3 border border-border rounded-lg bg-bg">
+      {/* Add/Edit form */}
+      {isFormOpen && (
+        <form onSubmit={editingId !== null ? handleEdit : handleAdd} className="mt-3 p-3 border border-border rounded-lg bg-bg">
           <div className="flex gap-2">
             <select
               value={label}
@@ -296,14 +339,15 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
               onChange={(e) => setValue(e.target.value)}
               placeholder={placeholder}
               required
+              autoFocus
               className="flex-1 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div className="flex gap-2 mt-2">
             <button type="submit" disabled={saving} className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover disabled:opacity-50">
-              {saving ? 'Adding...' : 'Add'}
+              {saving ? 'Saving...' : editingId !== null ? 'Update' : 'Add'}
             </button>
-            <button type="button" onClick={() => setAdding(false)} className="px-3 py-1.5 bg-surface border border-border text-text-secondary rounded-lg text-xs">
+            <button type="button" onClick={cancelForm} className="px-3 py-1.5 bg-surface border border-border text-text-secondary rounded-lg text-xs">
               Cancel
             </button>
           </div>

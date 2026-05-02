@@ -99,6 +99,12 @@ export class ClientsController {
     return this.clientsService.addEmail(id, dto);
   }
 
+  @Patch(':id/emails/:emailId')
+  @RequirePermissions('clients:update')
+  updateEmail(@Param('id', ParseIntPipe) id: number, @Param('emailId', ParseIntPipe) emailId: number, @Body() dto: CreateClientEmailDto) {
+    return this.clientsService.updateEmail(id, emailId, dto);
+  }
+
   @Delete(':id/emails/:emailId')
   @RequirePermissions('clients:update')
   removeEmail(@Param('id', ParseIntPipe) id: number, @Param('emailId', ParseIntPipe) emailId: number) {
@@ -113,6 +119,12 @@ export class ClientsController {
     return this.clientsService.addPhone(id, dto);
   }
 
+  @Patch(':id/phones/:phoneId')
+  @RequirePermissions('clients:update')
+  updatePhone(@Param('id', ParseIntPipe) id: number, @Param('phoneId', ParseIntPipe) phoneId: number, @Body() dto: CreateClientPhoneDto) {
+    return this.clientsService.updatePhone(id, phoneId, dto);
+  }
+
   @Delete(':id/phones/:phoneId')
   @RequirePermissions('clients:update')
   removePhone(@Param('id', ParseIntPipe) id: number, @Param('phoneId', ParseIntPipe) phoneId: number) {
@@ -125,6 +137,12 @@ export class ClientsController {
   @RequirePermissions('clients:update')
   addAddress(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientAddressDto) {
     return this.clientsService.addAddress(id, dto);
+  }
+
+  @Patch(':id/addresses/:addressId')
+  @RequirePermissions('clients:update')
+  updateAddress(@Param('id', ParseIntPipe) id: number, @Param('addressId', ParseIntPipe) addressId: number, @Body() dto: CreateClientAddressDto) {
+    return this.clientsService.updateAddress(id, addressId, dto);
   }
 
   @Delete(':id/addresses/:addressId')
