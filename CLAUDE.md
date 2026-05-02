@@ -68,6 +68,84 @@ Four palettes available (user selects in profile settings):
 
 Light + dark mode supported (separate toggle from palette).
 
+## Database Entities
+
+### Auth & Users
+- **User** — email, password (bcrypt), firstName, lastName, avatar, isActive, colorPalette, darkMode, roleId, refreshToken
+- **Role** — name, description. M2M with Permission via `role_permissions`
+- **Permission** — resource, action (e.g., `clients:create`)
+
+### Settings
+- **AppSettings** — companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON)
+- **Language** — code, name, direction (ltr/rtl), isActive
+- **LabelOption** — category (email/phone/address), value, sortOrder. Configurable labels for client contact info.
+
+### Clients
+- **Client** — type (company/person), name, taxId, notes
+- **ClientEmail** — email, label, isPrimary. Multiple per client.
+- **ClientPhone** — phone, label, isPrimary. Multiple per client.
+- **ClientAddress** — address, label, isPrimary. Multiple per client.
+- **Contact** — firstName, lastName, email, phone, role, notes. Only on company-type clients.
+- **PassportCopy** — label, filePath, originalName, mimeType, fileSize. Reference images for name spellings.
+
+### Templates
+- **Template** — name, description, pricePerPage, discountedPricePerPage, layoutJson, isActive
+- **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey
+  - Fields with same `groupKey` form a repeatable set (e.g., family extract rows)
+  - Fields with no `groupKey` are fixed (appear once)
+- **TemplateFieldLabel** — label text per language per field (M2O to Language)
+
+## API Endpoints
+
+### Auth (`/api/auth`)
+- `POST /login` — Login, returns JWT tokens
+- `POST /register` — Register with invite token
+- `POST /refresh` — Refresh access token
+- `POST /logout` — Invalidate refresh token
+- `GET /profile` — Get current user
+
+### Users (`/api/users`)
+- Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`
+- `PATCH /profile/me` — Self-update (no role/active change)
+- `POST /change-password`
+
+### Roles (`/api/roles`)
+- Full CRUD + `GET /permissions` — List all permissions
+
+### Settings (`/api/settings`)
+- `GET /` + `PATCH /` — App settings
+- CRUD `/languages` — Language management
+- CRUD `/labels` + `GET /labels/:category` — Configurable label options
+
+### Clients (`/api/clients`)
+- Full CRUD with search, type filter, sort, pagination
+- `POST/PATCH/DELETE /:id/emails/:emailId` — Client emails
+- `POST/PATCH/DELETE /:id/phones/:phoneId` — Client phones
+- `POST/PATCH/DELETE /:id/addresses/:addressId` — Client addresses
+- CRUD `/:id/contacts` — Contacts (company clients only)
+- `POST/GET/DELETE /:id/passports` — Passport copy uploads
+- `GET /:id/passports/:copyId/file` — Serve passport file (token via query param)
+
+### Templates (`/api/templates`)
+- Full CRUD with search, isActive filter, sort
+- `POST/PATCH/DELETE /:id/fields/:fieldId` — Template fields
+- `PATCH /:id/fields/reorder` — Reorder fields
+
+## Frontend Pages
+- `/login` — Login page (public)
+- `/` — Dashboard with summary cards, theme preview
+- `/clients` — Client list with search, type filter, sort, pagination
+- `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab placeholder)
+- `/templates` — Template list as card grid
+- `/templates/:id` — Template detail (Fields tab with grouped display, Settings tab)
+- `/settings` — Settings page (General, Languages, Labels, File Uploads tabs)
+
+## File Upload Validation
+- `FileValidationPipe` checks every upload against:
+  - `maxUploadSizeMb` from AppSettings
+  - `allowedFileTypes` from AppSettings (if list is non-empty, only those extensions accepted)
+- Applied to passport copy uploads (and future upload endpoints)
+
 ## Build Phases
 - [x] Phase 1: Project setup
 - [x] Phase 2: Auth & Users (JWT, RBAC, login, user/role management, seeder)
