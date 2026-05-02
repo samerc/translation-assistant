@@ -73,7 +73,7 @@ Light + dark mode supported (separate toggle from palette).
 - [x] Phase 2: Auth & Users (JWT, RBAC, login, user/role management, seeder)
 - [x] Phase 3: Settings (app config, languages, file upload limits)
 - [x] Phase 4: Clients (companies/persons, contacts, passport uploads, search/sort/paginate)
-- [ ] Phase 5: Templates
+- [x] Phase 5: Templates (CRUD, field definitions, labels per language)
 - [ ] Phase 6: Document Designer
 - [ ] Phase 7: Jobs
 - [ ] Phase 8: Documents
