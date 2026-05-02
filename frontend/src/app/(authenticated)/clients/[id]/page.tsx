@@ -449,9 +449,11 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: number; conta
 function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies: PassportCopy[]; onUpdate: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [label, setLabel] = useState('');
+  const [error, setError] = useState('');
 
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault();
+    setError('');
     const formEl = e.target as HTMLFormElement;
     const fileInput = formEl.querySelector('input[type="file"]') as HTMLInputElement;
     if (!fileInput.files?.length) return;
@@ -461,17 +463,29 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
     formData.append('file', fileInput.files[0]);
     formData.append('label', label || 'Passport');
 
-    const token = localStorage.getItem('accessToken');
-    await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
 
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ message: 'Upload failed' }));
+        const msg = Array.isArray(data.message) ? data.message.join(', ') : data.message;
+        setError(msg);
+        setUploading(false);
+        return;
+      }
+
+      setLabel('');
+      fileInput.value = '';
+      onUpdate();
+    } catch {
+      setError('Upload failed. Please try again.');
+    }
     setUploading(false);
-    setLabel('');
-    fileInput.value = '';
-    onUpdate();
   };
 
   const handleDelete = async (copyId: number) => {
@@ -504,6 +518,11 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
+        {error && (
+          <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">
+            {error}
+          </div>
+        )}
       </form>
 
       {copies.length === 0 && (
