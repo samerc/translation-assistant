@@ -8,7 +8,7 @@ interface Language { id: number; code: string; name: string; direction: string; 
 interface FieldLabel { id: number; languageId: number; label: string; language: Language; }
 interface TemplateField {
   id: number; fieldKey: string; fieldType: string; sortOrder: number;
-  required: boolean; isRepeatable: boolean; labels: FieldLabel[];
+  required: boolean; groupKey: string | null; labels: FieldLabel[];
 }
 interface Template {
   id: number; name: string; description: string | null; pricePerPage: number;
@@ -89,10 +89,12 @@ export default function TemplateDetailPage() {
 function FieldsTab({ template, languages, onUpdate }: { template: Template; languages: Language[]; onUpdate: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [form, setForm] = useState({ fieldKey: '', fieldType: 'text', required: false, isRepeatable: false, labels: {} as Record<number, string> });
+  const [form, setForm] = useState({ fieldKey: '', fieldType: 'text', required: false, groupKey: '', labels: {} as Record<number, string> });
+
+  const existingGroups = [...new Set(template.fields.map((f) => f.groupKey).filter(Boolean))] as string[];
 
   const resetForm = () => {
-    setForm({ fieldKey: '', fieldType: 'text', required: false, isRepeatable: false, labels: {} });
+    setForm({ fieldKey: '', fieldType: 'text', required: false, groupKey: '', labels: {} });
     setShowForm(false);
     setEditingId(null);
   };
@@ -100,7 +102,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   const startEdit = (field: TemplateField) => {
     const labelMap: Record<number, string> = {};
     field.labels.forEach((l) => { labelMap[l.languageId] = l.label; });
-    setForm({ fieldKey: field.fieldKey, fieldType: field.fieldType, required: field.required, isRepeatable: field.isRepeatable, labels: labelMap });
+    setForm({ fieldKey: field.fieldKey, fieldType: field.fieldType, required: field.required, groupKey: field.groupKey || '', labels: labelMap });
     setEditingId(field.id);
     setShowForm(true);
   };
@@ -115,7 +117,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
       fieldKey: form.fieldKey,
       fieldType: form.fieldType,
       required: form.required,
-      isRepeatable: form.isRepeatable,
+      groupKey: form.groupKey || null,
       labels,
     };
 
@@ -157,18 +159,29 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                 {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
               </select>
             </div>
-            <div className="flex items-end gap-4">
-              <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
-                <input type="checkbox" checked={form.required} onChange={(e) => setForm({ ...form, required: e.target.checked })}
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
-                Required
-              </label>
-              <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
-                <input type="checkbox" checked={form.isRepeatable} onChange={(e) => setForm({ ...form, isRepeatable: e.target.checked })}
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
-                Repeatable
-              </label>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1.5">Group</label>
+              <div className="flex gap-2">
+                <input
+                  value={form.groupKey}
+                  onChange={(e) => setForm({ ...form, groupKey: e.target.value })}
+                  placeholder="None (fixed field)"
+                  list="group-options"
+                  className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <datalist id="group-options">
+                  {existingGroups.map((g) => <option key={g} value={g} />)}
+                </datalist>
+              </div>
+              <p className="text-xs text-text-muted mt-1">Fields with the same group repeat together</p>
             </div>
+          </div>
+          <div className="mb-4">
+            <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
+              <input type="checkbox" checked={form.required} onChange={(e) => setForm({ ...form, required: e.target.checked })}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
+              Required field
+            </label>
           </div>
 
           {/* Labels per language */}
@@ -209,39 +222,85 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
           No fields defined yet. Add your first field above.
         </div>
       )}
-      <div className="space-y-3">
-        {template.fields
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((field, index) => (
-          <div key={field.id} className="bg-surface border border-border rounded-xl p-5">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-xs text-text-muted bg-bg px-2 py-0.5 rounded font-mono">#{index + 1}</span>
-                  <span className="font-semibold text-text">{field.fieldKey}</span>
-                  <span className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium">
-                    {FIELD_TYPES.find((ft) => ft.value === field.fieldType)?.label || field.fieldType}
-                  </span>
-                  {field.required && <span className="px-2 py-0.5 bg-warning-light text-warning rounded text-xs font-medium">Required</span>}
-                  {field.isRepeatable && <span className="px-2 py-0.5 bg-accent/20 text-accent rounded text-xs font-medium">Repeatable</span>}
+
+      {/* Render fields grouped */}
+      {(() => {
+        const sorted = [...template.fields].sort((a, b) => a.sortOrder - b.sortOrder);
+        const fixedFields = sorted.filter((f) => !f.groupKey);
+        const groups: Record<string, typeof sorted> = {};
+        sorted.filter((f) => f.groupKey).forEach((f) => {
+          if (!groups[f.groupKey!]) groups[f.groupKey!] = [];
+          groups[f.groupKey!].push(f);
+        });
+
+        return (
+          <div className="space-y-4">
+            {/* Fixed fields */}
+            {fixedFields.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Fixed Fields</h4>
+                <div className="space-y-2">
+                  {fixedFields.map((field) => (
+                    <FieldCard key={field.id} field={field} onEdit={startEdit} onDelete={handleDelete} />
+                  ))}
                 </div>
-                {field.labels.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {field.labels.map((l) => (
-                      <span key={l.id} className="text-xs text-text-secondary">
-                        <span className="font-medium text-text-muted uppercase">{l.language.code}:</span> {l.label}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <button onClick={() => startEdit(field)} className="text-xs text-primary hover:text-primary-hover font-medium">Edit</button>
-                <button onClick={() => handleDelete(field.id)} className="text-xs text-danger hover:text-danger/80 font-medium">Delete</button>
+            )}
+
+            {/* Grouped fields */}
+            {Object.entries(groups).map(([groupKey, fields]) => (
+              <div key={groupKey}>
+                <div className="flex items-center gap-2 mb-2">
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wide">Group: {groupKey}</h4>
+                  <span className="px-2 py-0.5 bg-accent/20 text-accent rounded text-xs font-medium">Repeatable</span>
+                  <span className="text-xs text-text-muted">{fields.length} field{fields.length !== 1 ? 's' : ''} per entry</span>
+                </div>
+                <div className="border-l-3 border-accent/30 pl-4 space-y-2">
+                  {fields.map((field) => (
+                    <FieldCard key={field.id} field={field} onEdit={startEdit} onDelete={handleDelete} />
+                  ))}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
-        ))}
+        );
+      })()}
+    </div>
+  );
+}
+
+// ── Field Card ──
+
+function FieldCard({ field, onEdit, onDelete }: {
+  field: TemplateField;
+  onEdit: (field: TemplateField) => void;
+  onDelete: (fieldId: number) => void;
+}) {
+  return (
+    <div className="bg-surface border border-border rounded-xl p-4">
+      <div className="flex justify-between items-start">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-1">
+            <span className="font-semibold text-text text-sm">{field.fieldKey}</span>
+            <span className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium">
+              {FIELD_TYPES.find((ft) => ft.value === field.fieldType)?.label || field.fieldType}
+            </span>
+            {field.required && <span className="px-2 py-0.5 bg-warning-light text-warning rounded text-xs font-medium">Required</span>}
+          </div>
+          {field.labels.length > 0 && (
+            <div className="flex flex-wrap gap-3 mt-1.5">
+              {field.labels.map((l) => (
+                <span key={l.id} className="text-xs text-text-secondary">
+                  <span className="font-medium text-text-muted uppercase">{l.language.code}:</span> {l.label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <button onClick={() => onEdit(field)} className="text-xs text-primary hover:text-primary-hover font-medium">Edit</button>
+          <button onClick={() => onDelete(field.id)} className="text-xs text-danger hover:text-danger/80 font-medium">Delete</button>
+        </div>
       </div>
     </div>
   );

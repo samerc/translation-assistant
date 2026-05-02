@@ -37,8 +37,8 @@ export class TemplateField {
   @Column({ default: false })
   required: boolean;
 
-  @Column({ default: false })
-  isRepeatable: boolean;
+  @Column({ length: 100, nullable: true })
+  groupKey: string;
 
   @OneToMany(() => TemplateFieldLabel, (label) => label.field, {
     cascade: true,

@@ -103,7 +103,7 @@ export class TemplatesService {
       fieldType: dto.fieldType,
       sortOrder: dto.sortOrder,
       required: dto.required,
-      isRepeatable: dto.isRepeatable,
+      groupKey: dto.groupKey,
     });
 
     const saved = await this.fieldRepository.save(field);
@@ -141,7 +141,7 @@ export class TemplatesService {
     if (dto.fieldType !== undefined) field.fieldType = dto.fieldType;
     if (dto.sortOrder !== undefined) field.sortOrder = dto.sortOrder;
     if (dto.required !== undefined) field.required = dto.required;
-    if (dto.isRepeatable !== undefined) field.isRepeatable = dto.isRepeatable;
+    if (dto.groupKey !== undefined) field.groupKey = dto.groupKey;
 
     await this.fieldRepository.save(field);
 

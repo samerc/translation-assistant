@@ -39,8 +39,9 @@ export class CreateTemplateFieldDto {
   required?: boolean;
 
   @IsOptional()
-  @IsBoolean()
-  isRepeatable?: boolean;
+  @IsString()
+  @MaxLength(100)
+  groupKey?: string;
 
   @IsOptional()
   @IsArray()
@@ -69,8 +70,9 @@ export class UpdateTemplateFieldDto {
   required?: boolean;
 
   @IsOptional()
-  @IsBoolean()
-  isRepeatable?: boolean;
+  @IsString()
+  @MaxLength(100)
+  groupKey?: string;
 
   @IsOptional()
   @IsArray()
