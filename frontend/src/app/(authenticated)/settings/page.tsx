@@ -432,93 +432,157 @@ function UploadSettings() {
   useEffect(() => {
     api.get<AppSettings>('/settings').then((s) => {
       setSettings(s);
-      setAllowedInput(s.allowedFileTypes?.join(', ') || '');
-      setForbiddenInput(s.forbiddenFileTypes?.join(', ') || '');
     });
   }, []);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSaveSize = async () => {
     if (!settings) return;
     setSaving(true);
     setMessage('');
-    try {
-      const allowedFileTypes = allowedInput
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const forbiddenFileTypes = forbiddenInput
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
+    const updated = await api.patch<AppSettings>('/settings', {
+      maxUploadSizeMb: settings.maxUploadSizeMb,
+    });
+    setSettings(updated);
+    setSaving(false);
+    setMessage('Saved');
+    setTimeout(() => setMessage(''), 3000);
+  };
 
-      const updated = await api.patch<AppSettings>('/settings', {
-        maxUploadSizeMb: settings.maxUploadSizeMb,
-        allowedFileTypes: allowedFileTypes.length ? allowedFileTypes : null,
-        forbiddenFileTypes: forbiddenFileTypes.length ? forbiddenFileTypes : null,
-      });
-      setSettings(updated);
-      setMessage('Upload settings saved');
-      setTimeout(() => setMessage(''), 3000);
-    } finally {
-      setSaving(false);
-    }
+  const addFileType = async (list: 'allowedFileTypes' | 'forbiddenFileTypes', input: string, setInput: (v: string) => void) => {
+    if (!settings || !input.trim()) return;
+    const value = input.trim().startsWith('.') ? input.trim() : `.${input.trim()}`;
+    const current = settings[list] || [];
+    if (current.includes(value)) { setInput(''); return; }
+    const updated = await api.patch<AppSettings>('/settings', {
+      [list]: [...current, value],
+    });
+    setSettings(updated);
+    setInput('');
+  };
+
+  const removeFileType = async (list: 'allowedFileTypes' | 'forbiddenFileTypes', value: string) => {
+    if (!settings) return;
+    const current = settings[list] || [];
+    const filtered = current.filter((t) => t !== value);
+    const updated = await api.patch<AppSettings>('/settings', {
+      [list]: filtered.length ? filtered : null,
+    });
+    setSettings(updated);
   };
 
   if (!settings) return <LoadingSpinner />;
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-lg">
-      <div className="bg-surface border border-border rounded-xl p-6 space-y-5">
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">
-            Max Upload Size (MB)
-          </label>
+    <div className="max-w-lg space-y-6">
+      {/* Max Upload Size */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <label className="block text-sm font-medium text-text mb-1.5">
+          Max Upload Size (MB)
+        </label>
+        <div className="flex gap-3 items-center">
           <input
             type="number"
             min={1}
             max={100}
             value={settings.maxUploadSizeMb}
             onChange={(e) => setSettings({ ...settings, maxUploadSizeMb: parseInt(e.target.value) || 5 })}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="w-32 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">
-            Allowed File Types
-          </label>
-          <input
-            value={allowedInput}
-            onChange={(e) => setAllowedInput(e.target.value)}
-            placeholder=".pdf, .jpg, .png, .docx"
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-          />
-          <p className="text-xs text-text-muted mt-1">Comma-separated. Leave empty to allow all types.</p>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">
-            Forbidden File Types
-          </label>
-          <input
-            value={forbiddenInput}
-            onChange={(e) => setForbiddenInput(e.target.value)}
-            placeholder=".exe, .bat, .sh"
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-          />
-          <p className="text-xs text-text-muted mt-1">Comma-separated. These types will always be rejected.</p>
+          <button
+            onClick={handleSaveSize}
+            disabled={saving}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
+          >
+            Save
+          </button>
+          {message && <span className="text-sm text-success">{message}</span>}
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-3">
+
+      {/* Allowed File Types */}
+      <FileTypePills
+        title="Allowed File Types"
+        description="Only these file types can be uploaded. Leave empty to allow all."
+        items={settings.allowedFileTypes || []}
+        inputValue={allowedInput}
+        onInputChange={setAllowedInput}
+        onAdd={() => addFileType('allowedFileTypes', allowedInput, setAllowedInput)}
+        onRemove={(val) => removeFileType('allowedFileTypes', val)}
+        placeholder=".pdf"
+        color="primary"
+      />
+
+      {/* Forbidden File Types */}
+      <FileTypePills
+        title="Forbidden File Types"
+        description="These file types will always be rejected."
+        items={settings.forbiddenFileTypes || []}
+        inputValue={forbiddenInput}
+        onInputChange={setForbiddenInput}
+        onAdd={() => addFileType('forbiddenFileTypes', forbiddenInput, setForbiddenInput)}
+        onRemove={(val) => removeFileType('forbiddenFileTypes', val)}
+        placeholder=".exe"
+        color="danger"
+      />
+    </div>
+  );
+}
+
+function FileTypePills({ title, description, items, inputValue, onInputChange, onAdd, onRemove, placeholder, color }: {
+  title: string;
+  description: string;
+  items: string[];
+  inputValue: string;
+  onInputChange: (v: string) => void;
+  onAdd: () => void;
+  onRemove: (val: string) => void;
+  placeholder: string;
+  color: 'primary' | 'danger';
+}) {
+  const pillColors = color === 'primary'
+    ? 'bg-primary-light text-primary'
+    : 'bg-danger-light text-danger';
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <h3 className="text-sm font-medium text-text mb-1">{title}</h3>
+      <p className="text-xs text-text-muted mb-4">{description}</p>
+
+      {/* Pills */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {items.map((item) => (
+          <span key={item} className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${pillColors}`}>
+            {item}
+            <button
+              onClick={() => onRemove(item)}
+              className="hover:opacity-70 font-bold text-sm leading-none"
+            >
+              &times;
+            </button>
+          </span>
+        ))}
+        {items.length === 0 && (
+          <span className="text-xs text-text-muted">None</span>
+        )}
+      </div>
+
+      {/* Add input */}
+      <div className="flex gap-2">
+        <input
+          value={inputValue}
+          onChange={(e) => onInputChange(e.target.value)}
+          placeholder={placeholder}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd(); } }}
+          className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        />
         <button
-          type="submit"
-          disabled={saving}
-          className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
+          onClick={onAdd}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover"
         >
-          {saving ? 'Saving...' : 'Save Changes'}
+          Add
         </button>
-        {message && <span className="text-sm text-success">{message}</span>}
       </div>
-    </form>
+    </div>
   );
 }
 
