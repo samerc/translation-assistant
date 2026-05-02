@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { Permission } from '../modules/roles/entities/permission.entity.js';
 import { Role } from '../modules/roles/entities/role.entity.js';
 import { User } from '../modules/users/entities/user.entity.js';
+import { LabelOption } from '../modules/settings/entities/label-option.entity.js';
 
 const RESOURCES = [
   'users',
@@ -92,5 +93,28 @@ export async function seed(dataSource: DataSource) {
       await userRepo.save(admin);
       console.log('Seeded admin user: admin@translation-assistant.com / admin123!');
     }
+  }
+
+  // Seed default label options
+  const labelRepo = dataSource.getRepository(LabelOption);
+  const existingLabels = await labelRepo.count();
+  if (existingLabels === 0) {
+    const defaults = [
+      { category: 'email', value: 'Work', sortOrder: 1 },
+      { category: 'email', value: 'Personal', sortOrder: 2 },
+      { category: 'email', value: 'Other', sortOrder: 3 },
+      { category: 'phone', value: 'Work', sortOrder: 1 },
+      { category: 'phone', value: 'Mobile', sortOrder: 2 },
+      { category: 'phone', value: 'Home', sortOrder: 3 },
+      { category: 'phone', value: 'Fax', sortOrder: 4 },
+      { category: 'phone', value: 'Other', sortOrder: 5 },
+      { category: 'address', value: 'Work', sortOrder: 1 },
+      { category: 'address', value: 'Home', sortOrder: 2 },
+      { category: 'address', value: 'Billing', sortOrder: 3 },
+      { category: 'address', value: 'Shipping', sortOrder: 4 },
+      { category: 'address', value: 'Other', sortOrder: 5 },
+    ];
+    await labelRepo.save(defaults);
+    console.log('Seeded default label options');
   }
 }

@@ -110,6 +110,11 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: client.name, taxId: client.taxId || '', notes: client.notes || '' });
   const [saving, setSaving] = useState(false);
+  const [labels, setLabels] = useState<Record<string, string[]>>({ email: [], phone: [], address: [] });
+
+  useEffect(() => {
+    api.get<Record<string, string[]>>('/settings/labels').then(setLabels);
+  }, []);
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -165,7 +170,7 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         items={client.emails.map((e) => ({ id: e.id, value: e.email, label: e.label }))}
         placeholder="email@example.com"
         inputType="email"
-        labelOptions={['Work', 'Personal', 'Other']}
+        labelOptions={labels.email}
         onAdd={async (value, label) => {
           await api.post(`/clients/${client.id}/emails`, { email: value, label: label || undefined });
           onUpdate();
@@ -181,7 +186,7 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         title="Phone Numbers"
         items={client.phones.map((p) => ({ id: p.id, value: p.phone, label: p.label }))}
         placeholder="+1 234 567 8900"
-        labelOptions={['Work', 'Mobile', 'Home', 'Fax', 'Other']}
+        labelOptions={labels.phone}
         onAdd={async (value, label) => {
           await api.post(`/clients/${client.id}/phones`, { phone: value, label: label || undefined });
           onUpdate();
@@ -197,7 +202,7 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
         title="Addresses"
         items={client.addresses.map((a) => ({ id: a.id, value: a.address, label: a.label }))}
         placeholder="123 Main St, City, Country"
-        labelOptions={['Work', 'Home', 'Billing', 'Shipping', 'Other']}
+        labelOptions={labels.address}
         onAdd={async (value, label) => {
           await api.post(`/clients/${client.id}/addresses`, { address: value, label: label || undefined });
           onUpdate();

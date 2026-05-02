@@ -28,9 +28,6 @@ import {
   CreateClientEmailDto,
   CreateClientPhoneDto,
   CreateClientAddressDto,
-  EMAIL_LABELS,
-  PHONE_LABELS,
-  ADDRESS_LABELS,
 } from './dto/client-detail.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -47,18 +44,6 @@ const uploadStorage = diskStorage({
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
-
-  // ── Labels (predefined) ──
-
-  @Get('labels')
-  @RequirePermissions('clients:read')
-  getLabels() {
-    return {
-      email: EMAIL_LABELS,
-      phone: PHONE_LABELS,
-      address: ADDRESS_LABELS,
-    };
-  }
 
   // ── Clients ──
 

@@ -1,15 +1,12 @@
-import { IsString, IsOptional, IsBoolean, MaxLength, IsEmail, IsIn } from 'class-validator';
-
-export const EMAIL_LABELS = ['Work', 'Personal', 'Other'] as const;
-export const PHONE_LABELS = ['Work', 'Mobile', 'Home', 'Fax', 'Other'] as const;
-export const ADDRESS_LABELS = ['Work', 'Home', 'Billing', 'Shipping', 'Other'] as const;
+import { IsString, IsOptional, IsBoolean, MaxLength, IsEmail } from 'class-validator';
 
 export class CreateClientEmailDto {
   @IsEmail()
   email: string;
 
   @IsOptional()
-  @IsIn(EMAIL_LABELS)
+  @IsString()
+  @MaxLength(100)
   label?: string;
 
   @IsOptional()
@@ -23,7 +20,8 @@ export class CreateClientPhoneDto {
   phone: string;
 
   @IsOptional()
-  @IsIn(PHONE_LABELS)
+  @IsString()
+  @MaxLength(100)
   label?: string;
 
   @IsOptional()
@@ -36,7 +34,8 @@ export class CreateClientAddressDto {
   address: string;
 
   @IsOptional()
-  @IsIn(ADDRESS_LABELS)
+  @IsString()
+  @MaxLength(100)
   label?: string;
 
   @IsOptional()

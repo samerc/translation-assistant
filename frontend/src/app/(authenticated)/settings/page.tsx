@@ -23,7 +23,14 @@ interface Language {
   isActive: boolean;
 }
 
-type Tab = 'general' | 'languages' | 'uploads';
+interface LabelOption {
+  id: number;
+  category: string;
+  value: string;
+  sortOrder: number;
+}
+
+type Tab = 'general' | 'languages' | 'labels' | 'uploads';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -31,6 +38,7 @@ export default function SettingsPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'general', label: 'General' },
     { id: 'languages', label: 'Languages' },
+    { id: 'labels', label: 'Labels' },
     { id: 'uploads', label: 'File Uploads' },
   ];
 
@@ -57,6 +65,7 @@ export default function SettingsPage() {
 
       {activeTab === 'general' && <GeneralSettings />}
       {activeTab === 'languages' && <LanguagesSettings />}
+      {activeTab === 'labels' && <LabelsSettings />}
       {activeTab === 'uploads' && <UploadSettings />}
     </div>
   );
@@ -294,6 +303,118 @@ function LanguagesSettings() {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// ── Labels Settings ──
+
+const CATEGORIES = [
+  { id: 'email', label: 'Email Labels' },
+  { id: 'phone', label: 'Phone Labels' },
+  { id: 'address', label: 'Address Labels' },
+];
+
+function LabelsSettings() {
+  const [labels, setLabels] = useState<LabelOption[]>([]);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [newValue, setNewValue] = useState('');
+
+  const loadLabels = () => {
+    Promise.all(
+      CATEGORIES.map((cat) =>
+        api.get<LabelOption[]>(`/settings/labels/${cat.id}`),
+      ),
+    ).then((results) => {
+      setLabels(results.flat());
+    });
+  };
+
+  useEffect(() => { loadLabels(); }, []);
+
+  const handleAdd = async (category: string) => {
+    if (!newValue.trim()) return;
+    await api.post('/settings/labels', { category, value: newValue.trim() });
+    setNewValue('');
+    setAdding(null);
+    loadLabels();
+  };
+
+  const handleDelete = async (id: number) => {
+    await api.delete(`/settings/labels/${id}`);
+    loadLabels();
+  };
+
+  return (
+    <div className="max-w-2xl">
+      <p className="text-sm text-text-secondary mb-6">
+        Configure the label options available when adding emails, phones, and addresses to clients.
+      </p>
+
+      <div className="space-y-6">
+        {CATEGORIES.map((cat) => {
+          const catLabels = labels.filter((l) => l.category === cat.id);
+
+          return (
+            <div key={cat.id} className="bg-surface border border-border rounded-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-text">{cat.label}</h3>
+                {adding !== cat.id && (
+                  <button
+                    onClick={() => { setAdding(cat.id); setNewValue(''); }}
+                    className="text-sm text-primary hover:text-primary-hover font-medium"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
+
+              {catLabels.length === 0 && adding !== cat.id && (
+                <p className="text-sm text-text-muted">No labels defined.</p>
+              )}
+
+              <div className="space-y-2">
+                {catLabels.map((label) => (
+                  <div key={label.id} className="flex justify-between items-center py-2 px-3 bg-bg rounded-lg group">
+                    <span className="text-sm text-text">{label.value}</span>
+                    <button
+                      onClick={() => handleDelete(label.id)}
+                      className="text-xs text-danger opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {adding === cat.id && (
+                <div className="flex gap-2 mt-3">
+                  <input
+                    value={newValue}
+                    onChange={(e) => setNewValue(e.target.value)}
+                    placeholder="Label name"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(cat.id); } }}
+                    className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  <button
+                    onClick={() => handleAdd(cat.id)}
+                    className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover"
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => setAdding(null)}
+                    className="px-3 py-2 bg-bg border border-border text-text-secondary rounded-lg text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

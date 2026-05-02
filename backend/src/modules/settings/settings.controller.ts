@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
@@ -13,6 +14,8 @@ import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
+import { CreateLabelOptionDto, UpdateLabelOptionDto } from './dto/label-option.dto.js';
+import type { LabelCategory } from './dto/label-option.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 
@@ -62,5 +65,40 @@ export class SettingsController {
   @RequirePermissions('settings:delete')
   removeLanguage(@Param('id', ParseIntPipe) id: number) {
     return this.settingsService.removeLanguage(id);
+  }
+
+  // ── Label Options ──
+
+  @Get('labels')
+  @RequirePermissions('settings:read')
+  findAllLabels() {
+    return this.settingsService.findAllLabels();
+  }
+
+  @Get('labels/:category')
+  @RequirePermissions('settings:read')
+  findLabelsByCategory(@Param('category') category: LabelCategory) {
+    return this.settingsService.findLabelsByCategory(category);
+  }
+
+  @Post('labels')
+  @RequirePermissions('settings:create')
+  createLabel(@Body() dto: CreateLabelOptionDto) {
+    return this.settingsService.createLabel(dto);
+  }
+
+  @Patch('labels/:id')
+  @RequirePermissions('settings:update')
+  updateLabel(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateLabelOptionDto,
+  ) {
+    return this.settingsService.updateLabel(id, dto);
+  }
+
+  @Delete('labels/:id')
+  @RequirePermissions('settings:delete')
+  removeLabel(@Param('id', ParseIntPipe) id: number) {
+    return this.settingsService.removeLabel(id);
   }
 }

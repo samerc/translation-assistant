@@ -3,8 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSettings } from './entities/app-settings.entity.js';
 import { Language } from './entities/language.entity.js';
+import { LabelOption } from './entities/label-option.entity.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
+import {
+  CreateLabelOptionDto,
+  UpdateLabelOptionDto,
+  LabelCategory,
+} from './dto/label-option.dto.js';
 
 @Injectable()
 export class SettingsService {
@@ -13,6 +19,8 @@ export class SettingsService {
     private readonly settingsRepository: Repository<AppSettings>,
     @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
+    @InjectRepository(LabelOption)
+    private readonly labelOptionRepository: Repository<LabelOption>,
   ) {}
 
   // ── App Settings ──
@@ -58,5 +66,45 @@ export class SettingsService {
   async removeLanguage(id: number): Promise<void> {
     const language = await this.findOneLanguage(id);
     await this.languageRepository.remove(language);
+  }
+
+  // ── Label Options ──
+
+  async findAllLabels(): Promise<Record<string, string[]>> {
+    const labels = await this.labelOptionRepository.find({
+      order: { category: 'ASC', sortOrder: 'ASC', value: 'ASC' },
+    });
+
+    const grouped: Record<string, string[]> = { email: [], phone: [], address: [] };
+    for (const label of labels) {
+      if (!grouped[label.category]) grouped[label.category] = [];
+      grouped[label.category].push(label.value);
+    }
+    return grouped;
+  }
+
+  async findLabelsByCategory(category: LabelCategory): Promise<LabelOption[]> {
+    return this.labelOptionRepository.find({
+      where: { category },
+      order: { sortOrder: 'ASC', value: 'ASC' },
+    });
+  }
+
+  async createLabel(dto: CreateLabelOptionDto): Promise<LabelOption> {
+    const label = this.labelOptionRepository.create(dto);
+    return this.labelOptionRepository.save(label);
+  }
+
+  async updateLabel(id: number, dto: UpdateLabelOptionDto): Promise<LabelOption> {
+    const label = await this.labelOptionRepository.findOne({ where: { id } });
+    if (!label) throw new NotFoundException('Label option not found');
+    Object.assign(label, dto);
+    return this.labelOptionRepository.save(label);
+  }
+
+  async removeLabel(id: number): Promise<void> {
+    const label = await this.labelOptionRepository.findOne({ where: { id } });
+    if (!label) throw new NotFoundException('Label option not found');
+    await this.labelOptionRepository.remove(label);
   }
 }
