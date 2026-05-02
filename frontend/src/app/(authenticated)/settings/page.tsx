@@ -12,7 +12,6 @@ interface AppSettings {
   invoicePrefix: string | null;
   maxUploadSizeMb: number;
   allowedFileTypes: string[] | null;
-  forbiddenFileTypes: string[] | null;
 }
 
 interface Language {
@@ -427,7 +426,6 @@ function UploadSettings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [allowedInput, setAllowedInput] = useState('');
-  const [forbiddenInput, setForbiddenInput] = useState('');
 
   useEffect(() => {
     api.get<AppSettings>('/settings').then((s) => {
@@ -448,7 +446,7 @@ function UploadSettings() {
     setTimeout(() => setMessage(''), 3000);
   };
 
-  const addFileType = async (list: 'allowedFileTypes' | 'forbiddenFileTypes', input: string, setInput: (v: string) => void) => {
+  const addFileType = async (list: 'allowedFileTypes', input: string, setInput: (v: string) => void) => {
     if (!settings || !input.trim()) return;
     const value = input.trim().startsWith('.') ? input.trim() : `.${input.trim()}`;
     const current = settings[list] || [];
@@ -460,7 +458,7 @@ function UploadSettings() {
     setInput('');
   };
 
-  const removeFileType = async (list: 'allowedFileTypes' | 'forbiddenFileTypes', value: string) => {
+  const removeFileType = async (list: 'allowedFileTypes', value: string) => {
     if (!settings) return;
     const current = settings[list] || [];
     const filtered = current.filter((t) => t !== value);
@@ -512,18 +510,6 @@ function UploadSettings() {
         color="primary"
       />
 
-      {/* Forbidden File Types */}
-      <FileTypePills
-        title="Forbidden File Types"
-        description="These file types will always be rejected."
-        items={settings.forbiddenFileTypes || []}
-        inputValue={forbiddenInput}
-        onInputChange={setForbiddenInput}
-        onAdd={() => addFileType('forbiddenFileTypes', forbiddenInput, setForbiddenInput)}
-        onRemove={(val) => removeFileType('forbiddenFileTypes', val)}
-        placeholder=".exe"
-        color="danger"
-      />
     </div>
   );
 }

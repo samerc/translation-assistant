@@ -42,9 +42,4 @@ export class UpdateSettingsDto {
   @IsArray()
   @IsString({ each: true })
   allowedFileTypes?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  forbiddenFileTypes?: string[];
 }

@@ -26,9 +26,6 @@ export class AppSettings {
   @Column({ type: 'json', nullable: true })
   allowedFileTypes: string[];
 
-  @Column({ type: 'json', nullable: true })
-  forbiddenFileTypes: string[];
-
   @UpdateDateColumn()
   updatedAt: Date;
 }

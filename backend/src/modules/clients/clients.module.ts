@@ -8,6 +8,8 @@ import { PassportCopy } from './entities/passport-copy.entity.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
 import { ClientAddress } from './entities/client-address.entity.js';
+import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
 
 @Module({
   imports: [
@@ -18,10 +20,11 @@ import { ClientAddress } from './entities/client-address.entity.js';
       ClientEmail,
       ClientPhone,
       ClientAddress,
+      AppSettings,
     ]),
   ],
   controllers: [ClientsController],
-  providers: [ClientsService],
+  providers: [ClientsService, FileValidationPipe],
   exports: [ClientsService],
 })
 export class ClientsModule {}

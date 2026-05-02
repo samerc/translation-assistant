@@ -29,6 +29,7 @@ import {
   CreateClientAddressDto,
 } from './dto/client-detail.dto.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
@@ -199,7 +200,7 @@ export class ClientsController {
   createPassportCopy(
     @Param('id', ParseIntPipe) id: number,
     @Body('label') label: string,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(FileValidationPipe) file: Express.Multer.File,
   ) {
     return this.clientsService.createPassportCopy(id, label || 'Passport', file);
   }
