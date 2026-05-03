@@ -12,6 +12,8 @@ import { SettingsModule } from './modules/settings/settings.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { TemplatesModule } from './modules/templates/templates.module.js';
 import { JobsModule } from './modules/jobs/jobs.module.js';
+import { DocumentsModule } from './modules/documents/documents.module.js';
+import { TranslateModule } from './modules/translate/translate.module.js';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { JobsModule } from './modules/jobs/jobs.module.js';
     ClientsModule,
     TemplatesModule,
     JobsModule,
+    DocumentsModule,
+    TranslateModule,
   ],
   controllers: [],
   providers: [

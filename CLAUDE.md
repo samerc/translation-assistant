@@ -141,6 +141,19 @@ Light + dark mode supported (separate toggle from palette).
 - `POST /:id/files/link` — Link file from another job
 - `DELETE /:id/files/:fileId` — Remove file
 
+### Documents (`/api/documents`)
+- `GET /by-job/:jobId` — List documents for a job
+- `GET /search-clone` — Search completed documents for cloning
+- `GET /:id` — Get document with template fields and values
+- `POST /` — Create document (with optional cloneFromId)
+- `POST /:id/save-values` — Save all field values (replace)
+- `PATCH /:id/status` — Mark draft/completed
+- `POST /:id/clone` — Clone document to another job
+- `DELETE /:id` — Remove document
+
+### Translate (`/api/translate`)
+- `POST /` — Google Translate proxy (text, from, to)
+
 ## Frontend Pages
 - `/login` — Login page (public)
 - `/` — Dashboard with summary cards, theme preview
@@ -150,7 +163,8 @@ Light + dark mode supported (separate toggle from palette).
 - `/templates/:id` — Template detail (Fields tab with grouped display, Settings tab)
 - `/jobs` — Jobs list with search, status filter, sort, pagination
 - `/jobs/new` — Create job form (type, client, languages, pricing, deadline)
-- `/jobs/:id` — Job detail (Details tab, Documents placeholder, Source Files, Translated Files)
+- `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files)
+- `/documents/:id` — Document fill page (template fields, GT popup, save/complete)
 - `/settings` — Settings page (General, Languages, Labels, File Uploads tabs)
 
 ## File Upload Validation
@@ -167,7 +181,7 @@ Light + dark mode supported (separate toggle from palette).
 - [x] Phase 5: Templates (CRUD, field definitions, labels per language)
 - [x] Phase 6: Document Designer (block-based + Word template with placeholders)
 - [x] Phase 7: Jobs (CRUD, status workflow, pricing, files, user assignment)
-- [ ] Phase 8: Documents
+- [x] Phase 8: Documents (fill templates, GT popup, clone, repeatable groups)
 - [ ] Phase 9: Word Export
 - [ ] Phase 10: Invoicing
 - [ ] Phase 11: Calendar

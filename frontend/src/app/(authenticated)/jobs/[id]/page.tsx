@@ -262,12 +262,100 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
   );
 }
 
-// ── Documents Tab (placeholder for Phase 8) ──
+// ── Documents Tab ──
+
+interface DocSummary {
+  id: number;
+  status: string;
+  template: { id: number; name: string; type: string };
+  fieldValues: { id: number }[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 function DocumentsTab({ job }: { job: Job }) {
+  const [docs, setDocs] = useState<DocSummary[]>([]);
+  const [templates, setTemplates] = useState<{ id: number; name: string }[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const router = useRouter();
+
+  const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs); };
+
+  useEffect(() => {
+    loadDocs();
+    api.get<{ id: number; name: string }[]>('/templates?isActive=true').then(setTemplates);
+  }, [job.id]);
+
+  const handleCreate = async () => {
+    if (!selectedTemplateId) return;
+    const doc = await api.post<{ id: number }>('/documents', {
+      jobId: job.id,
+      templateId: parseInt(selectedTemplateId),
+    });
+    setShowAdd(false);
+    setSelectedTemplateId('');
+    router.push(`/documents/${doc.id}`);
+  };
+
+  const handleDelete = async (docId: number) => {
+    if (!confirm('Delete this document?')) return;
+    await api.delete(`/documents/${docId}`);
+    loadDocs();
+  };
+
   return (
-    <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
-      Documents will be available after Phase 8.
+    <div className="max-w-3xl">
+      <div className="flex justify-end mb-4">
+        <button onClick={() => setShowAdd(true)}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Document</button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-surface border border-border rounded-xl p-5 mb-4">
+          <h4 className="font-semibold text-text mb-3">Create Document from Template</h4>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-text mb-1.5">Template</label>
+              <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="">Select template...</option>
+                {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <button onClick={handleCreate} disabled={!selectedTemplateId}
+              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">Create</button>
+            <button onClick={() => setShowAdd(false)}
+              className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {docs.length === 0 && !showAdd && (
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No documents yet. Add one above.</div>
+      )}
+
+      <div className="space-y-3">
+        {docs.map((doc) => (
+          <div key={doc.id} className="bg-surface border border-border rounded-xl p-4 flex justify-between items-center hover:border-primary/40 transition-colors">
+            <div className="cursor-pointer flex-1" onClick={() => router.push(`/documents/${doc.id}`)}>
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-text">{doc.template.name}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  doc.status === 'completed' ? 'bg-success-light text-success' : 'bg-warning-light text-warning'
+                }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
+              </div>
+              <div className="text-xs text-text-muted mt-1">
+                {doc.fieldValues.length} field(s) filled — Last updated {new Date(doc.updatedAt).toLocaleDateString()}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => router.push(`/documents/${doc.id}`)} className="text-xs text-primary hover:text-primary-hover font-medium">Edit</button>
+              <button onClick={() => handleDelete(doc.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
