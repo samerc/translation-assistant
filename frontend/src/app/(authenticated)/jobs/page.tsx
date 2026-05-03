@@ -24,7 +24,7 @@ interface Job {
 interface JobsResponse { data: Job[]; total: number; page: number; limit: number; totalPages: number; }
 
 const STATUSES = [
-  { value: 'quote', label: 'Quote', color: 'bg-bg text-text-secondary' },
+  { value: 'quote', label: 'Quote', color: 'bg-blue-100 text-blue-700' },
   { value: 'accepted', label: 'Accepted', color: 'bg-primary-light text-primary' },
   { value: 'in_progress', label: 'In Progress', color: 'bg-primary-light text-primary' },
   { value: 'delivered', label: 'Delivered', color: 'bg-success-light text-success' },

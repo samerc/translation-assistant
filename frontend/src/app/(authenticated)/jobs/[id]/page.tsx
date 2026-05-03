@@ -30,7 +30,7 @@ const STATUSES = [
 
 const statusColor = (s: string) => {
   const map: Record<string, string> = {
-    quote: 'bg-bg text-text-secondary', accepted: 'bg-primary-light text-primary',
+    quote: 'bg-blue-100 text-blue-700', accepted: 'bg-primary-light text-primary',
     in_progress: 'bg-primary-light text-primary', delivered: 'bg-success-light text-success',
     invoiced: 'bg-warning-light text-warning', paid: 'bg-success-light text-success',
     lost: 'bg-bg text-text-muted', cancelled: 'bg-danger-light text-danger',
