@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { readFileSync, writeFileSync } from 'fs';
+import mammoth from 'mammoth';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
@@ -80,6 +82,68 @@ export class TemplatesService {
   async remove(id: number): Promise<void> {
     const template = await this.findOne(id);
     await this.templateRepository.remove(template);
+  }
+
+  // ── Word Template ──
+
+  async uploadWordFile(
+    id: number,
+    file: Express.Multer.File,
+  ): Promise<Template> {
+    const template = await this.findOne(id);
+    if (template.type !== 'word') {
+      throw new BadRequestException('This template is not a Word-based template');
+    }
+
+    template.wordFilePath = file.path;
+    template.wordFileName = file.originalname;
+    await this.templateRepository.save(template);
+    return this.findOne(id);
+  }
+
+  async getWordPreview(id: number): Promise<{ html: string; placeholders: string[] }> {
+    const template = await this.findOne(id);
+    if (!template.wordFilePath) {
+      throw new NotFoundException('No Word file uploaded for this template');
+    }
+
+    const buffer = readFileSync(template.wordFilePath);
+    const result = await mammoth.convertToHtml({ buffer });
+
+    // Find existing placeholders like {field_key}
+    const placeholderRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+    const placeholders: string[] = [];
+    let match;
+    while ((match = placeholderRegex.exec(result.value)) !== null) {
+      if (!placeholders.includes(match[1])) {
+        placeholders.push(match[1]);
+      }
+    }
+
+    return { html: result.value, placeholders };
+  }
+
+  async setWordPlaceholders(
+    id: number,
+    placeholders: { find: string; fieldKey: string }[],
+  ): Promise<Template> {
+    const template = await this.findOne(id);
+    if (template.type !== 'word' || !template.wordFilePath) {
+      throw new BadRequestException('Not a Word template or no file uploaded');
+    }
+
+    // Create/update fields based on placeholders
+    for (const ph of placeholders) {
+      const existing = template.fields.find((f) => f.fieldKey === ph.fieldKey);
+      if (!existing) {
+        await this.addField(id, {
+          fieldKey: ph.fieldKey,
+          fieldType: 'text',
+        });
+      }
+    }
+
+    return this.findOne(id);
   }
 
   // ── Fields ──

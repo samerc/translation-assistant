@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 
 interface Template {
   id: number;
+  type: 'designer' | 'word';
   name: string;
   description: string | null;
   pricePerPage: number;
@@ -24,7 +25,7 @@ export default function TemplatesPage() {
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
+  const [form, setForm] = useState({ type: 'designer' as 'designer' | 'word', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
   const [view, setView] = useState<ViewMode>('table');
   const router = useRouter();
 
@@ -56,13 +57,14 @@ export default function TemplatesPage() {
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     const created = await api.post<Template>('/templates', {
+      type: form.type,
       name: form.name,
       description: form.description || undefined,
       pricePerPage: form.pricePerPage ? parseFloat(form.pricePerPage) : 0,
       discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : undefined,
     });
     setShowForm(false);
-    setForm({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
+    setForm({ type: 'designer', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
     router.push(`/templates/${created.id}`);
   };
 
@@ -81,7 +83,15 @@ export default function TemplatesPage() {
       {showForm && (
         <form onSubmit={handleCreate} className="bg-surface border border-border rounded-xl p-5 mb-6">
           <h3 className="font-semibold text-text mb-4">New Template</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-text mb-1.5">Type</label>
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'designer' | 'word' })}
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="designer">Designer (build layout)</option>
+                <option value="word">Word (upload .docx)</option>
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Name *</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
@@ -145,6 +155,7 @@ export default function TemplatesPage() {
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('name')}>
                   Name <SortIcon field="name" />
                 </th>
+                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Type</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Description</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Fields</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('pricePerPage')}>
@@ -159,12 +170,19 @@ export default function TemplatesPage() {
             </thead>
             <tbody>
               {templates.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-text-muted">No templates found.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-text-muted">No templates found.</td></tr>
               )}
               {templates.map((t) => (
                 <tr key={t.id} onClick={() => router.push(`/templates/${t.id}`)}
                   className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
                   <td className="px-4 py-3 font-medium text-text">{t.name}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      t.type === 'word' ? 'bg-blue-100 text-blue-700' : 'bg-primary-light text-primary'
+                    }`}>
+                      {t.type === 'word' ? 'Word' : 'Designer'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 text-text-secondary max-w-xs truncate">{t.description || '—'}</td>
                   <td className="px-4 py-3 text-text-secondary">{t.fields.length}</td>
                   <td className="px-4 py-3 text-text-secondary">${Number(t.pricePerPage).toFixed(2)}</td>
@@ -198,7 +216,14 @@ export default function TemplatesPage() {
             <div key={t.id} onClick={() => router.push(`/templates/${t.id}`)}
               className="bg-surface border border-border rounded-xl p-5 hover:border-primary/50 cursor-pointer transition-colors">
               <div className="flex justify-between items-start mb-2">
-                <h3 className="font-semibold text-text">{t.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-text">{t.name}</h3>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    t.type === 'word' ? 'bg-blue-100 text-blue-700' : 'bg-primary-light text-primary'
+                  }`}>
+                    {t.type === 'word' ? 'Word' : 'Designer'}
+                  </span>
+                </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                   t.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'
                 }`}>

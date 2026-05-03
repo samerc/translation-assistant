@@ -11,8 +11,9 @@ interface TemplateField {
   required: boolean; groupKey: string | null; labels: FieldLabel[];
 }
 interface Template {
-  id: number; name: string; description: string | null; pricePerPage: number;
-  discountedPricePerPage: number | null; isActive: boolean; layoutJson: object | null;
+  id: number; type: 'designer' | 'word'; name: string; description: string | null;
+  pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean;
+  layoutJson: object | null; wordFilePath: string | null; wordFileName: string | null;
   fields: TemplateField[];
 }
 
@@ -24,7 +25,7 @@ const FIELD_TYPES = [
   { value: 'image', label: 'Image' },
 ];
 
-type Tab = 'fields' | 'settings';
+type Tab = 'fields' | 'designer' | 'word' | 'settings';
 
 export default function TemplateDetailPage() {
   const { id } = useParams();
@@ -48,9 +49,11 @@ export default function TemplateDetailPage() {
     router.push('/templates');
   };
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'fields', label: `Fields (${template.fields.length})` },
-    { id: 'settings', label: 'Settings' },
+  const tabs: { id: Tab; label: string; show: boolean }[] = [
+    { id: 'fields', label: `Fields (${template.fields.length})`, show: true },
+    { id: 'designer', label: 'Layout Designer', show: template.type === 'designer' },
+    { id: 'word', label: 'Word Template', show: template.type === 'word' },
+    { id: 'settings', label: 'Settings', show: true },
   ];
 
   return (
@@ -60,6 +63,11 @@ export default function TemplateDetailPage() {
           <button onClick={() => router.push('/templates')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">← Back to Templates</button>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-text">{template.name}</h1>
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+              template.type === 'word' ? 'bg-blue-100 text-blue-700' : 'bg-primary-light text-primary'
+            }`}>
+              {template.type === 'word' ? 'Word' : 'Designer'}
+            </span>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${template.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'}`}>
               {template.isActive ? 'Active' : 'Inactive'}
             </span>
@@ -70,7 +78,7 @@ export default function TemplateDetailPage() {
       </div>
 
       <div className="flex gap-1 border-b border-border mb-6">
-        {tabs.map((tab) => (
+        {tabs.filter((t) => t.show).map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'}`}>
             {tab.label}
@@ -79,6 +87,8 @@ export default function TemplateDetailPage() {
       </div>
 
       {activeTab === 'fields' && <FieldsTab template={template} languages={languages} onUpdate={loadTemplate} />}
+      {activeTab === 'designer' && template.type === 'designer' && <DesignerTab template={template} onUpdate={loadTemplate} />}
+      {activeTab === 'word' && template.type === 'word' && <WordTemplateTab template={template} onUpdate={loadTemplate} />}
       {activeTab === 'settings' && <SettingsTab template={template} onUpdate={loadTemplate} />}
     </div>
   );
@@ -427,6 +437,376 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ── Designer Tab (block-based layout builder) ──
+
+interface LayoutBlock {
+  id: string;
+  type: 'header' | 'text' | 'field' | 'field-row' | 'divider' | 'footer' | 'date';
+  content?: string;
+  fieldKey?: string;
+  fieldKeys?: string[];
+  fontSize?: number;
+  alignment?: 'left' | 'center' | 'right';
+}
+
+function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
+  const [blocks, setBlocks] = useState<LayoutBlock[]>((template.layoutJson as LayoutBlock[]) || []);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const fieldKeys = template.fields.map((f) => f.fieldKey);
+
+  const addBlock = (type: LayoutBlock['type']) => {
+    const id = `block_${Date.now()}`;
+    let newBlock: LayoutBlock;
+    switch (type) {
+      case 'header': newBlock = { id, type, content: 'Header Text', fontSize: 18, alignment: 'center' }; break;
+      case 'text': newBlock = { id, type, content: 'Static text content', fontSize: 12, alignment: 'left' }; break;
+      case 'field': newBlock = { id, type, fieldKey: fieldKeys[0] || '', fontSize: 12, alignment: 'left' }; break;
+      case 'field-row': newBlock = { id, type, fieldKeys: [], fontSize: 12, alignment: 'left' }; break;
+      case 'divider': newBlock = { id, type }; break;
+      case 'footer': newBlock = { id, type, content: 'Footer text', fontSize: 10, alignment: 'center' }; break;
+      case 'date': newBlock = { id, type, content: 'Date: {date}', fontSize: 12, alignment: 'right' }; break;
+      default: newBlock = { id, type, content: '' }; break;
+    }
+    setBlocks([...blocks, newBlock]);
+    setSelectedIdx(blocks.length);
+  };
+
+  const moveBlock = (from: number, direction: 'up' | 'down') => {
+    const to = direction === 'up' ? from - 1 : from + 1;
+    if (to < 0 || to >= blocks.length) return;
+    const updated = [...blocks];
+    [updated[from], updated[to]] = [updated[to], updated[from]];
+    setBlocks(updated);
+    setSelectedIdx(to);
+  };
+
+  const removeBlock = (idx: number) => {
+    setBlocks(blocks.filter((_, i) => i !== idx));
+    setSelectedIdx(null);
+  };
+
+  const updateBlock = (idx: number, updates: Partial<LayoutBlock>) => {
+    const updated = [...blocks];
+    updated[idx] = { ...updated[idx], ...updates };
+    setBlocks(updated);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await api.patch(`/templates/${template.id}`, { layoutJson: blocks });
+    setSaving(false);
+    setMessage('Layout saved');
+    setTimeout(() => setMessage(''), 3000);
+    onUpdate();
+  };
+
+  const selected = selectedIdx !== null ? blocks[selectedIdx] : null;
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {/* Main area */}
+      <div className="lg:col-span-3">
+        {/* Toolbar */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {([['header', 'Header'], ['text', 'Text'], ['field', 'Field'], ['field-row', 'Field Row'], ['divider', 'Divider'], ['footer', 'Footer'], ['date', 'Date']] as const).map(([type, label]) => (
+            <button key={type} onClick={() => addBlock(type)}
+              className="px-3 py-1.5 bg-primary-light text-primary rounded-lg text-xs font-medium hover:bg-primary/20">
+              + {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Preview */}
+        <div className="bg-white border-2 border-border rounded-xl p-8 min-h-[400px]">
+          {blocks.length === 0 && (
+            <p className="text-center text-text-muted py-12">Add blocks using the toolbar above to build your document layout.</p>
+          )}
+          {blocks.map((block, idx) => (
+            <div
+              key={block.id}
+              onClick={() => setSelectedIdx(idx)}
+              className={`relative group mb-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                selectedIdx === idx ? 'border-primary bg-primary-light/30' : 'border-dashed border-border hover:border-primary/40'
+              }`}
+            >
+              {/* Move/delete controls */}
+              <div className="absolute -left-8 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={(e) => { e.stopPropagation(); moveBlock(idx, 'up'); }} className="text-text-muted hover:text-primary text-xs">▲</button>
+                <button onClick={(e) => { e.stopPropagation(); moveBlock(idx, 'down'); }} className="text-text-muted hover:text-primary text-xs">▼</button>
+              </div>
+
+              {/* Block content preview */}
+              {block.type === 'header' && (
+                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="font-bold text-text">{block.content}</div>
+              )}
+              {block.type === 'text' && (
+                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-text">{block.content}</div>
+              )}
+              {block.type === 'field' && (
+                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-primary font-medium">
+                  {'{'}{block.fieldKey || 'field_key'}{'}'}
+                </div>
+              )}
+              {block.type === 'field-row' && (
+                <div style={{ fontSize: block.fontSize }} className="flex gap-4">
+                  {(block.fieldKeys || []).map((fk) => (
+                    <span key={fk} className="text-primary font-medium flex-1">{'{'}{fk}{'}'}</span>
+                  ))}
+                  {(!block.fieldKeys || block.fieldKeys.length === 0) && <span className="text-text-muted">Select fields in properties →</span>}
+                </div>
+              )}
+              {block.type === 'divider' && <hr className="border-text-muted" />}
+              {block.type === 'footer' && (
+                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-text-secondary italic">{block.content}</div>
+              )}
+              {block.type === 'date' && (
+                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-text-secondary">{block.content}</div>
+              )}
+
+              <span className="absolute top-1 right-2 text-[10px] text-text-muted uppercase">{block.type}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save Layout'}
+          </button>
+          {message && <span className="text-sm text-success">{message}</span>}
+        </div>
+      </div>
+
+      {/* Properties panel */}
+      <div className="lg:col-span-1">
+        <div className="bg-surface border border-border rounded-xl p-5 sticky top-20">
+          <h3 className="font-semibold text-text mb-4">Properties</h3>
+          {!selected ? (
+            <p className="text-sm text-text-muted">Select a block to edit its properties.</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-xs text-text-muted uppercase font-medium">{selected.type} block</div>
+
+              {(selected.type === 'header' || selected.type === 'text' || selected.type === 'footer' || selected.type === 'date') && (
+                <div>
+                  <label className="block text-xs font-medium text-text mb-1">Content</label>
+                  <textarea value={selected.content || ''} onChange={(e) => updateBlock(selectedIdx!, { content: e.target.value })} rows={3}
+                    className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                </div>
+              )}
+
+              {selected.type === 'field' && (
+                <div>
+                  <label className="block text-xs font-medium text-text mb-1">Field</label>
+                  <select value={selected.fieldKey || ''} onChange={(e) => updateBlock(selectedIdx!, { fieldKey: e.target.value })}
+                    className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary">
+                    <option value="">Select field...</option>
+                    {fieldKeys.map((fk) => <option key={fk} value={fk}>{fk}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {selected.type === 'field-row' && (
+                <div>
+                  <label className="block text-xs font-medium text-text mb-1">Fields (select multiple)</label>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {fieldKeys.map((fk) => (
+                      <label key={fk} className="flex items-center gap-2 text-xs text-text cursor-pointer">
+                        <input type="checkbox" checked={(selected.fieldKeys || []).includes(fk)}
+                          onChange={(e) => {
+                            const current = selected.fieldKeys || [];
+                            const updated = e.target.checked ? [...current, fk] : current.filter((k) => k !== fk);
+                            updateBlock(selectedIdx!, { fieldKeys: updated });
+                          }}
+                          className="w-3 h-3 rounded border-border text-primary focus:ring-primary" />
+                        {fk}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selected.type !== 'divider' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-text mb-1">Font Size</label>
+                    <input type="number" min={8} max={36} value={selected.fontSize || 12}
+                      onChange={(e) => updateBlock(selectedIdx!, { fontSize: parseInt(e.target.value) || 12 })}
+                      className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-text mb-1">Alignment</label>
+                    <div className="flex gap-1">
+                      {(['left', 'center', 'right'] as const).map((a) => (
+                        <button key={a} onClick={() => updateBlock(selectedIdx!, { alignment: a })}
+                          className={`flex-1 px-2 py-1 rounded text-xs font-medium ${selected.alignment === a ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                          {a.charAt(0).toUpperCase() + a.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <button onClick={() => removeBlock(selectedIdx!)} className="w-full px-3 py-1.5 bg-danger-light text-danger rounded-lg text-xs font-medium hover:bg-danger/20">
+                Remove Block
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Word Template Tab ──
+
+function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState<{ html: string; placeholders: string[] } | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadPreview = async () => {
+    if (!template.wordFilePath) return;
+    setLoadingPreview(true);
+    try {
+      const data = await api.get<{ html: string; placeholders: string[] }>(`/templates/${template.id}/word-preview`);
+      setPreview(data);
+    } catch {
+      setError('Failed to load preview');
+    }
+    setLoadingPreview(false);
+  };
+
+  useEffect(() => { loadPreview(); }, [template.wordFilePath]);
+
+  const handleUpload = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const formEl = e.target as HTMLFormElement;
+    const fileInput = formEl.querySelector('input[type="file"]') as HTMLInputElement;
+    if (!fileInput.files?.length) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/templates/${template.id}/upload-word`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ message: 'Upload failed' }));
+        setError(Array.isArray(data.message) ? data.message.join(', ') : data.message);
+      } else {
+        fileInput.value = '';
+        onUpdate();
+      }
+    } catch {
+      setError('Upload failed');
+    }
+    setUploading(false);
+  };
+
+  const handleSyncPlaceholders = async () => {
+    if (!preview) return;
+    await api.post(`/templates/${template.id}/word-placeholders`, {
+      placeholders: preview.placeholders.map((p) => ({ find: p, fieldKey: p })),
+    });
+    onUpdate();
+  };
+
+  return (
+    <div>
+      {/* Upload */}
+      <form onSubmit={handleUpload} className="bg-surface border border-border rounded-xl p-5 mb-6">
+        <h3 className="font-semibold text-text mb-3">
+          {template.wordFileName ? 'Replace Word File' : 'Upload Word Template'}
+        </h3>
+        {template.wordFileName && (
+          <p className="text-sm text-text-secondary mb-3">
+            Current file: <span className="font-medium text-text">{template.wordFileName}</span>
+          </p>
+        )}
+        <div className="flex gap-4 items-end">
+          <div className="flex-1">
+            <input type="file" accept=".docx" required
+              className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
+          </div>
+          <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            {uploading ? 'Uploading...' : 'Upload'}
+          </button>
+        </div>
+        {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        <p className="text-xs text-text-muted mt-3">
+          Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{'}</code><code className="bg-bg px-1 py-0.5 rounded text-primary">full_name{'}'}</code> in your Word document where field values should be inserted.
+        </p>
+      </form>
+
+      {/* Preview */}
+      {loadingPreview && (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {preview && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Document preview */}
+          <div className="lg:col-span-2">
+            <h3 className="font-semibold text-text mb-3">Document Preview</h3>
+            <div className="bg-white border border-border rounded-xl p-8 shadow-sm prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: preview.html }} />
+          </div>
+
+          {/* Detected placeholders */}
+          <div>
+            <h3 className="font-semibold text-text mb-3">Detected Placeholders</h3>
+            <div className="bg-surface border border-border rounded-xl p-5">
+              {preview.placeholders.length === 0 ? (
+                <p className="text-sm text-text-muted">
+                  No placeholders found. Add <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{'}</code><code className="bg-bg px-1 py-0.5 rounded text-primary">field_name{'}'}</code> in your Word file.
+                </p>
+              ) : (
+                <>
+                  <div className="space-y-2 mb-4">
+                    {preview.placeholders.map((p) => {
+                      const hasField = template.fields.some((f) => f.fieldKey === p);
+                      return (
+                        <div key={p} className="flex items-center justify-between py-1.5 px-3 bg-bg rounded-lg">
+                          <code className="text-xs text-primary font-medium">{'{'}{p}{'}'}</code>
+                          {hasField ? (
+                            <span className="text-xs text-success font-medium">Linked</span>
+                          ) : (
+                            <span className="text-xs text-warning font-medium">Not linked</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {preview.placeholders.some((p) => !template.fields.some((f) => f.fieldKey === p)) && (
+                    <button onClick={handleSyncPlaceholders}
+                      className="w-full px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+                      Create Missing Fields
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

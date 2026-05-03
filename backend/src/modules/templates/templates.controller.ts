@@ -9,8 +9,14 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { randomUUID } from 'crypto';
 import { TemplatesService } from './templates.service.js';
 import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto.js';
 import {
@@ -19,6 +25,14 @@ import {
 } from './dto/template-field.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+
+const templateStorage = diskStorage({
+  destination: join(process.cwd(), 'uploads', 'templates'),
+  filename: (_req, file, cb) => {
+    const uniqueName = `${randomUUID()}${extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
 
 @Controller('templates')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -65,6 +79,33 @@ export class TemplatesController {
   @RequirePermissions('templates:delete')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.templatesService.remove(id);
+  }
+
+  // ── Word Template ──
+
+  @Post(':id/upload-word')
+  @RequirePermissions('templates:update')
+  @UseInterceptors(FileInterceptor('file', { storage: templateStorage }))
+  uploadWord(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.templatesService.uploadWordFile(id, file);
+  }
+
+  @Get(':id/word-preview')
+  @RequirePermissions('templates:read')
+  getWordPreview(@Param('id', ParseIntPipe) id: number) {
+    return this.templatesService.getWordPreview(id);
+  }
+
+  @Post(':id/word-placeholders')
+  @RequirePermissions('templates:update')
+  setWordPlaceholders(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { placeholders: { find: string; fieldKey: string }[] },
+  ) {
+    return this.templatesService.setWordPlaceholders(id, body.placeholders);
   }
 
   // ── Fields ──

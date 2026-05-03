@@ -13,6 +13,9 @@ export class Template {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ type: 'enum', enum: ['designer', 'word'], default: 'designer' })
+  type: 'designer' | 'word';
+
   @Column({ length: 255 })
   name: string;
 
@@ -27,6 +30,12 @@ export class Template {
 
   @Column({ type: 'json', nullable: true })
   layoutJson: object;
+
+  @Column({ length: 500, nullable: true })
+  wordFilePath: string;
+
+  @Column({ length: 255, nullable: true })
+  wordFileName: string;
 
   @Column({ default: true })
   isActive: boolean;

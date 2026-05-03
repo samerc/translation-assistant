@@ -3,12 +3,17 @@ import {
   IsOptional,
   IsNumber,
   IsBoolean,
+  IsIn,
   MinLength,
   MaxLength,
   Min,
 } from 'class-validator';
 
 export class CreateTemplateDto {
+  @IsOptional()
+  @IsIn(['designer', 'word'])
+  type?: 'designer' | 'word';
+
   @IsString()
   @MinLength(1)
   @MaxLength(255)

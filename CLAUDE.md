@@ -89,7 +89,9 @@ Light + dark mode supported (separate toggle from palette).
 - **PassportCopy** — label, filePath, originalName, mimeType, fileSize. Reference images for name spellings.
 
 ### Templates
-- **Template** — name, description, pricePerPage, discountedPricePerPage, layoutJson, isActive
+- **Template** — type (designer/word), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive
+  - **Designer type**: layout built with block-based designer, stored in layoutJson
+  - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
 - **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey
   - Fields with same `groupKey` form a repeatable set (e.g., family extract rows)
   - Fields with no `groupKey` are fixed (appear once)
@@ -152,7 +154,7 @@ Light + dark mode supported (separate toggle from palette).
 - [x] Phase 3: Settings (app config, languages, file upload limits)
 - [x] Phase 4: Clients (companies/persons, contacts, passport uploads, search/sort/paginate)
 - [x] Phase 5: Templates (CRUD, field definitions, labels per language)
-- [ ] Phase 6: Document Designer
+- [x] Phase 6: Document Designer (block-based + Word template with placeholders)
 - [ ] Phase 7: Jobs
 - [ ] Phase 8: Documents
 - [ ] Phase 9: Word Export
