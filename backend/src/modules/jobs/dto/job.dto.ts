@@ -10,17 +10,21 @@ export class JobLineItemDto {
   description: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   templateId?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   freeformJobTypeId?: number;
 
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   pageCount: number;
 
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   pricePerPage: number;
@@ -30,6 +34,7 @@ export class JobLineItemDto {
   useDiscountedPrice?: boolean;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   discountedPricePerPage?: number;

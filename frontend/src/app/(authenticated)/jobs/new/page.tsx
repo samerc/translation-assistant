@@ -127,13 +127,13 @@ export default function NewJobPage() {
         status: form.status,
         isFreeOfCharge: form.isFreeOfCharge,
         lineItems: lineItems.map((li) => ({
-          description: li.description,
+          description: li.description || 'Untitled',
           templateId: li.templateId || undefined,
           freeformJobTypeId: li.freeformJobTypeId || undefined,
-          pageCount: li.pageCount,
-          pricePerPage: li.pricePerPage,
+          pageCount: Number(li.pageCount) || 1,
+          pricePerPage: Number(li.pricePerPage) || 0,
           useDiscountedPrice: li.useDiscountedPrice,
-          discountedPricePerPage: li.discountedPricePerPage || undefined,
+          discountedPricePerPage: li.discountedPricePerPage ? Number(li.discountedPricePerPage) : undefined,
         })),
       };
 
