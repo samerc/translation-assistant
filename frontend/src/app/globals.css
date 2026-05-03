@@ -137,8 +137,8 @@
   --color-sidebar-active: var(--color-sidebar-active);
   --color-sidebar-hover: var(--color-sidebar-hover);
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
 }
 
 /* ==========================================
