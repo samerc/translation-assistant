@@ -38,7 +38,7 @@ interface FreeformJobType {
   isActive: boolean;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'jobtypes' | 'uploads';
+type Tab = 'general' | 'languages' | 'labels' | 'jobtypes' | 'uploads' | 'appearance';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -49,6 +49,7 @@ export default function SettingsPage() {
     { id: 'labels', label: 'Labels' },
     { id: 'jobtypes', label: 'Job Types' },
     { id: 'uploads', label: 'File Uploads' },
+    { id: 'appearance', label: 'Appearance' },
   ];
 
   return (
@@ -77,6 +78,7 @@ export default function SettingsPage() {
       {activeTab === 'labels' && <LabelsSettings />}
       {activeTab === 'jobtypes' && <JobTypesSettings />}
       {activeTab === 'uploads' && <UploadSettings />}
+      {activeTab === 'appearance' && <AppearanceSettings />}
     </div>
   );
 }
@@ -115,7 +117,7 @@ function GeneralSettings() {
   if (!settings) return <LoadingSpinner />;
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-lg">
+    <form onSubmit={handleSubmit} className="max-w-4xl">
       <div className="bg-surface border border-border rounded-xl p-6 space-y-5">
         <InputField
           label="Company Name"
@@ -203,7 +205,7 @@ function LanguagesSettings() {
   };
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-text-secondary">
           Define the languages available for templates and translation jobs.
@@ -357,7 +359,7 @@ function LabelsSettings() {
   };
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <p className="text-sm text-text-secondary mb-6">
         Configure the label options available when adding emails, phones, and addresses to clients.
       </p>
@@ -478,7 +480,7 @@ function JobTypesSettings() {
   };
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-text-secondary">
           Define document types for free-form jobs with default pricing.
@@ -606,7 +608,7 @@ function UploadSettings() {
   if (!settings) return <LoadingSpinner />;
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="max-w-4xl space-y-6">
       {/* Max Upload Size */}
       <div className="bg-surface border border-border rounded-xl p-6">
         <label className="block text-sm font-medium text-text mb-1.5">
@@ -729,6 +731,84 @@ function InputField({
         placeholder={placeholder}
         className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
       />
+    </div>
+  );
+}
+
+// ── Appearance Settings ──
+
+function AppearanceSettings() {
+  // Import theme context inline to avoid adding to file-level imports
+  const { palette, setPalette, darkMode, toggleDarkMode } = require('@/lib/theme-context').useTheme();
+
+  const palettes: { id: string; name: string; color: string }[] = [
+    { id: 'indigo', name: 'Indigo Minimal', color: '#4F46E5' },
+    { id: 'ocean', name: 'Ocean Blue', color: '#1E40AF' },
+    { id: 'teal', name: 'Teal Focus', color: '#0D9488' },
+    { id: 'slate', name: 'Slate & Amber', color: '#334155' },
+  ];
+
+  return (
+    <div className="max-w-4xl space-y-6">
+      {/* Color Palette */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-2">Color Palette</h3>
+        <p className="text-sm text-text-secondary mb-4">Choose your preferred color theme. This applies to your account only.</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {palettes.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setPalette(p.id)}
+              className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
+                palette === p.id
+                  ? 'border-primary bg-primary-light'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-full" style={{ backgroundColor: p.color }} />
+              <span className="text-sm font-medium text-text">{p.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Dark Mode */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="font-semibold text-text">Dark Mode</h3>
+            <p className="text-sm text-text-secondary mt-1">Switch between light and dark interface.</p>
+          </div>
+          <button
+            onClick={toggleDarkMode}
+            className={`relative w-12 h-7 rounded-full transition-colors ${darkMode ? 'bg-primary' : 'bg-border'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform shadow ${darkMode ? 'translate-x-5' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-4">Color Preview</h3>
+        <div className="flex gap-3 flex-wrap">
+          <Swatch label="Primary" className="bg-primary" />
+          <Swatch label="Accent" className="bg-accent" />
+          <Swatch label="Success" className="bg-success" />
+          <Swatch label="Warning" className="bg-warning" />
+          <Swatch label="Danger" className="bg-danger" />
+          <Swatch label="Neutral" className="bg-neutral" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Swatch({ label, className }: { label: string; className: string }) {
+  return (
+    <div className="text-center">
+      <div className={`w-14 h-14 rounded-xl ${className}`} />
+      <span className="text-xs text-text-muted mt-1 block">{label}</span>
     </div>
   );
 }
