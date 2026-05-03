@@ -844,9 +844,16 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
 
 // ── Word Template Tab ──
 
+interface WordPreview {
+  html: string;
+  valid: string[];
+  unlinked: string[];
+  malformed: { text: string; reason: string }[];
+}
+
 function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<{ html: string; placeholders: string[] } | null>(null);
+  const [preview, setPreview] = useState<WordPreview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [error, setError] = useState('');
 
@@ -854,7 +861,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
     if (!template.wordFilePath) return;
     setLoadingPreview(true);
     try {
-      const data = await api.get<{ html: string; placeholders: string[] }>(`/templates/${template.id}/word-preview`);
+      const data = await api.get<WordPreview>(`/templates/${template.id}/word-preview`);
       setPreview(data);
     } catch {
       setError('Failed to load preview');
@@ -899,10 +906,14 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
   const handleSyncPlaceholders = async () => {
     if (!preview) return;
     await api.post(`/templates/${template.id}/word-placeholders`, {
-      placeholders: preview.placeholders.map((p) => ({ find: p, fieldKey: p })),
+      placeholders: preview.unlinked.map((p) => ({ find: p, fieldKey: p })),
     });
     onUpdate();
   };
+
+  const totalPlaceholders = preview ? preview.valid.length + preview.unlinked.length : 0;
+  const hasMalformed = preview && preview.malformed.length > 0;
+  const hasUnlinked = preview && preview.unlinked.length > 0;
 
   return (
     <div>
@@ -927,11 +938,12 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
         </div>
         {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
         <p className="text-xs text-text-muted mt-3">
-          Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{'}</code><code className="bg-bg px-1 py-0.5 rounded text-primary">full_name{'}'}</code> in your Word document where field values should be inserted.
+          Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{field_name}'}</code> in your Word document.
+          Use only letters, numbers, and underscores. No spaces.
         </p>
       </form>
 
-      {/* Preview */}
+      {/* Loading */}
       {loadingPreview && (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -939,50 +951,95 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
       )}
 
       {preview && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Document preview */}
-          <div className="lg:col-span-2">
-            <h3 className="font-semibold text-text mb-3">Document Preview</h3>
-            <div className="bg-white border border-border rounded-xl p-8 shadow-sm prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: preview.html }} />
-          </div>
-
-          {/* Detected placeholders */}
-          <div>
-            <h3 className="font-semibold text-text mb-3">Detected Placeholders</h3>
-            <div className="bg-surface border border-border rounded-xl p-5">
-              {preview.placeholders.length === 0 ? (
-                <p className="text-sm text-text-muted">
-                  No placeholders found. Add <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{'}</code><code className="bg-bg px-1 py-0.5 rounded text-primary">field_name{'}'}</code> in your Word file.
-                </p>
-              ) : (
-                <>
-                  <div className="space-y-2 mb-4">
-                    {preview.placeholders.map((p) => {
-                      const hasField = template.fields.some((f) => f.fieldKey === p);
-                      return (
-                        <div key={p} className="flex items-center justify-between py-1.5 px-3 bg-bg rounded-lg">
-                          <code className="text-xs text-primary font-medium">{'{'}{p}{'}'}</code>
-                          {hasField ? (
-                            <span className="text-xs text-success font-medium">Linked</span>
-                          ) : (
-                            <span className="text-xs text-warning font-medium">Not linked</span>
-                          )}
-                        </div>
-                      );
-                    })}
+        <>
+          {/* Validation summary */}
+          {hasMalformed && (
+            <div className="bg-danger-light border border-danger/30 rounded-xl p-5 mb-6">
+              <h3 className="font-semibold text-danger mb-3">Errors Found — Fix in Word and Re-upload</h3>
+              <div className="space-y-2">
+                {preview.malformed.map((m, i) => (
+                  <div key={i} className="flex items-start gap-3 py-2 px-3 bg-white/60 rounded-lg">
+                    <code className="text-xs text-danger font-medium flex-shrink-0 mt-0.5">{m.text}</code>
+                    <span className="text-xs text-text">{m.reason}</span>
                   </div>
-                  {preview.placeholders.some((p) => !template.fields.some((f) => f.fieldKey === p)) && (
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Document preview */}
+            <div className="lg:col-span-2">
+              <h3 className="font-semibold text-text mb-3">Document Preview</h3>
+              <div className="bg-white border border-border rounded-xl p-8 shadow-sm prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: preview.html }} />
+            </div>
+
+            {/* Placeholder validation */}
+            <div>
+              <h3 className="font-semibold text-text mb-3">
+                Placeholders
+                {totalPlaceholders > 0 && <span className="text-text-muted font-normal ml-1">({totalPlaceholders})</span>}
+              </h3>
+
+              <div className="space-y-4">
+                {/* Valid / linked */}
+                {preview.valid.length > 0 && (
+                  <div className="bg-surface border border-border rounded-xl p-4">
+                    <h4 className="text-xs font-semibold text-success uppercase tracking-wide mb-2">Linked ({preview.valid.length})</h4>
+                    <div className="space-y-1.5">
+                      {preview.valid.map((p) => (
+                        <div key={p} className="flex items-center justify-between py-1.5 px-3 bg-success-light/50 rounded-lg">
+                          <code className="text-xs text-text font-medium">{'{' + p + '}'}</code>
+                          <span className="text-xs text-success font-medium">OK</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Unlinked — valid format but no matching field */}
+                {hasUnlinked && (
+                  <div className="bg-surface border border-warning/30 rounded-xl p-4">
+                    <h4 className="text-xs font-semibold text-warning uppercase tracking-wide mb-2">Not Linked ({preview.unlinked.length})</h4>
+                    <p className="text-xs text-text-muted mb-3">These placeholders are valid but don&apos;t have matching fields yet.</p>
+                    <div className="space-y-1.5 mb-3">
+                      {preview.unlinked.map((p) => (
+                        <div key={p} className="flex items-center justify-between py-1.5 px-3 bg-warning-light/50 rounded-lg">
+                          <code className="text-xs text-text font-medium">{'{' + p + '}'}</code>
+                          <span className="text-xs text-warning font-medium">No field</span>
+                        </div>
+                      ))}
+                    </div>
                     <button onClick={handleSyncPlaceholders}
                       className="w-full px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
-                      Create Missing Fields
+                      Create Fields for All ({preview.unlinked.length})
                     </button>
-                  )}
-                </>
-              )}
+                  </div>
+                )}
+
+                {/* No placeholders at all */}
+                {totalPlaceholders === 0 && !hasMalformed && (
+                  <div className="bg-surface border border-border rounded-xl p-5 text-center">
+                    <p className="text-sm text-text-muted">
+                      No placeholders found in the document.
+                    </p>
+                    <p className="text-xs text-text-muted mt-2">
+                      Add <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{field_name}'}</code> in your Word file where values should go.
+                    </p>
+                  </div>
+                )}
+
+                {/* All good */}
+                {preview.valid.length > 0 && !hasUnlinked && !hasMalformed && (
+                  <div className="p-3 bg-success-light text-success rounded-lg text-sm text-center font-medium">
+                    All placeholders are valid and linked!
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

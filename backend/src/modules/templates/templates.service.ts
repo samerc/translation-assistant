@@ -101,7 +101,12 @@ export class TemplatesService {
     return this.findOne(id);
   }
 
-  async getWordPreview(id: number): Promise<{ html: string; placeholders: string[] }> {
+  async getWordPreview(id: number): Promise<{
+    html: string;
+    valid: string[];
+    unlinked: string[];
+    malformed: { text: string; reason: string }[];
+  }> {
     const template = await this.findOne(id);
     if (!template.wordFilePath) {
       throw new NotFoundException('No Word file uploaded for this template');
@@ -109,18 +114,55 @@ export class TemplatesService {
 
     const buffer = readFileSync(template.wordFilePath);
     const result = await mammoth.convertToHtml({ buffer });
+    const rawText = result.value.replace(/<[^>]*>/g, ''); // strip HTML tags for scanning
 
-    // Find existing placeholders like {field_key}
-    const placeholderRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-    const placeholders: string[] = [];
+    // Find valid placeholders: {valid_field_key}
+    const validRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+    const foundValid: string[] = [];
     let match;
-    while ((match = placeholderRegex.exec(result.value)) !== null) {
-      if (!placeholders.includes(match[1])) {
-        placeholders.push(match[1]);
+    while ((match = validRegex.exec(rawText)) !== null) {
+      if (!foundValid.includes(match[1])) {
+        foundValid.push(match[1]);
       }
     }
 
-    return { html: result.value, placeholders };
+    // Find malformed placeholders: anything with braces that doesn't match the valid pattern
+    const allBracesRegex = /\{([^}]*)\}/g;
+    const malformed: { text: string; reason: string }[] = [];
+    while ((match = allBracesRegex.exec(rawText)) !== null) {
+      const inner = match[1];
+      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(inner)) continue; // valid, skip
+
+      let reason = '';
+      if (!inner.trim()) {
+        reason = 'Empty placeholder';
+      } else if (/\s/.test(inner)) {
+        reason = `Contains spaces — use underscores instead (e.g., {${inner.replace(/\s+/g, '_')}})`;
+      } else if (/^[0-9]/.test(inner)) {
+        reason = 'Cannot start with a number';
+      } else {
+        reason = 'Contains invalid characters — use only letters, numbers, and underscores';
+      }
+
+      malformed.push({ text: `{${inner}}`, reason });
+    }
+
+    // Check for unclosed braces
+    const openCount = (rawText.match(/\{/g) || []).length;
+    const closeCount = (rawText.match(/\}/g) || []).length;
+    if (openCount !== closeCount) {
+      malformed.push({
+        text: '{...}',
+        reason: `Mismatched braces: ${openCount} opening and ${closeCount} closing braces found`,
+      });
+    }
+
+    // Split valid into linked (has matching field) and unlinked
+    const fieldKeys = template.fields.map((f) => f.fieldKey);
+    const valid = foundValid.filter((p) => fieldKeys.includes(p));
+    const unlinked = foundValid.filter((p) => !fieldKeys.includes(p));
+
+    return { html: result.value, valid, unlinked, malformed };
   }
 
   async setWordPlaceholders(
