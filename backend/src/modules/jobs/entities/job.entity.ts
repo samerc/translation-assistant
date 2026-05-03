@@ -13,6 +13,7 @@ import { Contact } from '../../clients/entities/contact.entity.js';
 import { Language } from '../../settings/entities/language.entity.js';
 import { JobUser } from './job-user.entity.js';
 import { JobFile } from './job-file.entity.js';
+import { JobLineItem } from './job-line-item.entity.js';
 
 @Entity('jobs')
 export class Job {
@@ -61,25 +62,13 @@ export class Job {
 
   @Column({
     type: 'enum',
-    enum: ['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'cancelled'],
+    enum: ['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'lost', 'cancelled'],
     default: 'in_progress',
   })
   status: string;
 
   @Column({ type: 'date', nullable: true })
   deadline: string;
-
-  @Column({ default: 1 })
-  pageCount: number;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-  pricePerPage: number;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  discountedPricePerPage: number;
-
-  @Column({ default: false })
-  useDiscountedPrice: boolean;
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   calculatedTotal: number;
@@ -101,6 +90,9 @@ export class Job {
 
   @Column({ type: 'text', nullable: true })
   notes: string;
+
+  @OneToMany(() => JobLineItem, (li) => li.job, { cascade: true, eager: true })
+  lineItems: JobLineItem[];
 
   @OneToMany(() => JobUser, (ju) => ju.job, { cascade: true })
   assignedUsers: JobUser[];

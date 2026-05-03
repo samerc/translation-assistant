@@ -16,6 +16,7 @@ import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
 import { CreateLabelOptionDto, UpdateLabelOptionDto } from './dto/label-option.dto.js';
 import type { LabelCategory } from './dto/label-option.dto.js';
+import { CreateFreeformJobTypeDto, UpdateFreeformJobTypeDto } from './dto/freeform-job-type.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 
@@ -100,5 +101,34 @@ export class SettingsController {
   @RequirePermissions('settings:delete')
   removeLabel(@Param('id', ParseIntPipe) id: number) {
     return this.settingsService.removeLabel(id);
+  }
+
+  // ── Freeform Job Types ──
+
+  @Get('freeform-job-types')
+  @RequirePermissions('settings:read')
+  findAllFreeformJobTypes() {
+    return this.settingsService.findAllFreeformJobTypes();
+  }
+
+  @Post('freeform-job-types')
+  @RequirePermissions('settings:create')
+  createFreeformJobType(@Body() dto: CreateFreeformJobTypeDto) {
+    return this.settingsService.createFreeformJobType(dto);
+  }
+
+  @Patch('freeform-job-types/:id')
+  @RequirePermissions('settings:update')
+  updateFreeformJobType(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateFreeformJobTypeDto,
+  ) {
+    return this.settingsService.updateFreeformJobType(id, dto);
+  }
+
+  @Delete('freeform-job-types/:id')
+  @RequirePermissions('settings:delete')
+  removeFreeformJobType(@Param('id', ParseIntPipe) id: number) {
+    return this.settingsService.removeFreeformJobType(id);
   }
 }

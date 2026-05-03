@@ -6,22 +6,26 @@ import { api } from '@/lib/api';
 
 interface JobFile { id: number; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: number | null; uploadedAt: string; }
 interface JobUser { id: number; userId: number; permissionLevel: string; user: { id: number; firstName: string; lastName: string; email: string }; }
+interface JobLineItem {
+  id: number; description: string; templateId: number | null; freeformJobTypeId: number | null;
+  pageCount: number; pricePerPage: number; discountedPricePerPage: number | null;
+  useDiscountedPrice: boolean; lineTotal: number;
+}
 interface Job {
   id: number; jobNumber: string; type: string; title: string; description: string | null; status: string;
   client: { id: number; name: string }; contact: { id: number; firstName: string; lastName: string } | null;
   sourceLanguage: { id: number; code: string; name: string }; targetLanguage: { id: number; code: string; name: string };
-  deadline: string | null; pageCount: number; pricePerPage: number; discountedPricePerPage: number | null;
-  useDiscountedPrice: boolean; calculatedTotal: number; finalPrice: number | null;
+  deadline: string | null; calculatedTotal: number; finalPrice: number | null;
   isFreeOfCharge: boolean; freeOfChargeReason: string | null;
   paymentCurrency: string | null; paymentAmount: number | null; notes: string | null;
-  assignedUsers: JobUser[]; files: JobFile[]; createdAt: string;
+  lineItems: JobLineItem[]; assignedUsers: JobUser[]; files: JobFile[]; createdAt: string;
 }
 
 const STATUSES = [
   { value: 'quote', label: 'Quote' }, { value: 'accepted', label: 'Accepted' },
   { value: 'in_progress', label: 'In Progress' }, { value: 'delivered', label: 'Delivered' },
   { value: 'invoiced', label: 'Invoiced' }, { value: 'paid', label: 'Paid' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'lost', label: 'Lost' }, { value: 'cancelled', label: 'Cancelled' },
 ];
 
 const statusColor = (s: string) => {
@@ -29,7 +33,7 @@ const statusColor = (s: string) => {
     quote: 'bg-bg text-text-secondary', accepted: 'bg-primary-light text-primary',
     in_progress: 'bg-primary-light text-primary', delivered: 'bg-success-light text-success',
     invoiced: 'bg-warning-light text-warning', paid: 'bg-success-light text-success',
-    cancelled: 'bg-danger-light text-danger',
+    lost: 'bg-bg text-text-muted', cancelled: 'bg-danger-light text-danger',
   };
   return map[s] || 'bg-bg text-text-secondary';
 };
@@ -139,9 +143,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     title: job.title, description: job.description || '', notes: job.notes || '',
-    pageCount: String(job.pageCount), pricePerPage: String(job.pricePerPage),
-    discountedPricePerPage: job.discountedPricePerPage ? String(job.discountedPricePerPage) : '',
-    useDiscountedPrice: job.useDiscountedPrice, finalPrice: job.finalPrice ? String(job.finalPrice) : '',
+    finalPrice: job.finalPrice ? String(job.finalPrice) : '',
     deadline: job.deadline || '', isFreeOfCharge: job.isFreeOfCharge, freeOfChargeReason: job.freeOfChargeReason || '',
     paymentCurrency: job.paymentCurrency || '', paymentAmount: job.paymentAmount ? String(job.paymentAmount) : '',
   });
@@ -152,11 +154,8 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
     setSaving(true);
     const body: Record<string, unknown> = {
       title: form.title, description: form.description || null, notes: form.notes || null,
-      pageCount: parseInt(form.pageCount) || 1, pricePerPage: parseFloat(form.pricePerPage) || 0,
-      useDiscountedPrice: form.useDiscountedPrice, isFreeOfCharge: form.isFreeOfCharge,
-      deadline: form.deadline || null,
+      isFreeOfCharge: form.isFreeOfCharge, deadline: form.deadline || null,
     };
-    if (form.discountedPricePerPage) body.discountedPricePerPage = parseFloat(form.discountedPricePerPage);
     if (form.finalPrice) body.finalPrice = parseFloat(form.finalPrice);
     if (form.freeOfChargeReason) body.freeOfChargeReason = form.freeOfChargeReason;
     if (form.paymentCurrency) body.paymentCurrency = form.paymentCurrency;
@@ -205,33 +204,59 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
         )}
       </div>
 
-      {/* Pricing */}
+      {/* Pricing / Line Items */}
       <div className="bg-surface border border-border rounded-xl p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-semibold text-text">Pricing</h3>
-        </div>
-        <div className="space-y-2.5">
-          {job.isFreeOfCharge ? (
-            <>
-              <InfoRow label="Status" value="Free of Charge (Pro Bono)" />
-              {job.freeOfChargeReason && <InfoRow label="Reason" value={job.freeOfChargeReason} />}
-            </>
-          ) : (
-            <>
-              <InfoRow label="Pages" value={String(job.pageCount)} />
-              <InfoRow label="Price/Page" value={`$${Number(job.pricePerPage).toFixed(2)}`} />
-              {job.discountedPricePerPage && <InfoRow label="Discounted/Page" value={`$${Number(job.discountedPricePerPage).toFixed(2)}${job.useDiscountedPrice ? ' (active)' : ''}`} />}
+        <h3 className="font-semibold text-text mb-4">Pricing</h3>
+        {job.isFreeOfCharge ? (
+          <div className="space-y-2.5">
+            <InfoRow label="Status" value="Free of Charge (Pro Bono)" />
+            {job.freeOfChargeReason && <InfoRow label="Reason" value={job.freeOfChargeReason} />}
+          </div>
+        ) : (
+          <>
+            {job.lineItems.length > 0 ? (
+              <div className="overflow-hidden rounded-lg border border-border mb-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-bg border-b border-border">
+                      <th className="text-left px-3 py-2 font-semibold text-text-secondary">Item</th>
+                      <th className="text-center px-3 py-2 font-semibold text-text-secondary">Pages</th>
+                      <th className="text-right px-3 py-2 font-semibold text-text-secondary">Price/Page</th>
+                      <th className="text-right px-3 py-2 font-semibold text-text-secondary">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {job.lineItems.map((li) => (
+                      <tr key={li.id} className="border-b border-border last:border-0">
+                        <td className="px-3 py-2 text-text">{li.description}</td>
+                        <td className="px-3 py-2 text-text-secondary text-center">{li.pageCount}</td>
+                        <td className="px-3 py-2 text-text-secondary text-right">
+                          ${Number(li.useDiscountedPrice && li.discountedPricePerPage ? li.discountedPricePerPage : li.pricePerPage).toFixed(2)}
+                          {li.useDiscountedPrice && li.discountedPricePerPage && (
+                            <span className="text-xs text-success ml-1">(disc.)</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-text font-medium text-right">${Number(li.lineTotal).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-text-muted mb-4">No line items.</p>
+            )}
+            <div className="space-y-2">
               <InfoRow label="Calculated Total" value={`$${Number(job.calculatedTotal).toFixed(2)}`} />
               {job.finalPrice && <InfoRow label="Final Price (override)" value={`$${Number(job.finalPrice).toFixed(2)}`} />}
-              <div className="border-t border-border pt-2 mt-2">
+              <div className="border-t border-border pt-2">
                 <InfoRow label="Effective Total" value={`$${Number(effectivePrice).toFixed(2)}`} />
               </div>
               {job.paymentCurrency && (
                 <InfoRow label="Paid in" value={`${Number(job.paymentAmount).toFixed(2)} ${job.paymentCurrency}`} />
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

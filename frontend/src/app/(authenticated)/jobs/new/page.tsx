@@ -6,12 +6,27 @@ import { api } from '@/lib/api';
 
 interface Client { id: number; name: string; type: string; contacts: { id: number; firstName: string; lastName: string }[]; }
 interface Language { id: number; code: string; name: string; isActive: boolean; }
+interface Template { id: number; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+interface FreeformJobType { id: number; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+
+interface LineItem {
+  key: string;
+  description: string;
+  templateId?: number;
+  freeformJobTypeId?: number;
+  pageCount: number;
+  pricePerPage: number;
+  discountedPricePerPage: number;
+  useDiscountedPrice: boolean;
+}
 
 export default function NewJobPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [freeformTypes, setFreeformTypes] = useState<FreeformJobType[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,22 +42,75 @@ export default function NewJobPage() {
     targetLanguageId: '',
     status: 'in_progress',
     deadline: '',
-    pageCount: '1',
-    pricePerPage: '',
-    discountedPricePerPage: '',
-    useDiscountedPrice: false,
     isFreeOfCharge: false,
     freeOfChargeReason: '',
     notes: '',
   });
 
+  const [lineItems, setLineItems] = useState<LineItem[]>([]);
+
   useEffect(() => {
     api.get<{ data: Client[] }>('/clients?limit=1000').then((res) => setClients(res.data));
     api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive)));
+    api.get<Template[]>('/templates?isActive=true').then(setTemplates);
+    api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setFreeformTypes);
   }, []);
 
   const selectedClient = clients.find((c) => c.id === parseInt(form.clientId));
   const contacts = selectedClient?.contacts || [];
+
+  const addLineItem = () => {
+    if (form.type === 'template') {
+      setLineItems([...lineItems, {
+        key: `li_${Date.now()}`, description: '', templateId: undefined,
+        pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
+      }]);
+    } else {
+      setLineItems([...lineItems, {
+        key: `li_${Date.now()}`, description: '', freeformJobTypeId: undefined,
+        pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
+      }]);
+    }
+  };
+
+  const updateLineItem = (key: string, updates: Partial<LineItem>) => {
+    setLineItems(lineItems.map((li) => li.key === key ? { ...li, ...updates } : li));
+  };
+
+  const removeLineItem = (key: string) => {
+    setLineItems(lineItems.filter((li) => li.key !== key));
+  };
+
+  const handleTemplateSelect = (key: string, templateId: number) => {
+    const tmpl = templates.find((t) => t.id === templateId);
+    if (tmpl) {
+      updateLineItem(key, {
+        templateId,
+        description: tmpl.name,
+        pricePerPage: tmpl.pricePerPage,
+        discountedPricePerPage: tmpl.discountedPricePerPage || 0,
+      });
+    }
+  };
+
+  const handleFreeformTypeSelect = (key: string, typeId: number) => {
+    const ft = freeformTypes.find((t) => t.id === typeId);
+    if (ft) {
+      updateLineItem(key, {
+        freeformJobTypeId: typeId,
+        description: ft.name,
+        pricePerPage: ft.pricePerPage,
+        discountedPricePerPage: ft.discountedPricePerPage || 0,
+      });
+    }
+  };
+
+  const getLineTotal = (li: LineItem) => {
+    const price = li.useDiscountedPrice && li.discountedPricePerPage ? li.discountedPricePerPage : li.pricePerPage;
+    return li.pageCount * price;
+  };
+
+  const grandTotal = lineItems.reduce((sum, li) => sum + getLineTotal(li), 0);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -57,16 +125,21 @@ export default function NewJobPage() {
         sourceLanguageId: parseInt(form.sourceLanguageId),
         targetLanguageId: parseInt(form.targetLanguageId),
         status: form.status,
-        pageCount: parseInt(form.pageCount) || 1,
         isFreeOfCharge: form.isFreeOfCharge,
+        lineItems: lineItems.map((li) => ({
+          description: li.description,
+          templateId: li.templateId || undefined,
+          freeformJobTypeId: li.freeformJobTypeId || undefined,
+          pageCount: li.pageCount,
+          pricePerPage: li.pricePerPage,
+          useDiscountedPrice: li.useDiscountedPrice,
+          discountedPricePerPage: li.discountedPricePerPage || undefined,
+        })),
       };
 
       if (form.description) body.description = form.description;
       if (form.contactId) body.contactId = parseInt(form.contactId);
       if (form.deadline) body.deadline = form.deadline;
-      if (form.pricePerPage) body.pricePerPage = parseFloat(form.pricePerPage);
-      if (form.discountedPricePerPage) body.discountedPricePerPage = parseFloat(form.discountedPricePerPage);
-      if (form.useDiscountedPrice) body.useDiscountedPrice = true;
       if (form.isFreeOfCharge && form.freeOfChargeReason) body.freeOfChargeReason = form.freeOfChargeReason;
       if (form.notes) body.notes = form.notes;
 
@@ -85,7 +158,7 @@ export default function NewJobPage() {
       <button onClick={() => router.push('/jobs')} className="text-sm text-text-secondary hover:text-primary mb-4 inline-block">← Back to Jobs</button>
       <h1 className="text-2xl font-bold text-text mb-6">New Job</h1>
 
-      <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">
+      <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
         {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
 
         {/* Basic info */}
@@ -94,7 +167,7 @@ export default function NewJobPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'template' | 'freeform' })} className={inputClass}>
+              <select value={form.type} onChange={(e) => { setForm({ ...form, type: e.target.value as 'template' | 'freeform' }); setLineItems([]); }} className={inputClass}>
                 <option value="template">Template-based</option>
                 <option value="freeform">Free-form</option>
               </select>
@@ -110,7 +183,7 @@ export default function NewJobPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Title *</label>
-            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required placeholder="Birth Certificate Translation" className={inputClass} />
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required className={inputClass} />
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Description</label>
@@ -155,11 +228,113 @@ export default function NewJobPage() {
               </select>
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">Deadline</label>
+            <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className={inputClass} />
+          </div>
         </div>
 
-        {/* Pricing */}
+        {/* Line Items */}
+        <div className="bg-surface border border-border rounded-xl p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-semibold text-text">
+              {form.type === 'template' ? 'Templates' : 'Documents'}
+            </h3>
+            <button type="button" onClick={addLineItem}
+              className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+              + Add {form.type === 'template' ? 'Template' : 'Document'}
+            </button>
+          </div>
+
+          {lineItems.length === 0 && (
+            <p className="text-sm text-text-muted py-4 text-center">
+              No {form.type === 'template' ? 'templates' : 'documents'} added yet.
+            </p>
+          )}
+
+          <div className="space-y-3">
+            {lineItems.map((li) => (
+              <div key={li.key} className="border border-border rounded-lg p-4 bg-bg">
+                <div className="grid grid-cols-12 gap-3 items-end">
+                  {/* Template/Type selector */}
+                  <div className="col-span-4">
+                    <label className="block text-xs font-medium text-text mb-1">
+                      {form.type === 'template' ? 'Template' : 'Document Type'}
+                    </label>
+                    {form.type === 'template' ? (
+                      <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, parseInt(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="">Select template...</option>
+                        {templates.map((t) => <option key={t.id} value={t.id}>{t.name} (${Number(t.pricePerPage).toFixed(2)}/p)</option>)}
+                      </select>
+                    ) : (
+                      <select value={li.freeformJobTypeId || ''} onChange={(e) => handleFreeformTypeSelect(li.key, parseInt(e.target.value))}
+                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="">Select type...</option>
+                        {freeformTypes.map((ft) => <option key={ft.id} value={ft.id}>{ft.name} (${Number(ft.pricePerPage).toFixed(2)}/p)</option>)}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Pages */}
+                  <div className="col-span-1">
+                    <label className="block text-xs font-medium text-text mb-1">Pages</label>
+                    <input type="number" min={1} value={li.pageCount}
+                      onChange={(e) => updateLineItem(li.key, { pageCount: parseInt(e.target.value) || 1 })}
+                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  </div>
+
+                  {/* Price */}
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-text mb-1">Price/Page</label>
+                    <input type="number" step="0.01" min={0} value={li.pricePerPage}
+                      onChange={(e) => updateLineItem(li.key, { pricePerPage: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  </div>
+
+                  {/* Discounted */}
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-text mb-1">Discounted</label>
+                    <input type="number" step="0.01" min={0} value={li.discountedPricePerPage || ''}
+                      onChange={(e) => updateLineItem(li.key, { discountedPricePerPage: parseFloat(e.target.value) || 0 })}
+                      placeholder="—"
+                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  </div>
+
+                  {/* Use discount checkbox */}
+                  <div className="col-span-1 flex items-center justify-center pb-1">
+                    <label className="flex items-center gap-1 text-xs text-text cursor-pointer" title="Use discounted price">
+                      <input type="checkbox" checked={li.useDiscountedPrice}
+                        onChange={(e) => updateLineItem(li.key, { useDiscountedPrice: e.target.checked })}
+                        disabled={!li.discountedPricePerPage}
+                        className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary" />
+                      Disc.
+                    </label>
+                  </div>
+
+                  {/* Line total + delete */}
+                  <div className="col-span-2 flex items-center justify-between pb-1">
+                    <span className="text-sm font-semibold text-text">${getLineTotal(li).toFixed(2)}</span>
+                    <button type="button" onClick={() => removeLineItem(li.key)} className="text-xs text-danger hover:text-danger/80">Remove</button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Total */}
+          {lineItems.length > 0 && (
+            <div className="flex justify-end mt-4 pt-4 border-t border-border">
+              <div className="text-right">
+                <span className="text-sm text-text-secondary mr-4">Total:</span>
+                <span className="text-lg font-bold text-text">${grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pro bono */}
         <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
-          <h3 className="font-semibold text-text">Pricing</h3>
           <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
             <input type="checkbox" checked={form.isFreeOfCharge} onChange={(e) => setForm({ ...form, isFreeOfCharge: e.target.checked })}
               className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
@@ -171,34 +346,6 @@ export default function NewJobPage() {
               <input value={form.freeOfChargeReason} onChange={(e) => setForm({ ...form, freeOfChargeReason: e.target.value })} placeholder="Optional" className={inputClass} />
             </div>
           )}
-          {!form.isFreeOfCharge && (
-            <div className="grid grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-text mb-1.5">Pages</label>
-                <input type="number" min={1} value={form.pageCount} onChange={(e) => setForm({ ...form, pageCount: e.target.value })} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text mb-1.5">Price/Page</label>
-                <input type="number" step="0.01" min={0} value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} className={inputClass} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text mb-1.5">Discounted</label>
-                <input type="number" step="0.01" min={0} value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} placeholder="Optional" className={inputClass} />
-              </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm text-text cursor-pointer pb-2">
-                  <input type="checkbox" checked={form.useDiscountedPrice} onChange={(e) => setForm({ ...form, useDiscountedPrice: e.target.checked })}
-                    disabled={!form.discountedPricePerPage}
-                    className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
-                  Use discounted
-                </label>
-              </div>
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-text mb-1.5">Deadline</label>
-            <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className={inputClass} />
-          </div>
         </div>
 
         {/* Notes */}

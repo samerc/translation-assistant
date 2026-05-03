@@ -5,11 +5,12 @@ import { JobsController } from './jobs.controller.js';
 import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
 import { JobFile } from './entities/job-file.entity.js';
+import { JobLineItem } from './entities/job-line-item.entity.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Job, JobUser, JobFile, AppSettings])],
+  imports: [TypeOrmModule.forFeature([Job, JobUser, JobFile, JobLineItem, AppSettings])],
   controllers: [JobsController],
   providers: [JobsService, FileValidationPipe],
   exports: [JobsService],

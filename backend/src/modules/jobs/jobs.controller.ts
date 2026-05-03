@@ -83,6 +83,33 @@ export class JobsController {
     return this.jobsService.reopenJob(id);
   }
 
+  // ── Line Items ──
+
+  @Post(':id/line-items')
+  @RequirePermissions('jobs:update')
+  addLineItem(@Param('id', ParseIntPipe) id: number, @Body() body: {
+    description: string; templateId?: number; freeformJobTypeId?: number;
+    pageCount: number; pricePerPage: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number;
+  }) {
+    return this.jobsService.addLineItem(id, body);
+  }
+
+  @Patch(':id/line-items/:itemId')
+  @RequirePermissions('jobs:update')
+  updateLineItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('itemId', ParseIntPipe) itemId: number,
+    @Body() body: { description?: string; pageCount?: number; pricePerPage?: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number },
+  ) {
+    return this.jobsService.updateLineItem(id, itemId, body);
+  }
+
+  @Delete(':id/line-items/:itemId')
+  @RequirePermissions('jobs:update')
+  removeLineItem(@Param('id', ParseIntPipe) id: number, @Param('itemId', ParseIntPipe) itemId: number) {
+    return this.jobsService.removeLineItem(id, itemId);
+  }
+
   // ── Users ──
 
   @Post(':id/users')

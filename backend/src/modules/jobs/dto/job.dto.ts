@@ -1,15 +1,39 @@
 import {
-  IsString,
-  IsOptional,
-  IsInt,
-  IsNumber,
-  IsBoolean,
-  IsIn,
-  IsDateString,
-  MinLength,
-  MaxLength,
-  Min,
+  IsString, IsOptional, IsInt, IsNumber, IsBoolean, IsIn,
+  IsDateString, IsArray, ValidateNested, MinLength, MaxLength, Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class JobLineItemDto {
+  @IsString()
+  @MaxLength(255)
+  description: string;
+
+  @IsOptional()
+  @IsInt()
+  templateId?: number;
+
+  @IsOptional()
+  @IsInt()
+  freeformJobTypeId?: number;
+
+  @IsInt()
+  @Min(1)
+  pageCount: number;
+
+  @IsNumber()
+  @Min(0)
+  pricePerPage: number;
+
+  @IsOptional()
+  @IsBoolean()
+  useDiscountedPrice?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  discountedPricePerPage?: number;
+}
 
 export class CreateJobDto {
   @IsOptional()
@@ -39,31 +63,12 @@ export class CreateJobDto {
   targetLanguageId: number;
 
   @IsOptional()
-  @IsIn(['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'cancelled'])
+  @IsIn(['quote', 'accepted', 'in_progress'])
   status?: string;
 
   @IsOptional()
   @IsDateString()
   deadline?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  pageCount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  pricePerPage?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  discountedPricePerPage?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  useDiscountedPrice?: boolean;
 
   @IsOptional()
   @IsNumber()
@@ -79,16 +84,13 @@ export class CreateJobDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(10)
-  paymentCurrency?: string;
-
-  @IsOptional()
-  @IsNumber()
-  paymentAmount?: number;
-
-  @IsOptional()
-  @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => JobLineItemDto)
+  lineItems?: JobLineItemDto[];
 }
 
 export class UpdateJobDto {
@@ -107,31 +109,12 @@ export class UpdateJobDto {
   contactId?: number;
 
   @IsOptional()
-  @IsIn(['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'cancelled'])
+  @IsIn(['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'lost', 'cancelled'])
   status?: string;
 
   @IsOptional()
   @IsDateString()
   deadline?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  pageCount?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  pricePerPage?: number;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  discountedPricePerPage?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  useDiscountedPrice?: boolean;
 
   @IsOptional()
   @IsNumber()

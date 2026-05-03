@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AppSettings } from './entities/app-settings.entity.js';
 import { Language } from './entities/language.entity.js';
 import { LabelOption } from './entities/label-option.entity.js';
+import { FreeformJobType } from './entities/freeform-job-type.entity.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
 import {
@@ -11,6 +12,10 @@ import {
   UpdateLabelOptionDto,
   LabelCategory,
 } from './dto/label-option.dto.js';
+import {
+  CreateFreeformJobTypeDto,
+  UpdateFreeformJobTypeDto,
+} from './dto/freeform-job-type.dto.js';
 
 @Injectable()
 export class SettingsService {
@@ -21,6 +26,8 @@ export class SettingsService {
     private readonly languageRepository: Repository<Language>,
     @InjectRepository(LabelOption)
     private readonly labelOptionRepository: Repository<LabelOption>,
+    @InjectRepository(FreeformJobType)
+    private readonly freeformJobTypeRepository: Repository<FreeformJobType>,
   ) {}
 
   // ── App Settings ──
@@ -106,5 +113,29 @@ export class SettingsService {
     const label = await this.labelOptionRepository.findOne({ where: { id } });
     if (!label) throw new NotFoundException('Label option not found');
     await this.labelOptionRepository.remove(label);
+  }
+
+  // ── Freeform Job Types ──
+
+  async findAllFreeformJobTypes(): Promise<FreeformJobType[]> {
+    return this.freeformJobTypeRepository.find({ order: { name: 'ASC' } });
+  }
+
+  async createFreeformJobType(dto: CreateFreeformJobTypeDto): Promise<FreeformJobType> {
+    const type = this.freeformJobTypeRepository.create(dto);
+    return this.freeformJobTypeRepository.save(type);
+  }
+
+  async updateFreeformJobType(id: number, dto: UpdateFreeformJobTypeDto): Promise<FreeformJobType> {
+    const type = await this.freeformJobTypeRepository.findOne({ where: { id } });
+    if (!type) throw new NotFoundException('Freeform job type not found');
+    Object.assign(type, dto);
+    return this.freeformJobTypeRepository.save(type);
+  }
+
+  async removeFreeformJobType(id: number): Promise<void> {
+    const type = await this.freeformJobTypeRepository.findOne({ where: { id } });
+    if (!type) throw new NotFoundException('Freeform job type not found');
+    await this.freeformJobTypeRepository.remove(type);
   }
 }

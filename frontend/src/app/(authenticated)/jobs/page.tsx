@@ -14,7 +14,7 @@ interface Job {
   sourceLanguage: { code: string; name: string };
   targetLanguage: { code: string; name: string };
   deadline: string | null;
-  pageCount: number;
+  lineItems: { id: number; pageCount: number }[];
   calculatedTotal: number;
   finalPrice: number | null;
   isFreeOfCharge: boolean;
@@ -30,6 +30,7 @@ const STATUSES = [
   { value: 'delivered', label: 'Delivered', color: 'bg-success-light text-success' },
   { value: 'invoiced', label: 'Invoiced', color: 'bg-warning-light text-warning' },
   { value: 'paid', label: 'Paid', color: 'bg-success-light text-success' },
+  { value: 'lost', label: 'Lost', color: 'bg-bg text-text-muted' },
   { value: 'cancelled', label: 'Cancelled', color: 'bg-danger-light text-danger' },
 ];
 
@@ -126,7 +127,7 @@ export default function JobsPage() {
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('status')}>
                 Status <SortIcon field="status" />
               </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Pages</th>
+              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Items</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('calculatedTotal')}>
                 Total <SortIcon field="calculatedTotal" />
               </th>
@@ -163,7 +164,7 @@ export default function JobsPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge.color}`}>{badge.label}</span>
                   </td>
-                  <td className="px-4 py-3 text-text-secondary">{job.pageCount}</td>
+                  <td className="px-4 py-3 text-text-secondary">{job.lineItems?.length || 0}</td>
                   <td className="px-4 py-3 text-text-secondary">{getPrice(job)}</td>
                   <td className="px-4 py-3 text-text-secondary">{job.deadline ? new Date(job.deadline).toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(job.createdAt).toLocaleDateString()}</td>
