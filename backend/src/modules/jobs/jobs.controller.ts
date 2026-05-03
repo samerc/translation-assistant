@@ -77,6 +77,12 @@ export class JobsController {
     return this.jobsService.updateStatus(id, status);
   }
 
+  @Post(':id/reopen')
+  @RequirePermissions('jobs:update')
+  reopenJob(@Param('id', ParseIntPipe) id: number) {
+    return this.jobsService.reopenJob(id);
+  }
+
   // ── Users ──
 
   @Post(':id/users')

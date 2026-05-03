@@ -19,6 +19,9 @@ export class Job {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ length: 20, unique: true })
+  jobNumber: string;
+
   @Column({ type: 'enum', enum: ['template', 'freeform'], default: 'template' })
   type: 'template' | 'freeform';
 

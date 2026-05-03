@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 interface JobFile { id: number; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: number | null; uploadedAt: string; }
 interface JobUser { id: number; userId: number; permissionLevel: string; user: { id: number; firstName: string; lastName: string; email: string }; }
 interface Job {
-  id: number; type: string; title: string; description: string | null; status: string;
+  id: number; jobNumber: string; type: string; title: string; description: string | null; status: string;
   client: { id: number; name: string }; contact: { id: number; firstName: string; lastName: string } | null;
   sourceLanguage: { id: number; code: string; name: string }; targetLanguage: { id: number; code: string; name: string };
   deadline: string | null; pageCount: number; pricePerPage: number; discountedPricePerPage: number | null;
@@ -58,6 +58,12 @@ export default function JobDetailPage() {
     loadJob();
   };
 
+  const handleReopen = async () => {
+    await api.post(`/jobs/${id}/reopen`);
+    loadJob();
+  };
+
+  const isLocked = ['delivered', 'invoiced', 'paid'].includes(job.status);
   const sourceFiles = job.files.filter((f) => f.category === 'source');
   const translatedFiles = job.files.filter((f) => f.category === 'translated');
 
@@ -72,11 +78,24 @@ export default function JobDetailPage() {
 
   return (
     <div>
+      {/* Locked banner */}
+      {isLocked && (
+        <div className="mb-4 p-3 bg-warning-light border border-warning/30 rounded-lg flex justify-between items-center">
+          <span className="text-sm text-warning font-medium">
+            This job is locked ({STATUSES.find((s) => s.value === job.status)?.label}). Reopen to make changes.
+          </span>
+          <button onClick={handleReopen} className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+            Reopen Job
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
           <button onClick={() => router.push('/jobs')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">← Back to Jobs</button>
           <div className="flex items-center gap-3">
+            <span className="text-sm font-mono text-text-muted">{job.jobNumber}</span>
             <h1 className="text-2xl font-bold text-text">{job.title}</h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor(job.status)}`}>
               {STATUSES.find((s) => s.value === job.status)?.label}
@@ -106,7 +125,7 @@ export default function JobDetailPage() {
         ))}
       </div>
 
-      {activeTab === 'details' && <DetailsTab job={job} onUpdate={loadJob} />}
+      {activeTab === 'details' && <DetailsTab job={job} locked={isLocked} onUpdate={loadJob} />}
       {activeTab === 'documents' && <DocumentsTab job={job} />}
       {activeTab === 'source-files' && <FilesTab job={job} category="source" files={sourceFiles} onUpdate={loadJob} />}
       {activeTab === 'translated-files' && <FilesTab job={job} category="translated" files={translatedFiles} onUpdate={loadJob} />}
@@ -116,7 +135,7 @@ export default function JobDetailPage() {
 
 // ── Details Tab ──
 
-function DetailsTab({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
+function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUpdate: () => void }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     title: job.title, description: job.description || '', notes: job.notes || '',
@@ -157,7 +176,7 @@ function DetailsTab({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
       <div className="bg-surface border border-border rounded-xl p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-text">Job Information</h3>
-          {!editing && <button onClick={() => setEditing(true)} className="text-sm text-primary hover:text-primary-hover font-medium">Edit</button>}
+          {!editing && !locked && <button onClick={() => setEditing(true)} className="text-sm text-primary hover:text-primary-hover font-medium">Edit</button>}
         </div>
         {editing ? (
           <form onSubmit={handleSave} className="space-y-3">

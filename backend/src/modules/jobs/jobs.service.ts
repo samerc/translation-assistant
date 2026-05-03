@@ -70,14 +70,31 @@ export class JobsService {
     return job;
   }
 
+  private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
+
+  private isLocked(job: Job): boolean {
+    return JobsService.LOCKED_STATUSES.includes(job.status);
+  }
+
+  private async generateJobNumber(): Promise<string> {
+    const result = await this.jobRepository
+      .createQueryBuilder('job')
+      .select('MAX(job.id)', 'maxId')
+      .getRawOne();
+    const nextNum = (result?.maxId || 0) + 1;
+    return `JOB-${String(nextNum).padStart(4, '0')}`;
+  }
+
   async create(dto: CreateJobDto, userId: number): Promise<Job> {
     const price = dto.useDiscountedPrice && dto.discountedPricePerPage
       ? dto.discountedPricePerPage
       : (dto.pricePerPage || 0);
     const calculatedTotal = (dto.pageCount || 1) * price;
+    const jobNumber = await this.generateJobNumber();
 
     const job = this.jobRepository.create({
       ...dto,
+      jobNumber,
       calculatedTotal,
       createdByUserId: userId,
     });
@@ -97,6 +114,14 @@ export class JobsService {
 
   async update(id: number, dto: UpdateJobDto): Promise<Job> {
     const job = await this.findOne(id);
+
+    // Prevent editing locked jobs (unless only changing status)
+    if (this.isLocked(job) && !('status' in dto && Object.keys(dto).length === 1)) {
+      throw new BadRequestException(
+        `Cannot edit a job with status "${job.status}". Reopen it first.`,
+      );
+    }
+
     Object.assign(job, dto);
 
     // Recalculate total if pricing fields changed
@@ -117,7 +142,22 @@ export class JobsService {
   // ── Status ──
 
   async updateStatus(id: number, status: string): Promise<Job> {
-    return this.update(id, { status } as UpdateJobDto);
+    const job = await this.findOne(id);
+
+    // Allow status changes on locked jobs (for reopening or advancing)
+    job.status = status;
+    await this.jobRepository.save(job);
+    return this.findOne(id);
+  }
+
+  async reopenJob(id: number): Promise<Job> {
+    const job = await this.findOne(id);
+    if (!this.isLocked(job)) {
+      throw new BadRequestException('Job is not in a completed state');
+    }
+    job.status = 'in_progress';
+    await this.jobRepository.save(job);
+    return this.findOne(id);
   }
 
   // ── Job Users ──

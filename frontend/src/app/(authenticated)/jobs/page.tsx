@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 
 interface Job {
   id: number;
+  jobNumber: string;
   type: 'template' | 'freeform';
   title: string;
   status: string;
@@ -148,9 +149,12 @@ export default function JobsPage() {
                   className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
                   <td className="px-4 py-3">
                     <div className="font-medium text-text">{job.title}</div>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? 'bg-bg text-text-muted' : 'bg-primary-light text-primary'}`}>
-                      {job.type === 'freeform' ? 'Free-form' : 'Template'}
-                    </span>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? 'bg-bg text-text-muted' : 'bg-primary-light text-primary'}`}>
+                        {job.type === 'freeform' ? 'Free-form' : 'Template'}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-text-secondary">{job.client.name}</td>
                   <td className="px-4 py-3 text-text-secondary text-xs">
