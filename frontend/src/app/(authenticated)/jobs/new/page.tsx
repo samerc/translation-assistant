@@ -38,6 +38,7 @@ export default function NewJobPage() {
     description: '',
     clientId: preselectedClientId || '',
     contactId: '',
+    isTranslation: true,
     sourceLanguageId: '',
     targetLanguageId: '',
     status: 'in_progress',
@@ -123,7 +124,6 @@ export default function NewJobPage() {
         title: form.title,
         clientId: parseInt(form.clientId),
         sourceLanguageId: parseInt(form.sourceLanguageId),
-        targetLanguageId: parseInt(form.targetLanguageId),
         status: form.status,
         isFreeOfCharge: form.isFreeOfCharge,
         lineItems: lineItems.map((li) => ({
@@ -137,6 +137,7 @@ export default function NewJobPage() {
         })),
       };
 
+      if (form.isTranslation && form.targetLanguageId) body.targetLanguageId = parseInt(form.targetLanguageId);
       if (form.description) body.description = form.description;
       if (form.contactId) body.contactId = parseInt(form.contactId);
       if (form.deadline) body.deadline = form.deadline;
@@ -212,21 +213,31 @@ export default function NewJobPage() {
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <label className="flex items-center gap-2 text-sm text-text cursor-pointer mb-2">
+            <input type="checkbox" checked={form.isTranslation}
+              onChange={(e) => setForm({ ...form, isTranslation: e.target.checked, targetLanguageId: '' })}
+              className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
+            Translation job (has a target language)
+          </label>
+          <div className={`grid gap-4 ${form.isTranslation ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Source Language *</label>
+              <label className="block text-sm font-medium text-text mb-1.5">
+                {form.isTranslation ? 'Source Language *' : 'Language *'}
+              </label>
               <select value={form.sourceLanguageId} onChange={(e) => setForm({ ...form, sourceLanguageId: e.target.value })} required className={inputClass}>
                 <option value="">Select...</option>
                 {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Target Language *</label>
-              <select value={form.targetLanguageId} onChange={(e) => setForm({ ...form, targetLanguageId: e.target.value })} required className={inputClass}>
-                <option value="">Select...</option>
-                {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
-              </select>
-            </div>
+            {form.isTranslation && (
+              <div>
+                <label className="block text-sm font-medium text-text mb-1.5">Target Language *</label>
+                <select value={form.targetLanguageId} onChange={(e) => setForm({ ...form, targetLanguageId: e.target.value })} required className={inputClass}>
+                  <option value="">Select...</option>
+                  {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
+                </select>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Deadline</label>

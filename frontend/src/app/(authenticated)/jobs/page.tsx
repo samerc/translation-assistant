@@ -12,7 +12,7 @@ interface Job {
   status: string;
   client: { id: number; name: string };
   sourceLanguage: { code: string; name: string };
-  targetLanguage: { code: string; name: string };
+  targetLanguage: { code: string; name: string } | null;
   deadline: string | null;
   lineItems: { id: number; pageCount: number }[];
   calculatedTotal: number;
@@ -159,7 +159,7 @@ export default function JobsPage() {
                   </td>
                   <td className="px-4 py-3 text-text-secondary">{job.client.name}</td>
                   <td className="px-4 py-3 text-text-secondary text-xs">
-                    {job.sourceLanguage.code.toUpperCase()} → {job.targetLanguage.code.toUpperCase()}
+                    {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge.color}`}>{badge.label}</span>

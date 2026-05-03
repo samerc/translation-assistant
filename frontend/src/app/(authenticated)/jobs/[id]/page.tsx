@@ -14,7 +14,7 @@ interface JobLineItem {
 interface Job {
   id: number; jobNumber: string; type: string; title: string; description: string | null; status: string;
   client: { id: number; name: string }; contact: { id: number; firstName: string; lastName: string } | null;
-  sourceLanguage: { id: number; code: string; name: string }; targetLanguage: { id: number; code: string; name: string };
+  sourceLanguage: { id: number; code: string; name: string }; targetLanguage: { id: number; code: string; name: string } | null;
   deadline: string | null; calculatedTotal: number; finalPrice: number | null;
   isFreeOfCharge: boolean; freeOfChargeReason: string | null;
   paymentCurrency: string | null; paymentAmount: number | null; notes: string | null;
@@ -107,7 +107,7 @@ export default function JobDetailPage() {
             {job.isFreeOfCharge && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent/20 text-accent">Pro Bono</span>}
           </div>
           <p className="text-sm text-text-secondary mt-1">
-            {job.client.name} — {job.sourceLanguage.code.toUpperCase()} → {job.targetLanguage.code.toUpperCase()}
+            {job.client.name} — {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
           </p>
         </div>
         <div className="flex gap-2">
@@ -197,7 +197,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
             <InfoRow label="Type" value={job.type === 'template' ? 'Template-based' : 'Free-form'} />
             <InfoRow label="Client" value={job.client.name} />
             {job.contact && <InfoRow label="Contact" value={`${job.contact.firstName} ${job.contact.lastName}`} />}
-            <InfoRow label="Languages" value={`${job.sourceLanguage.name} → ${job.targetLanguage.name}`} />
+            <InfoRow label="Languages" value={job.targetLanguage ? `${job.sourceLanguage.name} → ${job.targetLanguage.name}` : job.sourceLanguage.name} />
             <InfoRow label="Deadline" value={job.deadline ? new Date(job.deadline).toLocaleDateString() : null} />
             <InfoRow label="Notes" value={job.notes} />
           </div>

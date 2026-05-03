@@ -53,11 +53,11 @@ export class Job {
   @Column({ name: 'source_language_id' })
   sourceLanguageId: number;
 
-  @ManyToOne(() => Language, { eager: true })
+  @ManyToOne(() => Language, { nullable: true, eager: true })
   @JoinColumn({ name: 'target_language_id' })
   targetLanguage: Language;
 
-  @Column({ name: 'target_language_id' })
+  @Column({ name: 'target_language_id', nullable: true })
   targetLanguageId: number;
 
   @Column({

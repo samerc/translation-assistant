@@ -64,8 +64,9 @@ export class CreateJobDto {
   @IsInt()
   sourceLanguageId: number;
 
+  @IsOptional()
   @IsInt()
-  targetLanguageId: number;
+  targetLanguageId?: number;
 
   @IsOptional()
   @IsIn(['quote', 'accepted', 'in_progress'])
