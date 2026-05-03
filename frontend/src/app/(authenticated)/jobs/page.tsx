@@ -152,7 +152,7 @@ export default function JobsPage() {
                     <div className="font-medium text-text">{job.title}</div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? 'bg-bg text-text-muted' : 'bg-primary-light text-primary'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? 'bg-orange-100 text-orange-700' : 'bg-violet-100 text-violet-700'}`}>
                         {job.type === 'freeform' ? 'Free-form' : 'Template'}
                       </span>
                     </div>
