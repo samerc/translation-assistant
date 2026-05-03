@@ -566,10 +566,10 @@ function JobsTab({ clientId }: { clientId: number }) {
   }, [clientId]);
 
   const statusColor: Record<string, string> = {
-    quote: 'bg-bg text-text-secondary', accepted: 'bg-primary-light text-primary',
-    in_progress: 'bg-primary-light text-primary', delivered: 'bg-success-light text-success',
-    invoiced: 'bg-warning-light text-warning', paid: 'bg-success-light text-success',
-    cancelled: 'bg-danger-light text-danger',
+    quote: 'bg-sky-100 text-sky-700', accepted: 'bg-teal-100 text-teal-700',
+    in_progress: 'bg-primary-light text-primary', delivered: 'bg-green-100 text-green-700',
+    invoiced: 'bg-warning-light text-warning', paid: 'bg-emerald-100 text-emerald-800',
+    lost: 'bg-gray-100 text-gray-500', cancelled: 'bg-danger-light text-danger',
   };
 
   return (

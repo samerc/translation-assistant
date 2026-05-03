@@ -24,13 +24,13 @@ interface Job {
 interface JobsResponse { data: Job[]; total: number; page: number; limit: number; totalPages: number; }
 
 const STATUSES = [
-  { value: 'quote', label: 'Quote', color: 'bg-blue-100 text-blue-700' },
-  { value: 'accepted', label: 'Accepted', color: 'bg-primary-light text-primary' },
+  { value: 'quote', label: 'Quote', color: 'bg-sky-100 text-sky-700' },
+  { value: 'accepted', label: 'Accepted', color: 'bg-teal-100 text-teal-700' },
   { value: 'in_progress', label: 'In Progress', color: 'bg-primary-light text-primary' },
-  { value: 'delivered', label: 'Delivered', color: 'bg-success-light text-success' },
+  { value: 'delivered', label: 'Delivered', color: 'bg-green-100 text-green-700' },
   { value: 'invoiced', label: 'Invoiced', color: 'bg-warning-light text-warning' },
-  { value: 'paid', label: 'Paid', color: 'bg-success-light text-success' },
-  { value: 'lost', label: 'Lost', color: 'bg-bg text-text-muted' },
+  { value: 'paid', label: 'Paid', color: 'bg-emerald-100 text-emerald-800' },
+  { value: 'lost', label: 'Lost', color: 'bg-gray-100 text-gray-500' },
   { value: 'cancelled', label: 'Cancelled', color: 'bg-danger-light text-danger' },
 ];
 

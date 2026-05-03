@@ -30,10 +30,10 @@ const STATUSES = [
 
 const statusColor = (s: string) => {
   const map: Record<string, string> = {
-    quote: 'bg-blue-100 text-blue-700', accepted: 'bg-primary-light text-primary',
-    in_progress: 'bg-primary-light text-primary', delivered: 'bg-success-light text-success',
-    invoiced: 'bg-warning-light text-warning', paid: 'bg-success-light text-success',
-    lost: 'bg-bg text-text-muted', cancelled: 'bg-danger-light text-danger',
+    quote: 'bg-sky-100 text-sky-700', accepted: 'bg-teal-100 text-teal-700',
+    in_progress: 'bg-primary-light text-primary', delivered: 'bg-green-100 text-green-700',
+    invoiced: 'bg-warning-light text-warning', paid: 'bg-emerald-100 text-emerald-800',
+    lost: 'bg-gray-100 text-gray-500', cancelled: 'bg-danger-light text-danger',
   };
   return map[s] || 'bg-bg text-text-secondary';
 };
