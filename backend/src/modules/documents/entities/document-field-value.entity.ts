@@ -10,22 +10,22 @@ import { TemplateField } from '../../templates/entities/template-field.entity.js
 
 @Entity('document_field_values')
 export class DocumentFieldValue {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Document, (doc) => doc.fieldValues, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'document_id' })
   document: Document;
 
   @Column({ name: 'document_id' })
-  documentId: number;
+  documentId: string;
 
   @ManyToOne(() => TemplateField)
   @JoinColumn({ name: 'template_field_id' })
   templateField: TemplateField;
 
   @Column({ name: 'template_field_id' })
-  templateFieldId: number;
+  templateFieldId: string;
 
   @Column({ default: 1 })
   pageNumber: number;

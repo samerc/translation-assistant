@@ -89,7 +89,7 @@ export class AuthService {
       password: hashedPassword,
       firstName: dto.firstName,
       lastName: dto.lastName,
-      roleId: invite.roleId || 2, // Use invite's role or default to Translator
+      roleId: invite.roleId, // Use invite's role (set during invite creation)
     });
 
     const savedUser = await this.userRepository.save(user);
@@ -113,7 +113,7 @@ export class AuthService {
     };
   }
 
-  async refreshTokens(userId: number, refreshToken: string) {
+  async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['role', 'role.permissions'],
@@ -134,11 +134,11 @@ export class AuthService {
     return tokens;
   }
 
-  async logout(userId: number) {
+  async logout(userId: string) {
     await this.userRepository.update(userId, { refreshToken: '' });
   }
 
-  async getProfile(userId: number) {
+  async getProfile(userId: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['role', 'role.permissions'],
@@ -151,7 +151,7 @@ export class AuthService {
     return this.sanitizeUser(user);
   }
 
-  async createInvite(email: string, roleId?: number): Promise<{ token: string; expiresAt: Date }> {
+  async createInvite(email: string, roleId?: string): Promise<{ token: string; expiresAt: Date }> {
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7-day expiry
@@ -178,7 +178,7 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private async updateRefreshToken(userId: number, refreshToken: string) {
+  private async updateRefreshToken(userId: string, refreshToken: string) {
     const hashedToken = await bcrypt.hash(refreshToken, 12);
     await this.userRepository.update(userId, { refreshToken: hashedToken });
   }

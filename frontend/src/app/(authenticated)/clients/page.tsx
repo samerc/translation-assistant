@@ -4,11 +4,11 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
-interface ClientEmail { id: number; email: string; label: string | null; }
-interface ClientPhone { id: number; phone: string; label: string | null; }
+interface ClientEmail { id: string; email: string; label: string | null; }
+interface ClientPhone { id: string; phone: string; label: string | null; }
 
 interface Client {
-  id: number;
+  id: string;
   type: 'company' | 'person';
   name: string;
   emails: ClientEmail[];

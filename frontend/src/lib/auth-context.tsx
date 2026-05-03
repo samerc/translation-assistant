@@ -4,13 +4,13 @@ import { createContext, useContext, useEffect, useState, ReactNode, useCallback 
 import { api } from './api';
 
 interface UserRole {
-  id: number;
+  id: string;
   name: string;
   permissions: string[];
 }
 
 interface AuthUser {
-  id: number;
+  id: string;
   email: string;
   firstName: string;
   lastName: string;

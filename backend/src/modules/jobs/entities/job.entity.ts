@@ -17,8 +17,8 @@ import { JobLineItem } from './job-line-item.entity.js';
 
 @Entity('jobs')
 export class Job {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ length: 20, unique: true })
   jobNumber: string;
@@ -37,28 +37,28 @@ export class Job {
   client: Client;
 
   @Column({ name: 'client_id' })
-  clientId: number;
+  clientId: string;
 
   @ManyToOne(() => Contact, { nullable: true, eager: true })
   @JoinColumn({ name: 'contact_id' })
   contact: Contact;
 
   @Column({ name: 'contact_id', nullable: true })
-  contactId: number;
+  contactId: string;
 
   @ManyToOne(() => Language, { eager: true })
   @JoinColumn({ name: 'source_language_id' })
   sourceLanguage: Language;
 
   @Column({ name: 'source_language_id' })
-  sourceLanguageId: number;
+  sourceLanguageId: string;
 
   @ManyToOne(() => Language, { nullable: true, eager: true })
   @JoinColumn({ name: 'target_language_id' })
   targetLanguage: Language;
 
   @Column({ name: 'target_language_id', nullable: true })
-  targetLanguageId: number;
+  targetLanguageId: string;
 
   @Column({
     type: 'enum',
@@ -101,7 +101,7 @@ export class Job {
   files: JobFile[];
 
   @Column({ name: 'created_by_user_id', nullable: true })
-  createdByUserId: number;
+  createdByUserId: string;
 
   @CreateDateColumn()
   createdAt: Date;

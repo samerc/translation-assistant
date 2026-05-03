@@ -9,8 +9,8 @@ import {
 import { Type } from 'class-transformer';
 
 export class FieldValueDto {
-  @IsInt()
-  templateFieldId: number;
+  @IsString()
+  templateFieldId: string;
 
   @IsOptional()
   @IsInt()
@@ -25,15 +25,15 @@ export class FieldValueDto {
 }
 
 export class CreateDocumentDto {
-  @IsInt()
-  jobId: number;
+  @IsString()
+  jobId: string;
 
-  @IsInt()
-  templateId: number;
+  @IsString()
+  templateId: string;
 
   @IsOptional()
-  @IsInt()
-  clonedFromId?: number;
+  @IsString()
+  clonedFromId?: string;
 }
 
 export class SaveFieldValuesDto {

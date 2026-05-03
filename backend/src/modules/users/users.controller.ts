@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -31,7 +30,7 @@ export class UsersController {
 
   @Get(':id')
   @RequirePermissions('users:read')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id') id: string) {
     return this.usersService.findOne(id);
   }
 
@@ -43,7 +42,7 @@ export class UsersController {
 
   @Patch(':id')
   @RequirePermissions('users:update')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.update(id, dto);
   }
 
@@ -61,19 +60,19 @@ export class UsersController {
 
   @Patch(':id/activate')
   @RequirePermissions('users:update')
-  activate(@Param('id', ParseIntPipe) id: number) {
+  activate(@Param('id') id: string) {
     return this.usersService.activate(id);
   }
 
   @Patch(':id/deactivate')
   @RequirePermissions('users:update')
-  deactivate(@Param('id', ParseIntPipe) id: number) {
+  deactivate(@Param('id') id: string) {
     return this.usersService.deactivate(id);
   }
 
   @Delete(':id')
   @RequirePermissions('users:delete')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.usersService.remove(id);
   }
 }

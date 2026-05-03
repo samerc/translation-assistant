@@ -12,8 +12,8 @@ import {
 import { Type } from 'class-transformer';
 
 export class FieldLabelDto {
-  @IsInt()
-  languageId: number;
+  @IsString()
+  languageId: string;
 
   @IsString()
   @MinLength(1)

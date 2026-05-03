@@ -3,15 +3,15 @@ import { Job } from './job.entity.js';
 
 @Entity('job_files')
 export class JobFile {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Job, (job) => job.files, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'job_id' })
   job: Job;
 
   @Column({ name: 'job_id' })
-  jobId: number;
+  jobId: string;
 
   @Column({ type: 'enum', enum: ['source', 'translated'] })
   category: 'source' | 'translated';
@@ -29,10 +29,10 @@ export class JobFile {
   mimeType: string;
 
   @Column({ name: 'linked_from_job_id', nullable: true })
-  linkedFromJobId: number;
+  linkedFromJobId: string;
 
   @Column({ name: 'uploaded_by_user_id', nullable: true })
-  uploadedByUserId: number;
+  uploadedByUserId: string;
 
   @CreateDateColumn()
   uploadedAt: Date;

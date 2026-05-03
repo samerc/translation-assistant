@@ -4,7 +4,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { api } from '@/lib/api';
 
 interface AppSettings {
-  id: number;
+  id: string;
   companyName: string;
   companyAddress: string | null;
   companyLogo: string | null;
@@ -15,7 +15,7 @@ interface AppSettings {
 }
 
 interface Language {
-  id: number;
+  id: string;
   code: string;
   name: string;
   direction: 'ltr' | 'rtl';
@@ -23,14 +23,14 @@ interface Language {
 }
 
 interface LabelOption {
-  id: number;
+  id: string;
   category: string;
   value: string;
   sortOrder: number;
 }
 
 interface FreeformJobType {
-  id: number;
+  id: string;
   name: string;
   description: string | null;
   pricePerPage: number;
@@ -163,7 +163,7 @@ function GeneralSettings() {
 function LanguagesSettings() {
   const [languages, setLanguages] = useState<Language[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ code: '', name: '', direction: 'ltr' as 'ltr' | 'rtl' });
 
   const loadLanguages = () => {
@@ -191,7 +191,7 @@ function LanguagesSettings() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Delete this language?')) return;
     await api.delete(`/settings/languages/${id}`);
     loadLanguages();
@@ -351,7 +351,7 @@ function LabelsSettings() {
     loadLabels();
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     await api.delete(`/settings/labels/${id}`);
     loadLabels();
   };
@@ -435,7 +435,7 @@ function LabelsSettings() {
 function JobTypesSettings() {
   const [types, setTypes] = useState<FreeformJobType[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
 
   const loadTypes = () => { api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setTypes); };
@@ -471,7 +471,7 @@ function JobTypesSettings() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Delete this job type?')) return;
     await api.delete(`/settings/freeform-job-types/${id}`);
     loadTypes();

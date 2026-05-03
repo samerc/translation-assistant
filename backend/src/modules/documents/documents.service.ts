@@ -14,7 +14,7 @@ export class DocumentsService {
     private readonly fieldValueRepository: Repository<DocumentFieldValue>,
   ) {}
 
-  async findByJob(jobId: number): Promise<Document[]> {
+  async findByJob(jobId: string): Promise<Document[]> {
     return this.documentRepository.find({
       where: { jobId },
       relations: ['template', 'fieldValues', 'fieldValues.templateField'],
@@ -22,7 +22,7 @@ export class DocumentsService {
     });
   }
 
-  async findOne(id: number): Promise<Document> {
+  async findOne(id: string): Promise<Document> {
     const doc = await this.documentRepository.findOne({
       where: { id },
       relations: [
@@ -66,7 +66,7 @@ export class DocumentsService {
     return this.findOne(saved.id);
   }
 
-  async saveFieldValues(documentId: number, values: FieldValueDto[]): Promise<Document> {
+  async saveFieldValues(documentId: string, values: FieldValueDto[]): Promise<Document> {
     const doc = await this.findOne(documentId);
 
     // Delete existing values and replace with new ones
@@ -88,20 +88,20 @@ export class DocumentsService {
     return this.findOne(documentId);
   }
 
-  async updateStatus(id: number, status: 'draft' | 'completed'): Promise<Document> {
+  async updateStatus(id: string, status: 'draft' | 'completed'): Promise<Document> {
     const doc = await this.findOne(id);
     doc.status = status;
     await this.documentRepository.save(doc);
     return this.findOne(id);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const doc = await this.findOne(id);
     await this.documentRepository.remove(doc);
   }
 
   // Clone from existing document
-  async clone(sourceId: number, jobId: number): Promise<Document> {
+  async clone(sourceId: string, jobId: string): Promise<Document> {
     const source = await this.findOne(sourceId);
     return this.create({
       jobId,
@@ -112,7 +112,7 @@ export class DocumentsService {
 
   // Search documents for cloning
   async searchForClone(query: {
-    templateId?: number;
+    templateId?: string;
     search?: string;
     limit?: number;
   }): Promise<Document[]> {

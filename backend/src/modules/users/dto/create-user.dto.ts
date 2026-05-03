@@ -3,7 +3,6 @@ import {
   IsString,
   MinLength,
   MaxLength,
-  IsInt,
   IsOptional,
 } from 'class-validator';
 
@@ -26,8 +25,8 @@ export class CreateUserDto {
   @MaxLength(100)
   lastName: string;
 
-  @IsInt()
-  roleId: number;
+  @IsString()
+  roleId: string;
 
   @IsOptional()
   @IsString()

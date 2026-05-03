@@ -8,7 +8,6 @@ import {
   Param,
   Query,
   Res,
-  ParseIntPipe,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -76,7 +75,7 @@ export class ClientsController {
 
   @Get(':id')
   @RequirePermissions('clients:read')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id') id: string) {
     return this.clientsService.findOne(id);
   }
 
@@ -88,13 +87,13 @@ export class ClientsController {
 
   @Patch(':id')
   @RequirePermissions('clients:update')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateClientDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
     return this.clientsService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('clients:delete')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.clientsService.remove(id);
   }
 
@@ -102,19 +101,19 @@ export class ClientsController {
 
   @Post(':id/emails')
   @RequirePermissions('clients:update')
-  addEmail(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientEmailDto) {
+  addEmail(@Param('id') id: string, @Body() dto: CreateClientEmailDto) {
     return this.clientsService.addEmail(id, dto);
   }
 
   @Patch(':id/emails/:emailId')
   @RequirePermissions('clients:update')
-  updateEmail(@Param('id', ParseIntPipe) id: number, @Param('emailId', ParseIntPipe) emailId: number, @Body() dto: CreateClientEmailDto) {
+  updateEmail(@Param('id') id: string, @Param('emailId') emailId: string, @Body() dto: CreateClientEmailDto) {
     return this.clientsService.updateEmail(id, emailId, dto);
   }
 
   @Delete(':id/emails/:emailId')
   @RequirePermissions('clients:update')
-  removeEmail(@Param('id', ParseIntPipe) id: number, @Param('emailId', ParseIntPipe) emailId: number) {
+  removeEmail(@Param('id') id: string, @Param('emailId') emailId: string) {
     return this.clientsService.removeEmail(id, emailId);
   }
 
@@ -122,19 +121,19 @@ export class ClientsController {
 
   @Post(':id/phones')
   @RequirePermissions('clients:update')
-  addPhone(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientPhoneDto) {
+  addPhone(@Param('id') id: string, @Body() dto: CreateClientPhoneDto) {
     return this.clientsService.addPhone(id, dto);
   }
 
   @Patch(':id/phones/:phoneId')
   @RequirePermissions('clients:update')
-  updatePhone(@Param('id', ParseIntPipe) id: number, @Param('phoneId', ParseIntPipe) phoneId: number, @Body() dto: CreateClientPhoneDto) {
+  updatePhone(@Param('id') id: string, @Param('phoneId') phoneId: string, @Body() dto: CreateClientPhoneDto) {
     return this.clientsService.updatePhone(id, phoneId, dto);
   }
 
   @Delete(':id/phones/:phoneId')
   @RequirePermissions('clients:update')
-  removePhone(@Param('id', ParseIntPipe) id: number, @Param('phoneId', ParseIntPipe) phoneId: number) {
+  removePhone(@Param('id') id: string, @Param('phoneId') phoneId: string) {
     return this.clientsService.removePhone(id, phoneId);
   }
 
@@ -142,19 +141,19 @@ export class ClientsController {
 
   @Post(':id/addresses')
   @RequirePermissions('clients:update')
-  addAddress(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateClientAddressDto) {
+  addAddress(@Param('id') id: string, @Body() dto: CreateClientAddressDto) {
     return this.clientsService.addAddress(id, dto);
   }
 
   @Patch(':id/addresses/:addressId')
   @RequirePermissions('clients:update')
-  updateAddress(@Param('id', ParseIntPipe) id: number, @Param('addressId', ParseIntPipe) addressId: number, @Body() dto: CreateClientAddressDto) {
+  updateAddress(@Param('id') id: string, @Param('addressId') addressId: string, @Body() dto: CreateClientAddressDto) {
     return this.clientsService.updateAddress(id, addressId, dto);
   }
 
   @Delete(':id/addresses/:addressId')
   @RequirePermissions('clients:update')
-  removeAddress(@Param('id', ParseIntPipe) id: number, @Param('addressId', ParseIntPipe) addressId: number) {
+  removeAddress(@Param('id') id: string, @Param('addressId') addressId: string) {
     return this.clientsService.removeAddress(id, addressId);
   }
 
@@ -162,21 +161,21 @@ export class ClientsController {
 
   @Get(':id/contacts')
   @RequirePermissions('clients:read')
-  findContacts(@Param('id', ParseIntPipe) id: number) {
+  findContacts(@Param('id') id: string) {
     return this.clientsService.findContacts(id);
   }
 
   @Post(':id/contacts')
   @RequirePermissions('clients:create')
-  createContact(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateContactDto) {
+  createContact(@Param('id') id: string, @Body() dto: CreateContactDto) {
     return this.clientsService.createContact(id, dto);
   }
 
   @Patch(':id/contacts/:contactId')
   @RequirePermissions('clients:update')
   updateContact(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('contactId', ParseIntPipe) contactId: number,
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
     @Body() dto: UpdateContactDto,
   ) {
     return this.clientsService.updateContact(id, contactId, dto);
@@ -185,8 +184,8 @@ export class ClientsController {
   @Delete(':id/contacts/:contactId')
   @RequirePermissions('clients:delete')
   removeContact(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('contactId', ParseIntPipe) contactId: number,
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
   ) {
     return this.clientsService.removeContact(id, contactId);
   }
@@ -195,7 +194,7 @@ export class ClientsController {
 
   @Get(':id/passports')
   @RequirePermissions('clients:read')
-  findPassportCopies(@Param('id', ParseIntPipe) id: number) {
+  findPassportCopies(@Param('id') id: string) {
     return this.clientsService.findPassportCopies(id);
   }
 
@@ -203,7 +202,7 @@ export class ClientsController {
   @RequirePermissions('clients:create')
   @UseInterceptors(FileInterceptor('file', { storage: uploadStorage }))
   createPassportCopy(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body('label') label: string,
     @UploadedFile(FileValidationPipe) file: Express.Multer.File,
   ) {
@@ -213,8 +212,8 @@ export class ClientsController {
   @Get(':id/passports/:copyId/file')
   @Public()
   async viewPassportCopy(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('copyId', ParseIntPipe) copyId: number,
+    @Param('id') id: string,
+    @Param('copyId') copyId: string,
     @Query('token') token: string,
     @Res() res: Response,
   ) {
@@ -244,8 +243,8 @@ export class ClientsController {
   @Delete(':id/passports/:copyId')
   @RequirePermissions('clients:delete')
   removePassportCopy(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('copyId', ParseIntPipe) copyId: number,
+    @Param('id') id: string,
+    @Param('copyId') copyId: string,
   ) {
     return this.clientsService.removePassportCopy(id, copyId);
   }

@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   Query,
-  ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -56,7 +55,7 @@ export class SettingsController {
   @Patch('languages/:id')
   @RequirePermissions('settings:update')
   updateLanguage(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: UpdateLanguageDto,
   ) {
     return this.settingsService.updateLanguage(id, dto);
@@ -64,7 +63,7 @@ export class SettingsController {
 
   @Delete('languages/:id')
   @RequirePermissions('settings:delete')
-  removeLanguage(@Param('id', ParseIntPipe) id: number) {
+  removeLanguage(@Param('id') id: string) {
     return this.settingsService.removeLanguage(id);
   }
 
@@ -91,7 +90,7 @@ export class SettingsController {
   @Patch('labels/:id')
   @RequirePermissions('settings:update')
   updateLabel(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: UpdateLabelOptionDto,
   ) {
     return this.settingsService.updateLabel(id, dto);
@@ -99,7 +98,7 @@ export class SettingsController {
 
   @Delete('labels/:id')
   @RequirePermissions('settings:delete')
-  removeLabel(@Param('id', ParseIntPipe) id: number) {
+  removeLabel(@Param('id') id: string) {
     return this.settingsService.removeLabel(id);
   }
 
@@ -120,7 +119,7 @@ export class SettingsController {
   @Patch('freeform-job-types/:id')
   @RequirePermissions('settings:update')
   updateFreeformJobType(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: UpdateFreeformJobTypeDto,
   ) {
     return this.settingsService.updateFreeformJobType(id, dto);
@@ -128,7 +127,7 @@ export class SettingsController {
 
   @Delete('freeform-job-types/:id')
   @RequirePermissions('settings:delete')
-  removeFreeformJobType(@Param('id', ParseIntPipe) id: number) {
+  removeFreeformJobType(@Param('id') id: string) {
     return this.settingsService.removeFreeformJobType(id);
   }
 }

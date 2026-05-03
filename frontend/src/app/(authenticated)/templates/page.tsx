@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
 interface Template {
-  id: number;
+  id: string;
   type: 'designer' | 'word';
   name: string;
   description: string | null;
   pricePerPage: number;
   discountedPricePerPage: number | null;
   isActive: boolean;
-  fields: { id: number }[];
+  fields: { id: string }[];
   createdAt: string;
 }
 

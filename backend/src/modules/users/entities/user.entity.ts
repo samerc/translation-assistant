@@ -12,8 +12,8 @@ import { Role } from '../../roles/entities/role.entity.js';
 
 @Entity('users')
 export class User {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ length: 255, unique: true })
   email: string;
@@ -45,7 +45,7 @@ export class User {
   role: Role;
 
   @Column({ name: 'role_id' })
-  roleId: number;
+  roleId: string;
 
   @Column({ length: 512, nullable: true })
   @Exclude()

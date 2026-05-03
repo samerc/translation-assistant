@@ -18,7 +18,7 @@ export class RolesService {
     return this.roleRepository.find({ relations: ['permissions'] });
   }
 
-  async findOne(id: number): Promise<Role> {
+  async findOne(id: string): Promise<Role> {
     const role = await this.roleRepository.findOne({
       where: { id },
       relations: ['permissions'],
@@ -42,7 +42,7 @@ export class RolesService {
     return this.roleRepository.save(role);
   }
 
-  async update(id: number, dto: UpdateRoleDto): Promise<Role> {
+  async update(id: string, dto: UpdateRoleDto): Promise<Role> {
     const role = await this.findOne(id);
 
     if (dto.name !== undefined) role.name = dto.name;
@@ -57,7 +57,7 @@ export class RolesService {
     return this.roleRepository.save(role);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const role = await this.findOne(id);
     await this.roleRepository.remove(role);
   }

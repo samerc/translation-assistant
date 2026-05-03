@@ -4,14 +4,14 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
-interface Language { id: number; code: string; name: string; direction: string; isActive: boolean; }
-interface FieldLabel { id: number; languageId: number; label: string; language: Language; }
+interface Language { id: string; code: string; name: string; direction: string; isActive: boolean; }
+interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
 interface TemplateField {
-  id: number; fieldKey: string; fieldType: string; sortOrder: number;
+  id: string; fieldKey: string; fieldType: string; sortOrder: number;
   required: boolean; groupKey: string | null; labels: FieldLabel[];
 }
 interface Template {
-  id: number; type: 'designer' | 'word'; name: string; description: string | null;
+  id: string; type: 'designer' | 'word'; name: string; description: string | null;
   pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean;
   layoutJson: object | null; wordFilePath: string | null; wordFileName: string | null;
   fields: TemplateField[];
@@ -97,10 +97,10 @@ export default function TemplateDetailPage() {
 // ── Fields Tab ──
 
 function FieldsTab({ template, languages, onUpdate }: { template: Template; languages: Language[]; onUpdate: () => void }) {
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkGroup, setBulkGroup] = useState('');
   const [showBulkGroup, setShowBulkGroup] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [newRow, setNewRow] = useState<Record<string, string> | null>(null);
   const [saving, setSaving] = useState(false);
@@ -108,7 +108,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   const sorted = [...template.fields].sort((a, b) => a.sortOrder - b.sortOrder);
   const existingGroups = [...new Set(template.fields.map((f) => f.groupKey).filter(Boolean))] as string[];
 
-  const toggleSelect = (id: number) => {
+  const toggleSelect = (id: string) => {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
     setSelected(next);
@@ -188,7 +188,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   const cancelEdit = () => { setEditingId(null); setNewRow(null); };
 
   // ── Delete ──
-  const handleDelete = async (fieldId: number) => {
+  const handleDelete = async (fieldId: string) => {
     if (!confirm('Delete this field?')) return;
     await api.delete(`/templates/${template.id}/fields/${fieldId}`);
     selected.delete(fieldId);

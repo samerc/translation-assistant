@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  ParseIntPipe, UseGuards,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { DocumentsService } from './documents.service.js';
@@ -15,7 +15,7 @@ export class DocumentsController {
 
   @Get('by-job/:jobId')
   @RequirePermissions('documents:read')
-  findByJob(@Param('jobId', ParseIntPipe) jobId: number) {
+  findByJob(@Param('jobId') jobId: string) {
     return this.documentsService.findByJob(jobId);
   }
 
@@ -26,14 +26,14 @@ export class DocumentsController {
     @Query('search') search?: string,
   ) {
     return this.documentsService.searchForClone({
-      templateId: templateId ? parseInt(templateId, 10) : undefined,
+      templateId: templateId || undefined,
       search,
     });
   }
 
   @Get(':id')
   @RequirePermissions('documents:read')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id') id: string) {
     return this.documentsService.findOne(id);
   }
 
@@ -46,7 +46,7 @@ export class DocumentsController {
   @Post(':id/save-values')
   @RequirePermissions('documents:update')
   saveFieldValues(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: SaveFieldValuesDto,
   ) {
     return this.documentsService.saveFieldValues(id, dto.values);
@@ -55,7 +55,7 @@ export class DocumentsController {
   @Patch(':id/status')
   @RequirePermissions('documents:update')
   updateStatus(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: UpdateDocumentStatusDto,
   ) {
     return this.documentsService.updateStatus(id, dto.status);
@@ -64,15 +64,15 @@ export class DocumentsController {
   @Post(':id/clone')
   @RequirePermissions('documents:create')
   clone(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('jobId') jobId: number,
+    @Param('id') id: string,
+    @Body('jobId') jobId: string,
   ) {
     return this.documentsService.clone(id, jobId);
   }
 
   @Delete(':id')
   @RequirePermissions('documents:delete')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.documentsService.remove(id);
   }
 }

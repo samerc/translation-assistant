@@ -2,8 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeor
 
 @Entity('app_settings')
 export class AppSettings {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ length: 255, default: '' })
   companyName: string;

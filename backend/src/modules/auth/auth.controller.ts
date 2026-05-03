@@ -57,7 +57,7 @@ export class AuthController {
   @Post('invite')
   @UseGuards(AuthGuard('jwt'), PermissionsGuard)
   @RequirePermissions('users:create')
-  async createInvite(@Body() body: { email: string; roleId?: number }) {
+  async createInvite(@Body() body: { email: string; roleId?: string }) {
     return this.authService.createInvite(body.email, body.roleId);
   }
 }

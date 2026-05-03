@@ -33,7 +33,7 @@ export class SettingsService {
   // ── App Settings ──
 
   async getSettings(): Promise<AppSettings> {
-    let settings = await this.settingsRepository.findOne({ where: { id: 1 } });
+    let settings = await this.settingsRepository.find({ take: 1 }).then(r => r[0] ?? null);
     if (!settings) {
       settings = this.settingsRepository.create({});
       await this.settingsRepository.save(settings);
@@ -53,7 +53,7 @@ export class SettingsService {
     return this.languageRepository.find({ order: { name: 'ASC' } });
   }
 
-  async findOneLanguage(id: number): Promise<Language> {
+  async findOneLanguage(id: string): Promise<Language> {
     const language = await this.languageRepository.findOne({ where: { id } });
     if (!language) throw new NotFoundException('Language not found');
     return language;
@@ -64,13 +64,13 @@ export class SettingsService {
     return this.languageRepository.save(language);
   }
 
-  async updateLanguage(id: number, dto: UpdateLanguageDto): Promise<Language> {
+  async updateLanguage(id: string, dto: UpdateLanguageDto): Promise<Language> {
     const language = await this.findOneLanguage(id);
     Object.assign(language, dto);
     return this.languageRepository.save(language);
   }
 
-  async removeLanguage(id: number): Promise<void> {
+  async removeLanguage(id: string): Promise<void> {
     const language = await this.findOneLanguage(id);
     await this.languageRepository.remove(language);
   }
@@ -102,14 +102,14 @@ export class SettingsService {
     return this.labelOptionRepository.save(label);
   }
 
-  async updateLabel(id: number, dto: UpdateLabelOptionDto): Promise<LabelOption> {
+  async updateLabel(id: string, dto: UpdateLabelOptionDto): Promise<LabelOption> {
     const label = await this.labelOptionRepository.findOne({ where: { id } });
     if (!label) throw new NotFoundException('Label option not found');
     Object.assign(label, dto);
     return this.labelOptionRepository.save(label);
   }
 
-  async removeLabel(id: number): Promise<void> {
+  async removeLabel(id: string): Promise<void> {
     const label = await this.labelOptionRepository.findOne({ where: { id } });
     if (!label) throw new NotFoundException('Label option not found');
     await this.labelOptionRepository.remove(label);
@@ -126,14 +126,14 @@ export class SettingsService {
     return this.freeformJobTypeRepository.save(type);
   }
 
-  async updateFreeformJobType(id: number, dto: UpdateFreeformJobTypeDto): Promise<FreeformJobType> {
+  async updateFreeformJobType(id: string, dto: UpdateFreeformJobTypeDto): Promise<FreeformJobType> {
     const type = await this.freeformJobTypeRepository.findOne({ where: { id } });
     if (!type) throw new NotFoundException('Freeform job type not found');
     Object.assign(type, dto);
     return this.freeformJobTypeRepository.save(type);
   }
 
-  async removeFreeformJobType(id: number): Promise<void> {
+  async removeFreeformJobType(id: string): Promise<void> {
     const type = await this.freeformJobTypeRepository.findOne({ where: { id } });
     if (!type) throw new NotFoundException('Freeform job type not found');
     await this.freeformJobTypeRepository.remove(type);

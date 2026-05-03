@@ -56,7 +56,7 @@ export class TemplatesService {
     return data;
   }
 
-  async findOne(id: number): Promise<Template> {
+  async findOne(id: string): Promise<Template> {
     const template = await this.templateRepository.findOne({
       where: { id },
       relations: ['fields', 'fields.labels', 'fields.labels.language'],
@@ -72,14 +72,14 @@ export class TemplatesService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: UpdateTemplateDto): Promise<Template> {
+  async update(id: string, dto: UpdateTemplateDto): Promise<Template> {
     const template = await this.findOne(id);
     Object.assign(template, dto);
     await this.templateRepository.save(template);
     return this.findOne(id);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const template = await this.findOne(id);
     await this.templateRepository.remove(template);
   }
@@ -87,7 +87,7 @@ export class TemplatesService {
   // ── Word Template ──
 
   async uploadWordFile(
-    id: number,
+    id: string,
     file: Express.Multer.File,
   ): Promise<Template> {
     const template = await this.findOne(id);
@@ -101,7 +101,7 @@ export class TemplatesService {
     return this.findOne(id);
   }
 
-  async getWordPreview(id: number): Promise<{
+  async getWordPreview(id: string): Promise<{
     html: string;
     valid: string[];
     unlinked: string[];
@@ -166,7 +166,7 @@ export class TemplatesService {
   }
 
   async setWordPlaceholders(
-    id: number,
+    id: string,
     placeholders: { find: string; fieldKey: string }[],
   ): Promise<Template> {
     const template = await this.findOne(id);
@@ -190,7 +190,7 @@ export class TemplatesService {
 
   // ── Fields ──
 
-  async addField(templateId: number, dto: CreateTemplateFieldDto): Promise<TemplateField> {
+  async addField(templateId: string, dto: CreateTemplateFieldDto): Promise<TemplateField> {
     await this.findOne(templateId);
 
     // Auto-set sortOrder if not provided
@@ -233,8 +233,8 @@ export class TemplatesService {
   }
 
   async updateField(
-    templateId: number,
-    fieldId: number,
+    templateId: string,
+    fieldId: string,
     dto: UpdateTemplateFieldDto,
   ): Promise<TemplateField> {
     const field = await this.fieldRepository.findOne({
@@ -272,7 +272,7 @@ export class TemplatesService {
     }) as Promise<TemplateField>;
   }
 
-  async removeField(templateId: number, fieldId: number): Promise<void> {
+  async removeField(templateId: string, fieldId: string): Promise<void> {
     const field = await this.fieldRepository.findOne({
       where: { id: fieldId, templateId },
     });
@@ -281,8 +281,8 @@ export class TemplatesService {
   }
 
   async reorderFields(
-    templateId: number,
-    fieldIds: number[],
+    templateId: string,
+    fieldIds: string[],
   ): Promise<void> {
     await this.findOne(templateId);
     for (let i = 0; i < fieldIds.length; i++) {

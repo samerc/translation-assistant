@@ -4,16 +4,16 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
-interface Client { id: number; name: string; type: string; contacts: { id: number; firstName: string; lastName: string }[]; }
-interface Language { id: number; code: string; name: string; isActive: boolean; }
-interface Template { id: number; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
-interface FreeformJobType { id: number; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+interface Client { id: string; name: string; type: string; contacts: { id: string; firstName: string; lastName: string }[]; }
+interface Language { id: string; code: string; name: string; isActive: boolean; }
+interface Template { id: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+interface FreeformJobType { id: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
 
 interface LineItem {
   key: string;
   description: string;
-  templateId?: number;
-  freeformJobTypeId?: number;
+  templateId?: string;
+  freeformJobTypeId?: string;
   pageCount: number;
   pricePerPage: number;
   discountedPricePerPage: number;
@@ -57,7 +57,7 @@ export default function NewJobPage() {
     api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setFreeformTypes);
   }, []);
 
-  const selectedClient = clients.find((c) => c.id === parseInt(form.clientId));
+  const selectedClient = clients.find((c) => c.id === form.clientId);
   const contacts = selectedClient?.contacts || [];
 
   const addLineItem = () => {
@@ -82,7 +82,7 @@ export default function NewJobPage() {
     setLineItems(lineItems.filter((li) => li.key !== key));
   };
 
-  const handleTemplateSelect = (key: string, templateId: number) => {
+  const handleTemplateSelect = (key: string, templateId: string) => {
     const tmpl = templates.find((t) => t.id === templateId);
     if (tmpl) {
       updateLineItem(key, {
@@ -94,7 +94,7 @@ export default function NewJobPage() {
     }
   };
 
-  const handleFreeformTypeSelect = (key: string, typeId: number) => {
+  const handleFreeformTypeSelect = (key: string, typeId: string) => {
     const ft = freeformTypes.find((t) => t.id === typeId);
     if (ft) {
       updateLineItem(key, {
@@ -122,8 +122,8 @@ export default function NewJobPage() {
       const body: Record<string, unknown> = {
         type: form.type,
         title: form.title,
-        clientId: parseInt(form.clientId),
-        sourceLanguageId: parseInt(form.sourceLanguageId),
+        clientId: form.clientId,
+        sourceLanguageId: form.sourceLanguageId,
         status: form.status,
         isFreeOfCharge: form.isFreeOfCharge,
         lineItems: lineItems.map((li) => ({
@@ -137,14 +137,14 @@ export default function NewJobPage() {
         })),
       };
 
-      if (form.isTranslation && form.targetLanguageId) body.targetLanguageId = parseInt(form.targetLanguageId);
+      if (form.isTranslation && form.targetLanguageId) body.targetLanguageId = form.targetLanguageId;
       if (form.description) body.description = form.description;
-      if (form.contactId) body.contactId = parseInt(form.contactId);
+      if (form.contactId) body.contactId = form.contactId;
       if (form.deadline) body.deadline = form.deadline;
       if (form.isFreeOfCharge && form.freeOfChargeReason) body.freeOfChargeReason = form.freeOfChargeReason;
       if (form.notes) body.notes = form.notes;
 
-      const job = await api.post<{ id: number }>('/jobs', body);
+      const job = await api.post<{ id: string }>('/jobs', body);
       router.push(`/jobs/${job.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create job');
@@ -273,13 +273,13 @@ export default function NewJobPage() {
                       {form.type === 'template' ? 'Template' : 'Document Type'}
                     </label>
                     {form.type === 'template' ? (
-                      <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, parseInt(e.target.value))}
+                      <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
                         className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="">Select template...</option>
                         {templates.map((t) => <option key={t.id} value={t.id}>{t.name} (${Number(t.pricePerPage).toFixed(2)}/p)</option>)}
                       </select>
                     ) : (
-                      <select value={li.freeformJobTypeId || ''} onChange={(e) => handleFreeformTypeSelect(li.key, parseInt(e.target.value))}
+                      <select value={li.freeformJobTypeId || ''} onChange={(e) => handleFreeformTypeSelect(li.key, e.target.value)}
                         className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="">Select type...</option>
                         {freeformTypes.map((ft) => <option key={ft.id} value={ft.id}>{ft.name} (${Number(ft.pricePerPage).toFixed(2)}/p)</option>)}

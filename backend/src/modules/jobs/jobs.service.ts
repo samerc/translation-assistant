@@ -29,9 +29,9 @@ export class JobsService {
   private async generateJobNumber(): Promise<string> {
     const result = await this.jobRepository
       .createQueryBuilder('job')
-      .select('MAX(job.id)', 'maxId')
+      .select('COUNT(*)', 'count')
       .getRawOne();
-    const nextNum = (result?.maxId || 0) + 1;
+    const nextNum = (parseInt(result?.count || '0', 10)) + 1;
     return `JOB-${String(nextNum).padStart(4, '0')}`;
   }
 
@@ -45,7 +45,7 @@ export class JobsService {
   async findAll(query: {
     search?: string;
     status?: string;
-    clientId?: number;
+    clientId?: string;
     type?: string;
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
@@ -89,7 +89,7 @@ export class JobsService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async findOne(id: number): Promise<Job> {
+  async findOne(id: string): Promise<Job> {
     const job = await this.jobRepository.findOne({
       where: { id },
       relations: ['client', 'contact', 'sourceLanguage', 'targetLanguage', 'lineItems', 'assignedUsers', 'assignedUsers.user', 'files'],
@@ -98,7 +98,7 @@ export class JobsService {
     return job;
   }
 
-  async create(dto: CreateJobDto, userId: number): Promise<Job> {
+  async create(dto: CreateJobDto, userId: string): Promise<Job> {
     const jobNumber = await this.generateJobNumber();
 
     const job = this.jobRepository.create({
@@ -154,7 +154,7 @@ export class JobsService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: UpdateJobDto): Promise<Job> {
+  async update(id: string, dto: UpdateJobDto): Promise<Job> {
     const job = await this.findOne(id);
 
     if (this.isLocked(job) && !('status' in dto && Object.keys(dto).length === 1)) {
@@ -166,15 +166,15 @@ export class JobsService {
     return this.findOne(id);
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const job = await this.findOne(id);
     await this.jobRepository.remove(job);
   }
 
   // ── Line Items ──
 
-  async addLineItem(jobId: number, item: {
-    description: string; templateId?: number; freeformJobTypeId?: number;
+  async addLineItem(jobId: string, item: {
+    description: string; templateId?: string; freeformJobTypeId?: string;
     pageCount: number; pricePerPage: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number;
   }): Promise<JobLineItem> {
     const job = await this.findOne(jobId);
@@ -200,7 +200,7 @@ export class JobsService {
     return li;
   }
 
-  async updateLineItem(jobId: number, itemId: number, updates: Partial<{
+  async updateLineItem(jobId: string, itemId: string, updates: Partial<{
     description: string; pageCount: number; pricePerPage: number;
     useDiscountedPrice: boolean; discountedPricePerPage: number;
   }>): Promise<JobLineItem> {
@@ -217,7 +217,7 @@ export class JobsService {
     return li;
   }
 
-  async removeLineItem(jobId: number, itemId: number): Promise<void> {
+  async removeLineItem(jobId: string, itemId: string): Promise<void> {
     const job = await this.findOne(jobId);
     if (this.isLocked(job)) throw new BadRequestException('Job is locked');
 
@@ -227,7 +227,7 @@ export class JobsService {
     await this.recalculateTotal(jobId);
   }
 
-  private async recalculateTotal(jobId: number): Promise<void> {
+  private async recalculateTotal(jobId: string): Promise<void> {
     const items = await this.lineItemRepository.find({ where: { jobId } });
     const total = items.reduce((sum, li) => sum + Number(li.lineTotal), 0);
     await this.jobRepository.update(jobId, { calculatedTotal: total });
@@ -235,14 +235,14 @@ export class JobsService {
 
   // ── Status ──
 
-  async updateStatus(id: number, status: string): Promise<Job> {
+  async updateStatus(id: string, status: string): Promise<Job> {
     const job = await this.findOne(id);
     job.status = status;
     await this.jobRepository.save(job);
     return this.findOne(id);
   }
 
-  async reopenJob(id: number): Promise<Job> {
+  async reopenJob(id: string): Promise<Job> {
     const job = await this.findOne(id);
     if (!this.isLocked(job)) {
       throw new BadRequestException('Job is not in a completed state');
@@ -254,7 +254,7 @@ export class JobsService {
 
   // ── Job Users ──
 
-  async assignUser(jobId: number, userId: number, permissionLevel: 'view' | 'edit' = 'edit'): Promise<JobUser> {
+  async assignUser(jobId: string, userId: string, permissionLevel: 'view' | 'edit' = 'edit'): Promise<JobUser> {
     await this.findOne(jobId);
     const existing = await this.jobUserRepository.findOne({ where: { jobId, userId } });
     if (existing) {
@@ -264,7 +264,7 @@ export class JobsService {
     return this.jobUserRepository.save(this.jobUserRepository.create({ jobId, userId, permissionLevel }));
   }
 
-  async removeUser(jobId: number, userId: number): Promise<void> {
+  async removeUser(jobId: string, userId: string): Promise<void> {
     const ju = await this.jobUserRepository.findOne({ where: { jobId, userId } });
     if (!ju) throw new NotFoundException('User assignment not found');
     await this.jobUserRepository.remove(ju);
@@ -272,7 +272,7 @@ export class JobsService {
 
   // ── Files ──
 
-  async uploadFile(jobId: number, category: 'source' | 'translated', file: Express.Multer.File, userId: number): Promise<JobFile> {
+  async uploadFile(jobId: string, category: 'source' | 'translated', file: Express.Multer.File, userId: string): Promise<JobFile> {
     await this.findOne(jobId);
     return this.jobFileRepository.save(this.jobFileRepository.create({
       jobId, category, fileName: file.originalname, filePath: file.path,
@@ -280,7 +280,7 @@ export class JobsService {
     }));
   }
 
-  async linkFile(jobId: number, sourceJobId: number, fileId: number): Promise<JobFile> {
+  async linkFile(jobId: string, sourceJobId: string, fileId: string): Promise<JobFile> {
     await this.findOne(jobId);
     const sourceFile = await this.jobFileRepository.findOne({ where: { id: fileId, jobId: sourceJobId } });
     if (!sourceFile) throw new NotFoundException('Source file not found');
@@ -291,7 +291,7 @@ export class JobsService {
     }));
   }
 
-  async removeFile(jobId: number, fileId: number): Promise<void> {
+  async removeFile(jobId: string, fileId: string): Promise<void> {
     const jf = await this.jobFileRepository.findOne({ where: { id: fileId, jobId } });
     if (!jf) throw new NotFoundException('File not found');
     await this.jobFileRepository.remove(jf);

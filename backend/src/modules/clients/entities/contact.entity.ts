@@ -10,15 +10,15 @@ import { Client } from './client.entity.js';
 
 @Entity('contacts')
 export class Contact {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Client, (client) => client.contacts, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'client_id' })
   client: Client;
 
   @Column({ name: 'client_id' })
-  clientId: number;
+  clientId: string;
 
   @Column({ length: 100 })
   firstName: string;

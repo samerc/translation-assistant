@@ -14,28 +14,28 @@ import { DocumentFieldValue } from './document-field-value.entity.js';
 
 @Entity('documents')
 export class Document {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Job, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'job_id' })
   job: Job;
 
   @Column({ name: 'job_id' })
-  jobId: number;
+  jobId: string;
 
   @ManyToOne(() => Template)
   @JoinColumn({ name: 'template_id' })
   template: Template;
 
   @Column({ name: 'template_id' })
-  templateId: number;
+  templateId: string;
 
   @Column({ type: 'enum', enum: ['draft', 'completed'], default: 'draft' })
   status: 'draft' | 'completed';
 
   @Column({ name: 'cloned_from_id', nullable: true })
-  clonedFromId: number;
+  clonedFromId: string;
 
   @OneToMany(() => DocumentFieldValue, (fv) => fv.document, { cascade: true })
   fieldValues: DocumentFieldValue[];

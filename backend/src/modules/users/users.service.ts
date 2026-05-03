@@ -24,7 +24,7 @@ export class UsersService {
     return users.map((u) => this.sanitize(u));
   }
 
-  async findOne(id: number): Promise<Partial<User>> {
+  async findOne(id: string): Promise<Partial<User>> {
     const user = await this.userRepository.findOne({
       where: { id },
       relations: ['role', 'role.permissions'],
@@ -49,7 +49,7 @@ export class UsersService {
     return this.findOne(saved.id);
   }
 
-  async update(id: number, dto: UpdateUserDto): Promise<Partial<User>> {
+  async update(id: string, dto: UpdateUserDto): Promise<Partial<User>> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -57,7 +57,7 @@ export class UsersService {
     return this.findOne(id);
   }
 
-  async changePassword(id: number, dto: ChangePasswordDto): Promise<void> {
+  async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
@@ -68,15 +68,15 @@ export class UsersService {
     await this.userRepository.update(id, { password: hashedPassword });
   }
 
-  async deactivate(id: number): Promise<Partial<User>> {
+  async deactivate(id: string): Promise<Partial<User>> {
     return this.update(id, { isActive: false });
   }
 
-  async activate(id: number): Promise<Partial<User>> {
+  async activate(id: string): Promise<Partial<User>> {
     return this.update(id, { isActive: true });
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
     await this.userRepository.remove(user);

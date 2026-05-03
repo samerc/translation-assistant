@@ -3,24 +3,24 @@ import { Job } from './job.entity.js';
 
 @Entity('job_line_items')
 export class JobLineItem {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Job, (job) => job.lineItems, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'job_id' })
   job: Job;
 
   @Column({ name: 'job_id' })
-  jobId: number;
+  jobId: string;
 
   @Column({ length: 255 })
   description: string;
 
   @Column({ nullable: true })
-  templateId: number;
+  templateId: string;
 
   @Column({ nullable: true })
-  freeformJobTypeId: number;
+  freeformJobTypeId: string;
 
   @Column({ default: 1 })
   pageCount: number;

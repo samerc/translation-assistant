@@ -6,7 +6,6 @@ import {
   Delete,
   Body,
   Param,
-  ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -34,7 +33,7 @@ export class RolesController {
 
   @Get(':id')
   @RequirePermissions('roles:read')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id') id: string) {
     return this.rolesService.findOne(id);
   }
 
@@ -46,13 +45,13 @@ export class RolesController {
 
   @Patch(':id')
   @RequirePermissions('roles:update')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRoleDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
     return this.rolesService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('roles:delete')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.rolesService.remove(id);
   }
 }

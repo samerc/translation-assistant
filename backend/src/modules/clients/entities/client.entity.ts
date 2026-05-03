@@ -14,8 +14,8 @@ import { ClientAddress } from './client-address.entity.js';
 
 @Entity('clients')
 export class Client {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ type: 'enum', enum: ['company', 'person'] })
   type: 'company' | 'person';

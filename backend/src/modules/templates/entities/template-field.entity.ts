@@ -11,15 +11,15 @@ import { TemplateFieldLabel } from './template-field-label.entity.js';
 
 @Entity('template_fields')
 export class TemplateField {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Template, (template) => template.fields, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'template_id' })
   template: Template;
 
   @Column({ name: 'template_id' })
-  templateId: number;
+  templateId: string;
 
   @Column({ length: 100 })
   fieldKey: string;

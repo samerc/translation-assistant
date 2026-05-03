@@ -5,16 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
 interface Job {
-  id: number;
+  id: string;
   jobNumber: string;
   type: 'template' | 'freeform';
   title: string;
   status: string;
-  client: { id: number; name: string };
+  client: { id: string; name: string };
   sourceLanguage: { code: string; name: string };
   targetLanguage: { code: string; name: string } | null;
   deadline: string | null;
-  lineItems: { id: number; pageCount: number }[];
+  lineItems: { id: string; pageCount: number }[];
   calculatedTotal: number;
   finalPrice: number | null;
   isFreeOfCharge: boolean;

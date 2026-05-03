@@ -10,8 +10,8 @@ import { TemplateField } from './template-field.entity.js';
 
 @Entity('templates')
 export class Template {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ type: 'enum', enum: ['designer', 'word'], default: 'designer' })
   type: 'designer' | 'word';

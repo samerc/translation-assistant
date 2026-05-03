@@ -4,17 +4,17 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
-interface JobFile { id: number; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: number | null; uploadedAt: string; }
-interface JobUser { id: number; userId: number; permissionLevel: string; user: { id: number; firstName: string; lastName: string; email: string }; }
+interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
+interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
 interface JobLineItem {
-  id: number; description: string; templateId: number | null; freeformJobTypeId: number | null;
+  id: string; description: string; templateId: string | null; freeformJobTypeId: string | null;
   pageCount: number; pricePerPage: number; discountedPricePerPage: number | null;
   useDiscountedPrice: boolean; lineTotal: number;
 }
 interface Job {
-  id: number; jobNumber: string; type: string; title: string; description: string | null; status: string;
-  client: { id: number; name: string }; contact: { id: number; firstName: string; lastName: string } | null;
-  sourceLanguage: { id: number; code: string; name: string }; targetLanguage: { id: number; code: string; name: string } | null;
+  id: string; jobNumber: string; type: string; title: string; description: string | null; status: string;
+  client: { id: string; name: string }; contact: { id: string; firstName: string; lastName: string } | null;
+  sourceLanguage: { id: string; code: string; name: string }; targetLanguage: { id: string; code: string; name: string } | null;
   deadline: string | null; calculatedTotal: number; finalPrice: number | null;
   isFreeOfCharge: boolean; freeOfChargeReason: string | null;
   paymentCurrency: string | null; paymentAmount: number | null; notes: string | null;
@@ -265,17 +265,17 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
 // ── Documents Tab ──
 
 interface DocSummary {
-  id: number;
+  id: string;
   status: string;
-  template: { id: number; name: string; type: string };
-  fieldValues: { id: number }[];
+  template: { id: string; name: string; type: string };
+  fieldValues: { id: string }[];
   createdAt: string;
   updatedAt: string;
 }
 
 function DocumentsTab({ job }: { job: Job }) {
   const [docs, setDocs] = useState<DocSummary[]>([]);
-  const [templates, setTemplates] = useState<{ id: number; name: string }[]>([]);
+  const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const router = useRouter();
@@ -284,21 +284,21 @@ function DocumentsTab({ job }: { job: Job }) {
 
   useEffect(() => {
     loadDocs();
-    api.get<{ id: number; name: string }[]>('/templates?isActive=true').then(setTemplates);
+    api.get<{ id: string; name: string }[]>('/templates?isActive=true').then(setTemplates);
   }, [job.id]);
 
   const handleCreate = async () => {
     if (!selectedTemplateId) return;
-    const doc = await api.post<{ id: number }>('/documents', {
+    const doc = await api.post<{ id: string }>('/documents', {
       jobId: job.id,
-      templateId: parseInt(selectedTemplateId),
+      templateId: selectedTemplateId,
     });
     setShowAdd(false);
     setSelectedTemplateId('');
     router.push(`/documents/${doc.id}`);
   };
 
-  const handleDelete = async (docId: number) => {
+  const handleDelete = async (docId: string) => {
     if (!confirm('Delete this document?')) return;
     await api.delete(`/documents/${docId}`);
     loadDocs();
@@ -396,7 +396,7 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
     setUploading(false);
   };
 
-  const handleDelete = async (fileId: number) => {
+  const handleDelete = async (fileId: string) => {
     if (!confirm('Delete this file?')) return;
     await api.delete(`/jobs/${job.id}/files/${fileId}`);
     onUpdate();

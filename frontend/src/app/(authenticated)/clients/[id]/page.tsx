@@ -4,14 +4,14 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
-interface ClientEmail { id: number; email: string; label: string | null; isPrimary: boolean; }
-interface ClientPhone { id: number; phone: string; label: string | null; isPrimary: boolean; }
-interface ClientAddress { id: number; address: string; label: string | null; isPrimary: boolean; }
-interface Contact { id: number; firstName: string; lastName: string; email: string | null; phone: string | null; role: string | null; notes: string | null; }
-interface PassportCopy { id: number; label: string; originalName: string; mimeType: string; fileSize: number; uploadedAt: string; }
+interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
+interface ClientPhone { id: string; phone: string; label: string | null; isPrimary: boolean; }
+interface ClientAddress { id: string; address: string; label: string | null; isPrimary: boolean; }
+interface Contact { id: string; firstName: string; lastName: string; email: string | null; phone: string | null; role: string | null; notes: string | null; }
+interface PassportCopy { id: string; label: string; originalName: string; mimeType: string; fileSize: number; uploadedAt: string; }
 
 interface Client {
-  id: number;
+  id: string;
   type: 'company' | 'person';
   name: string;
   taxId: string | null;
@@ -232,16 +232,16 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
 
 function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOptions, onAdd, onEdit, onRemove }: {
   title: string;
-  items: { id: number; value: string; label: string | null }[];
+  items: { id: string; value: string; label: string | null }[];
   placeholder: string;
   inputType?: string;
   labelOptions: string[];
   onAdd: (value: string, label: string) => Promise<void>;
-  onEdit: (id: number, value: string, label: string) => Promise<void>;
-  onRemove: (id: number) => Promise<void>;
+  onEdit: (id: string, value: string, label: string) => Promise<void>;
+  onRemove: (id: string) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
   const [saving, setSaving] = useState(false);
@@ -267,7 +267,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
     setSaving(false);
   };
 
-  const startEdit = (item: { id: number; value: string; label: string | null }) => {
+  const startEdit = (item: { id: string; value: string; label: string | null }) => {
     setEditingId(item.id);
     setValue(item.value);
     setLabel(item.label || '');
@@ -359,9 +359,9 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
 
 // ── Contacts Tab ──
 
-function ContactsTab({ clientId, contacts, onUpdate }: { clientId: number; contacts: Contact[]; onUpdate: () => void }) {
+function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; contacts: Contact[]; onUpdate: () => void }) {
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' });
 
   const handleSubmit = async (e: FormEvent) => {
@@ -389,7 +389,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: number; conta
     setShowForm(true);
   };
 
-  const handleDelete = async (contactId: number) => {
+  const handleDelete = async (contactId: string) => {
     if (!confirm('Delete this contact?')) return;
     await api.delete(`/clients/${clientId}/contacts/${contactId}`);
     onUpdate();
@@ -446,7 +446,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: number; conta
 
 // ── Passports Tab ──
 
-function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies: PassportCopy[]; onUpdate: () => void }) {
+function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies: PassportCopy[]; onUpdate: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [label, setLabel] = useState('');
   const [error, setError] = useState('');
@@ -488,7 +488,7 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
     setUploading(false);
   };
 
-  const handleDelete = async (copyId: number) => {
+  const handleDelete = async (copyId: string) => {
     if (!confirm('Delete this passport copy?')) return;
     await api.delete(`/clients/${clientId}/passports/${copyId}`);
     onUpdate();
@@ -557,8 +557,8 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
 
 // ── Jobs Tab (placeholder) ──
 
-function JobsTab({ clientId }: { clientId: number }) {
-  const [jobs, setJobs] = useState<{ id: number; title: string; status: string; sourceLanguage: { code: string }; targetLanguage: { code: string }; calculatedTotal: number; createdAt: string }[]>([]);
+function JobsTab({ clientId }: { clientId: string }) {
+  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string }; targetLanguage: { code: string }; calculatedTotal: number; createdAt: string }[]>([]);
   const router = useRouter();
 
   useEffect(() => {

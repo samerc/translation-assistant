@@ -10,14 +10,12 @@ export class JobLineItemDto {
   description: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  templateId?: number;
+  @IsString()
+  templateId?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  freeformJobTypeId?: number;
+  @IsString()
+  freeformJobTypeId?: string;
 
   @Type(() => Number)
   @IsInt()
@@ -54,19 +52,19 @@ export class CreateJobDto {
   @IsString()
   description?: string;
 
-  @IsInt()
-  clientId: number;
+  @IsString()
+  clientId: string;
 
   @IsOptional()
-  @IsInt()
-  contactId?: number;
+  @IsString()
+  contactId?: string;
 
-  @IsInt()
-  sourceLanguageId: number;
+  @IsString()
+  sourceLanguageId: string;
 
   @IsOptional()
-  @IsInt()
-  targetLanguageId?: number;
+  @IsString()
+  targetLanguageId?: string;
 
   @IsOptional()
   @IsIn(['quote', 'accepted', 'in_progress'])
@@ -111,8 +109,8 @@ export class UpdateJobDto {
   description?: string;
 
   @IsOptional()
-  @IsInt()
-  contactId?: number;
+  @IsString()
+  contactId?: string;
 
   @IsOptional()
   @IsIn(['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'lost', 'cancelled'])

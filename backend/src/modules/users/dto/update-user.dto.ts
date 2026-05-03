@@ -2,7 +2,6 @@ import {
   IsString,
   MinLength,
   MaxLength,
-  IsInt,
   IsOptional,
   IsBoolean,
   IsIn,
@@ -26,8 +25,8 @@ export class UpdateUserDto {
   avatar?: string;
 
   @IsOptional()
-  @IsInt()
-  roleId?: number;
+  @IsString()
+  roleId?: string;
 
   @IsOptional()
   @IsBoolean()

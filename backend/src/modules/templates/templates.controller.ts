@@ -7,7 +7,6 @@ import {
   Body,
   Param,
   Query,
-  ParseIntPipe,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -59,7 +58,7 @@ export class TemplatesController {
 
   @Get(':id')
   @RequirePermissions('templates:read')
-  findOne(@Param('id', ParseIntPipe) id: number) {
+  findOne(@Param('id') id: string) {
     return this.templatesService.findOne(id);
   }
 
@@ -71,13 +70,13 @@ export class TemplatesController {
 
   @Patch(':id')
   @RequirePermissions('templates:update')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateTemplateDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateTemplateDto) {
     return this.templatesService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('templates:delete')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  remove(@Param('id') id: string) {
     return this.templatesService.remove(id);
   }
 
@@ -87,7 +86,7 @@ export class TemplatesController {
   @RequirePermissions('templates:update')
   @UseInterceptors(FileInterceptor('file', { storage: templateStorage }))
   uploadWord(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.templatesService.uploadWordFile(id, file);
@@ -95,14 +94,14 @@ export class TemplatesController {
 
   @Get(':id/word-preview')
   @RequirePermissions('templates:read')
-  getWordPreview(@Param('id', ParseIntPipe) id: number) {
+  getWordPreview(@Param('id') id: string) {
     return this.templatesService.getWordPreview(id);
   }
 
   @Post(':id/word-placeholders')
   @RequirePermissions('templates:update')
   setWordPlaceholders(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() body: { placeholders: { find: string; fieldKey: string }[] },
   ) {
     return this.templatesService.setWordPlaceholders(id, body.placeholders);
@@ -113,7 +112,7 @@ export class TemplatesController {
   @Post(':id/fields')
   @RequirePermissions('templates:update')
   addField(
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() dto: CreateTemplateFieldDto,
   ) {
     return this.templatesService.addField(id, dto);
@@ -122,8 +121,8 @@ export class TemplatesController {
   @Patch(':id/fields/:fieldId')
   @RequirePermissions('templates:update')
   updateField(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('fieldId', ParseIntPipe) fieldId: number,
+    @Param('id') id: string,
+    @Param('fieldId') fieldId: string,
     @Body() dto: UpdateTemplateFieldDto,
   ) {
     return this.templatesService.updateField(id, fieldId, dto);
@@ -132,8 +131,8 @@ export class TemplatesController {
   @Delete(':id/fields/:fieldId')
   @RequirePermissions('templates:update')
   removeField(
-    @Param('id', ParseIntPipe) id: number,
-    @Param('fieldId', ParseIntPipe) fieldId: number,
+    @Param('id') id: string,
+    @Param('fieldId') fieldId: string,
   ) {
     return this.templatesService.removeField(id, fieldId);
   }
@@ -141,8 +140,8 @@ export class TemplatesController {
   @Patch(':id/fields/reorder')
   @RequirePermissions('templates:update')
   reorderFields(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('fieldIds') fieldIds: number[],
+    @Param('id') id: string,
+    @Body('fieldIds') fieldIds: string[],
   ) {
     return this.templatesService.reorderFields(id, fieldIds);
   }

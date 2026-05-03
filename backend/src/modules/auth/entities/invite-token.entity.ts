@@ -2,8 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeor
 
 @Entity('invite_tokens')
 export class InviteToken {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ length: 64, unique: true })
   token: string;
@@ -12,7 +12,7 @@ export class InviteToken {
   email: string;
 
   @Column({ nullable: true })
-  roleId: number;
+  roleId: string;
 
   @Column()
   expiresAt: Date;
@@ -21,7 +21,7 @@ export class InviteToken {
   used: boolean;
 
   @Column({ nullable: true })
-  usedByUserId: number;
+  usedByUserId: string;
 
   @CreateDateColumn()
   createdAt: Date;

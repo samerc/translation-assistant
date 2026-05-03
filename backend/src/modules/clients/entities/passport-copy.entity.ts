@@ -10,15 +10,15 @@ import { Client } from './client.entity.js';
 
 @Entity('passport_copies')
 export class PassportCopy {
-  @PrimaryGeneratedColumn()
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @ManyToOne(() => Client, (client) => client.passportCopies, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'client_id' })
   client: Client;
 
   @Column({ name: 'client_id' })
-  clientId: number;
+  clientId: string;
 
   @Column({ length: 255 })
   label: string;

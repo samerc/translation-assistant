@@ -4,16 +4,16 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
-interface Language { id: number; code: string; name: string; direction: string; }
-interface FieldLabel { id: number; languageId: number; label: string; language: Language; }
-interface TemplateField { id: number; fieldKey: string; fieldType: string; sortOrder: number; required: boolean; groupKey: string | null; labels: FieldLabel[]; }
-interface FieldValue { id: number; templateFieldId: number; pageNumber: number; entryIndex: number | null; value: string; }
+interface Language { id: string; code: string; name: string; direction: string; }
+interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
+interface TemplateField { id: string; fieldKey: string; fieldType: string; sortOrder: number; required: boolean; groupKey: string | null; labels: FieldLabel[]; }
+interface FieldValue { id: string; templateFieldId: string; pageNumber: number; entryIndex: number | null; value: string; }
 interface Doc {
-  id: number; jobId: number; templateId: number; status: string; clonedFromId: number | null;
-  template: { id: number; name: string; type: string; fields: TemplateField[] };
+  id: string; jobId: string; templateId: string; status: string; clonedFromId: string | null;
+  template: { id: string; name: string; type: string; fields: TemplateField[] };
   fieldValues: FieldValue[];
 }
-interface Job { id: number; title: string; jobNumber: string; sourceLanguage: Language; targetLanguage: Language | null; }
+interface Job { id: string; title: string; jobNumber: string; sourceLanguage: Language; targetLanguage: Language | null; }
 
 export default function DocumentFillPage() {
   const { id } = useParams();
@@ -23,7 +23,7 @@ export default function DocumentFillPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: number } | null>(null);
+  const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string } | null>(null);
 
   useEffect(() => {
     api.get<Doc>(`/documents/${id}`).then((d) => {
@@ -53,13 +53,13 @@ export default function DocumentFillPage() {
     groups[f.groupKey!].push(f);
   });
 
-  const getValueKey = (fieldId: number, page: number, entry?: number) =>
+  const getValueKey = (fieldId: string, page: number, entry?: number) =>
     `${fieldId}_${page}_${entry ?? ''}`;
 
-  const getValue = (fieldId: number, page: number, entry?: number) =>
+  const getValue = (fieldId: string, page: number, entry?: number) =>
     values[getValueKey(fieldId, page, entry)] || '';
 
-  const setValue = (fieldId: number, page: number, value: string, entry?: number) => {
+  const setValue = (fieldId: string, page: number, value: string, entry?: number) => {
     setValues({ ...values, [getValueKey(fieldId, page, entry)]: value });
   };
 
@@ -81,7 +81,7 @@ export default function DocumentFillPage() {
       .map(([key, value]) => {
         const [fieldId, page, entry] = key.split('_');
         return {
-          templateFieldId: parseInt(fieldId),
+          templateFieldId: fieldId,
           pageNumber: parseInt(page) || 1,
           entryIndex: entry ? parseInt(entry) : undefined,
           value,

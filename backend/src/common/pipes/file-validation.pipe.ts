@@ -20,7 +20,7 @@ export class FileValidationPipe implements PipeTransform {
       throw new BadRequestException('File is required');
     }
 
-    const settings = await this.settingsRepository.findOne({ where: { id: 1 } });
+    const settings = await this.settingsRepository.find({ take: 1 }).then(r => r[0] ?? null);
 
     // Check file size
     const maxSizeMb = settings?.maxUploadSizeMb || 5;
