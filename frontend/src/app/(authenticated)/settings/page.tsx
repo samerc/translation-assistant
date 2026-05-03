@@ -29,16 +29,7 @@ interface LabelOption {
   sortOrder: number;
 }
 
-interface FreeformJobType {
-  id: string;
-  name: string;
-  description: string | null;
-  pricePerPage: number;
-  discountedPricePerPage: number | null;
-  isActive: boolean;
-}
-
-type Tab = 'general' | 'languages' | 'labels' | 'jobtypes' | 'uploads' | 'appearance';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -47,7 +38,6 @@ export default function SettingsPage() {
     { id: 'general', label: 'General' },
     { id: 'languages', label: 'Languages' },
     { id: 'labels', label: 'Labels' },
-    { id: 'jobtypes', label: 'Job Types' },
     { id: 'uploads', label: 'File Uploads' },
     { id: 'appearance', label: 'Appearance' },
   ];
@@ -76,7 +66,6 @@ export default function SettingsPage() {
       {activeTab === 'general' && <GeneralSettings />}
       {activeTab === 'languages' && <LanguagesSettings />}
       {activeTab === 'labels' && <LabelsSettings />}
-      {activeTab === 'jobtypes' && <JobTypesSettings />}
       {activeTab === 'uploads' && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
     </div>
@@ -432,129 +421,6 @@ function LabelsSettings() {
   );
 }
 
-// ── Job Types Settings ──
-
-function JobTypesSettings() {
-  const [types, setTypes] = useState<FreeformJobType[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
-
-  const loadTypes = () => { api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setTypes); };
-  useEffect(() => { loadTypes(); }, []);
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    const body = {
-      name: form.name,
-      description: form.description || undefined,
-      pricePerPage: parseFloat(form.pricePerPage) || 0,
-      discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : undefined,
-    };
-    if (editingId) {
-      await api.patch(`/settings/freeform-job-types/${editingId}`, body);
-    } else {
-      await api.post('/settings/freeform-job-types', body);
-    }
-    setShowForm(false);
-    setEditingId(null);
-    setForm({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
-    loadTypes();
-  };
-
-  const handleEdit = (t: FreeformJobType) => {
-    setForm({
-      name: t.name,
-      description: t.description || '',
-      pricePerPage: String(t.pricePerPage),
-      discountedPricePerPage: t.discountedPricePerPage ? String(t.discountedPricePerPage) : '',
-    });
-    setEditingId(t.id);
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this job type?')) return;
-    await api.delete(`/settings/freeform-job-types/${id}`);
-    loadTypes();
-  };
-
-  return (
-    <div className="max-w-4xl">
-      <div className="flex justify-between items-center mb-4">
-        <p className="text-sm text-text-secondary">
-          Define document types for free-form jobs with default pricing.
-        </p>
-        <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' }); }}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Type</button>
-      </div>
-
-      {showForm && (
-        <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-5 mb-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Name *</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
-                placeholder="Legal Document"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Description</label>
-              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Price per Page</label>
-              <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Discounted Price</label>
-              <input type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })}
-                placeholder="Optional"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-          </div>
-          <div className="flex gap-2 mt-4">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">{editingId ? 'Update' : 'Add Type'}</button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
-          </div>
-        </form>
-      )}
-
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Name</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Description</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Price/Page</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Discounted</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {types.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-text-muted">No job types defined yet.</td></tr>
-            )}
-            {types.map((t) => (
-              <tr key={t.id} className="border-b border-border last:border-0 hover:bg-bg/50">
-                <td className="px-4 py-3 font-medium text-text">{t.name}</td>
-                <td className="px-4 py-3 text-text-secondary">{t.description || '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">${Number(t.pricePerPage).toFixed(2)}</td>
-                <td className="px-4 py-3 text-text-secondary">{t.discountedPricePerPage ? `$${Number(t.discountedPricePerPage).toFixed(2)}` : '—'}</td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => handleEdit(t)} className="text-primary hover:text-primary-hover text-sm mr-3">Edit</button>
-                  <button onClick={() => handleDelete(t.id)} className="text-danger hover:text-danger/80 text-sm">Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 // ── Upload Settings ──
 

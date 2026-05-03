@@ -89,7 +89,7 @@ export class JobsController {
   @Post(':id/line-items')
   @RequirePermissions('jobs:update')
   addLineItem(@Param('id') id: string, @Body() body: {
-    description: string; templateId?: string; freeformJobTypeId?: string;
+    description: string; templateId?: string;
     pageCount: number; pricePerPage: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number;
   }) {
     return this.jobsService.addLineItem(id, body);

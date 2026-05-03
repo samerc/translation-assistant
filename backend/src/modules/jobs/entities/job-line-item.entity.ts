@@ -19,9 +19,6 @@ export class JobLineItem {
   @Column({ nullable: true })
   templateId: string;
 
-  @Column({ nullable: true })
-  freeformJobTypeId: string;
-
   @Column({ default: 1 })
   pageCount: number;
 

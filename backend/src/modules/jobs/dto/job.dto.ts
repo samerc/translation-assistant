@@ -13,10 +13,6 @@ export class JobLineItemDto {
   @IsString()
   templateId?: string;
 
-  @IsOptional()
-  @IsString()
-  freeformJobTypeId?: string;
-
   @Type(() => Number)
   @IsInt()
   @Min(1)

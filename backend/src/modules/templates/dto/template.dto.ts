@@ -11,8 +11,8 @@ import {
 
 export class CreateTemplateDto {
   @IsOptional()
-  @IsIn(['designer', 'word'])
-  type?: 'designer' | 'word';
+  @IsIn(['designer', 'word', 'simple'])
+  type?: 'designer' | 'word' | 'simple';
 
   @IsString()
   @MinLength(1)

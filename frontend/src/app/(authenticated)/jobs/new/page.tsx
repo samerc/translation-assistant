@@ -6,14 +6,12 @@ import { api } from '@/lib/api';
 
 interface Client { id: string; name: string; type: string; contacts: { id: string; firstName: string; lastName: string }[]; }
 interface Language { id: string; code: string; name: string; isActive: boolean; }
-interface Template { id: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
-interface FreeformJobType { id: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+interface Template { id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
 
 interface LineItem {
   key: string;
   description: string;
   templateId?: string;
-  freeformJobTypeId?: string;
   pageCount: number;
   pricePerPage: number;
   discountedPricePerPage: number;
@@ -26,7 +24,6 @@ export default function NewJobPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [freeformTypes, setFreeformTypes] = useState<FreeformJobType[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,24 +51,16 @@ export default function NewJobPage() {
     api.get<{ data: Client[] }>('/clients?limit=1000').then((res) => setClients(res.data));
     api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive)));
     api.get<Template[]>('/templates?isActive=true').then(setTemplates);
-    api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setFreeformTypes);
   }, []);
 
   const selectedClient = clients.find((c) => c.id === form.clientId);
   const contacts = selectedClient?.contacts || [];
 
   const addLineItem = () => {
-    if (form.type === 'template') {
-      setLineItems([...lineItems, {
-        key: `li_${Date.now()}`, description: '', templateId: undefined,
-        pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
-      }]);
-    } else {
-      setLineItems([...lineItems, {
-        key: `li_${Date.now()}`, description: '', freeformJobTypeId: undefined,
-        pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
-      }]);
-    }
+    setLineItems([...lineItems, {
+      key: `li_${Date.now()}`, description: '', templateId: undefined,
+      pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
+    }]);
   };
 
   const updateLineItem = (key: string, updates: Partial<LineItem>) => {
@@ -82,6 +71,11 @@ export default function NewJobPage() {
     setLineItems(lineItems.filter((li) => li.key !== key));
   };
 
+  // Filter templates based on job type
+  const availableTemplates = form.type === 'freeform'
+    ? templates.filter((t) => t.type === 'simple')
+    : templates.filter((t) => t.type !== 'simple');
+
   const handleTemplateSelect = (key: string, templateId: string) => {
     const tmpl = templates.find((t) => t.id === templateId);
     if (tmpl) {
@@ -90,18 +84,6 @@ export default function NewJobPage() {
         description: tmpl.name,
         pricePerPage: tmpl.pricePerPage,
         discountedPricePerPage: tmpl.discountedPricePerPage || 0,
-      });
-    }
-  };
-
-  const handleFreeformTypeSelect = (key: string, typeId: string) => {
-    const ft = freeformTypes.find((t) => t.id === typeId);
-    if (ft) {
-      updateLineItem(key, {
-        freeformJobTypeId: typeId,
-        description: ft.name,
-        pricePerPage: ft.pricePerPage,
-        discountedPricePerPage: ft.discountedPricePerPage || 0,
       });
     }
   };
@@ -129,7 +111,6 @@ export default function NewJobPage() {
         lineItems: lineItems.map((li) => ({
           description: li.description || 'Untitled',
           templateId: li.templateId || undefined,
-          freeformJobTypeId: li.freeformJobTypeId || undefined,
           pageCount: Number(li.pageCount) || 1,
           pricePerPage: Number(li.pricePerPage) || 0,
           useDiscountedPrice: li.useDiscountedPrice,
@@ -267,24 +248,16 @@ export default function NewJobPage() {
             {lineItems.map((li) => (
               <div key={li.key} className="border border-border rounded-lg p-4 bg-bg">
                 <div className="grid grid-cols-12 gap-3 items-end">
-                  {/* Template/Type selector */}
+                  {/* Template selector */}
                   <div className="col-span-4">
                     <label className="block text-xs font-medium text-text mb-1">
                       {form.type === 'template' ? 'Template' : 'Document Type'}
                     </label>
-                    {form.type === 'template' ? (
-                      <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
-                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                        <option value="">Select template...</option>
-                        {templates.map((t) => <option key={t.id} value={t.id}>{t.name} (${Number(t.pricePerPage).toFixed(2)}/p)</option>)}
-                      </select>
-                    ) : (
-                      <select value={li.freeformJobTypeId || ''} onChange={(e) => handleFreeformTypeSelect(li.key, e.target.value)}
-                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                        <option value="">Select type...</option>
-                        {freeformTypes.map((ft) => <option key={ft.id} value={ft.id}>{ft.name} (${Number(ft.pricePerPage).toFixed(2)}/p)</option>)}
-                      </select>
-                    )}
+                    <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
+                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                      <option value="">Select...</option>
+                      {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} (${Number(t.pricePerPage).toFixed(2)}/p)</option>)}
+                    </select>
                   </div>
 
                   {/* Pages */}

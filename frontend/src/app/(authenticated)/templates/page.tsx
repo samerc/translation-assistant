@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 
 interface Template {
   id: string;
-  type: 'designer' | 'word';
+  type: 'designer' | 'word' | 'simple';
   name: string;
   description: string | null;
   pricePerPage: number;
@@ -25,7 +25,7 @@ export default function TemplatesPage() {
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ type: 'designer' as 'designer' | 'word', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
+  const [form, setForm] = useState({ type: 'designer' as 'designer' | 'word' | 'simple', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
   const [view, setView] = useState<ViewMode>('table');
   const router = useRouter();
 
@@ -86,10 +86,11 @@ export default function TemplatesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'designer' | 'word' })}
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'designer' | 'word' | 'simple' })}
                 className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                 <option value="designer">Designer (build layout)</option>
                 <option value="word">Word (upload .docx)</option>
+                <option value="simple">Simple (pricing only)</option>
               </select>
             </div>
             <div>
@@ -177,14 +178,10 @@ export default function TemplatesPage() {
                   className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
                   <td className="px-4 py-3 font-medium text-text">{t.name}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      t.type === 'word' ? 'bg-blue-100 text-blue-700' : 'bg-primary-light text-primary'
-                    }`}>
-                      {t.type === 'word' ? 'Word' : 'Designer'}
-                    </span>
+                    <TemplatTypeBadge type={t.type} />
                   </td>
                   <td className="px-4 py-3 text-text-secondary max-w-xs truncate">{t.description || '—'}</td>
-                  <td className="px-4 py-3 text-text-secondary">{t.fields.length}</td>
+                  <td className="px-4 py-3 text-text-secondary">{t.type === 'simple' ? '—' : t.fields.length}</td>
                   <td className="px-4 py-3 text-text-secondary">${Number(t.pricePerPage).toFixed(2)}</td>
                   <td className="px-4 py-3 text-text-secondary">
                     {t.discountedPricePerPage ? `$${Number(t.discountedPricePerPage).toFixed(2)}` : '—'}
@@ -218,11 +215,7 @@ export default function TemplatesPage() {
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-text">{t.name}</h3>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                    t.type === 'word' ? 'bg-blue-100 text-blue-700' : 'bg-primary-light text-primary'
-                  }`}>
-                    {t.type === 'word' ? 'Word' : 'Designer'}
-                  </span>
+                  <TemplatTypeBadge type={t.type} />
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                   t.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'
@@ -232,7 +225,7 @@ export default function TemplatesPage() {
               </div>
               {t.description && <p className="text-sm text-text-secondary mb-3 line-clamp-2">{t.description}</p>}
               <div className="flex justify-between text-xs text-text-muted">
-                <span>{t.fields.length} field{t.fields.length !== 1 ? 's' : ''}</span>
+                <span>{t.type === 'simple' ? 'Simple' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
                 <div className="flex gap-2">
                   <span>${Number(t.pricePerPage).toFixed(2)} / page</span>
                   {t.discountedPricePerPage && (
@@ -249,6 +242,16 @@ export default function TemplatesPage() {
 }
 
 // ── Icons ──
+
+function TemplatTypeBadge({ type }: { type: string }) {
+  const config: Record<string, { bg: string; label: string }> = {
+    designer: { bg: 'bg-primary-light text-primary', label: 'Designer' },
+    word: { bg: 'bg-blue-100 text-blue-700', label: 'Word' },
+    simple: { bg: 'bg-orange-100 text-orange-700', label: 'Simple' },
+  };
+  const c = config[type] || config.designer;
+  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.bg}`}>{c.label}</span>;
+}
 
 function TableIcon({ className }: { className?: string }) {
   return (

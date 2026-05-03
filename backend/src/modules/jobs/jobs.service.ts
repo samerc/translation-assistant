@@ -131,7 +131,6 @@ export class JobsService {
             jobId: saved.id,
             description: li.description,
             templateId: li.templateId,
-            freeformJobTypeId: li.freeformJobTypeId,
             pageCount: li.pageCount,
             pricePerPage: li.pricePerPage,
             useDiscountedPrice: li.useDiscountedPrice,
@@ -174,7 +173,7 @@ export class JobsService {
   // ── Line Items ──
 
   async addLineItem(jobId: string, item: {
-    description: string; templateId?: string; freeformJobTypeId?: string;
+    description: string; templateId?: string;
     pageCount: number; pricePerPage: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number;
   }): Promise<JobLineItem> {
     const job = await this.findOne(jobId);

@@ -11,7 +11,7 @@ interface TemplateField {
   required: boolean; groupKey: string | null; labels: FieldLabel[];
 }
 interface Template {
-  id: string; type: 'designer' | 'word'; name: string; description: string | null;
+  id: string; type: 'designer' | 'word' | 'simple'; name: string; description: string | null;
   pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean;
   layoutJson: object | null; wordFilePath: string | null; wordFileName: string | null;
   fields: TemplateField[];
@@ -50,7 +50,7 @@ export default function TemplateDetailPage() {
   };
 
   const tabs: { id: Tab; label: string; show: boolean }[] = [
-    { id: 'fields', label: `Fields (${template.fields.length})`, show: true },
+    { id: 'fields', label: `Fields (${template.fields.length})`, show: template.type !== 'simple' },
     { id: 'designer', label: 'Layout Designer', show: template.type === 'designer' },
     { id: 'word', label: 'Word Template', show: template.type === 'word' },
     { id: 'settings', label: 'Settings', show: true },
@@ -64,9 +64,9 @@ export default function TemplateDetailPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-text">{template.name}</h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-              template.type === 'word' ? 'bg-blue-100 text-blue-700' : 'bg-primary-light text-primary'
+              template.type === 'word' ? 'bg-blue-100 text-blue-700' : template.type === 'simple' ? 'bg-orange-100 text-orange-700' : 'bg-primary-light text-primary'
             }`}>
-              {template.type === 'word' ? 'Word' : 'Designer'}
+              {template.type === 'word' ? 'Word' : template.type === 'simple' ? 'Simple' : 'Designer'}
             </span>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${template.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'}`}>
               {template.isActive ? 'Active' : 'Inactive'}

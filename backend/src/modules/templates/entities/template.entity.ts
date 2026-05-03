@@ -13,8 +13,8 @@ export class Template {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'enum', enum: ['designer', 'word'], default: 'designer' })
-  type: 'designer' | 'word';
+  @Column({ type: 'enum', enum: ['designer', 'word', 'simple'], default: 'designer' })
+  type: 'designer' | 'word' | 'simple';
 
   @Column({ length: 255 })
   name: string;
