@@ -5,9 +5,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { basename } from 'path';
 import { Client } from './entities/client.entity.js';
 import { Contact } from './entities/contact.entity.js';
 import { PassportCopy } from './entities/passport-copy.entity.js';
+import { Job } from '../jobs/entities/job.entity.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
 import { ClientAddress } from './entities/client-address.entity.js';
@@ -34,6 +36,8 @@ export class ClientsService {
     private readonly phoneRepository: Repository<ClientPhone>,
     @InjectRepository(ClientAddress)
     private readonly addressRepository: Repository<ClientAddress>,
+    @InjectRepository(Job)
+    private readonly jobRepository: Repository<Job>,
   ) {}
 
   // ── Clients ──
@@ -51,9 +55,9 @@ export class ClientsService {
       type,
       sortBy = 'name',
       sortOrder = 'ASC',
-      page = 1,
-      limit = 25,
+      page = Math.max(1, query.page || 1),
     } = query;
+    const limit = Math.min(Math.max(1, query.limit || 25), 100);
 
     const qb = this.clientRepository
       .createQueryBuilder('client')
@@ -106,6 +110,12 @@ export class ClientsService {
 
   async remove(id: number): Promise<void> {
     const client = await this.findOne(id);
+    const jobCount = await this.jobRepository.count({ where: { clientId: id } });
+    if (jobCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete client "${client.name}" — ${jobCount} job(s) are linked to this client.`,
+      );
+    }
     await this.clientRepository.remove(client);
   }
 
@@ -231,7 +241,7 @@ export class ClientsService {
       clientId,
       label,
       filePath: file.path,
-      originalName: file.originalname,
+      originalName: basename(file.originalname),
       mimeType: file.mimetype,
       fileSize: file.size,
     });

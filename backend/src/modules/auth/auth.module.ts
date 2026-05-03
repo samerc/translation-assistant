@@ -8,10 +8,11 @@ import { AuthController } from './auth.controller.js';
 import { JwtStrategy } from './strategies/jwt.strategy.js';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy.js';
 import { User } from '../users/entities/user.entity.js';
+import { InviteToken } from './entities/invite-token.entity.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, InviteToken]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

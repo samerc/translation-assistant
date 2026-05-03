@@ -9,7 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
+import { MoreThan } from 'typeorm';
 import { User } from '../users/entities/user.entity.js';
+import { InviteToken } from './entities/invite-token.entity.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { JwtPayload } from './strategies/jwt.strategy.js';
@@ -19,6 +22,8 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(InviteToken)
+    private readonly inviteTokenRepository: Repository<InviteToken>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -53,9 +58,20 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     // Validate invite token
-    const expectedToken = this.configService.get<string>('jwt.secret');
-    if (dto.inviteToken !== expectedToken) {
-      throw new BadRequestException('Invalid invite token');
+    const invite = await this.inviteTokenRepository.findOne({
+      where: {
+        token: dto.inviteToken,
+        used: false,
+        expiresAt: MoreThan(new Date()),
+      },
+    });
+
+    if (!invite) {
+      throw new BadRequestException('Invalid or expired invite token');
+    }
+
+    if (invite.email !== dto.email) {
+      throw new BadRequestException('Email does not match the invite');
     }
 
     const existingUser = await this.userRepository.findOne({
@@ -73,10 +89,16 @@ export class AuthService {
       password: hashedPassword,
       firstName: dto.firstName,
       lastName: dto.lastName,
-      roleId: 1, // Default role, will be updated by admin
+      roleId: invite.roleId || 2, // Use invite's role or default to Translator
     });
 
     const savedUser = await this.userRepository.save(user);
+
+    // Mark invite as used
+    invite.used = true;
+    invite.usedByUserId = savedUser.id;
+    await this.inviteTokenRepository.save(invite);
+
     const fullUser = await this.userRepository.findOne({
       where: { id: savedUser.id },
       relations: ['role', 'role.permissions'],
@@ -127,6 +149,18 @@ export class AuthService {
     }
 
     return this.sanitizeUser(user);
+  }
+
+  async createInvite(email: string, roleId?: number): Promise<{ token: string; expiresAt: Date }> {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7-day expiry
+
+    await this.inviteTokenRepository.save(
+      this.inviteTokenRepository.create({ token, email, roleId, expiresAt }),
+    );
+
+    return { token, expiresAt };
   }
 
   private async generateTokens(user: User) {

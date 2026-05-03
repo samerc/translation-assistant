@@ -52,7 +52,9 @@ export class JobsService {
     page?: number;
     limit?: number;
   }) {
-    const { search, status, clientId, type, sortBy = 'createdAt', sortOrder = 'DESC', page = 1, limit = 25 } = query;
+    const { search, status, clientId, type, sortBy = 'createdAt', sortOrder = 'DESC' } = query;
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(Math.max(1, query.limit || 25), 100);
 
     const qb = this.jobRepository
       .createQueryBuilder('job')

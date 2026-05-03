@@ -13,6 +13,8 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
+import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
+import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 
 @Controller('auth')
 export class AuthController {
@@ -50,5 +52,12 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   async getProfile(@Req() req: any) {
     return this.authService.getProfile(req.user.id);
+  }
+
+  @Post('invite')
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+  @RequirePermissions('users:create')
+  async createInvite(@Body() body: { email: string; roleId?: number }) {
+    return this.authService.createInvite(body.email, body.roleId);
   }
 }

@@ -20,6 +20,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
+import { JwtService } from '@nestjs/jwt';
+import { basename } from 'path';
 import { ClientsService } from './clients.service.js';
 import { CreateClientDto, UpdateClientDto } from './dto/client.dto.js';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto.js';
@@ -45,7 +47,10 @@ const uploadStorage = diskStorage({
 @Controller('clients')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    private readonly clientsService: ClientsService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   // ── Clients ──
 
@@ -213,17 +218,13 @@ export class ClientsController {
     @Query('token') token: string,
     @Res() res: Response,
   ) {
-    // File viewing uses query token since browser tabs can't set headers
     if (!token) {
       res.status(401).json({ message: 'Token required' });
       return;
     }
 
-    // Verify token manually
-    const { JwtService } = await import('@nestjs/jwt');
-    const jwt = new JwtService({ secret: process.env.JWT_SECRET });
     try {
-      jwt.verify(token);
+      this.jwtService.verify(token);
     } catch {
       res.status(401).json({ message: 'Invalid token' });
       return;
@@ -233,8 +234,9 @@ export class ClientsController {
     if (!existsSync(pc.filePath)) {
       throw new NotFoundException('File not found on disk');
     }
+    const safeName = basename(pc.originalName).replace(/[^\w.\-]/g, '_');
     res.setHeader('Content-Type', pc.mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${pc.originalName}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
     const stream = createReadStream(pc.filePath);
     stream.pipe(res);
   }
