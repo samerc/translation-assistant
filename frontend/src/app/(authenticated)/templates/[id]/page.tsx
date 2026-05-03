@@ -456,6 +456,13 @@ interface LayoutBlock {
   underline?: boolean;
   color?: string;
   bgColor?: string;
+  // Field display options
+  showLabel?: boolean;
+  labelText?: string;
+  labelBold?: boolean;
+  labelPosition?: 'left' | 'top';
+  separator?: string;
+  valueAlignment?: 'left' | 'center' | 'right';
 }
 
 function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
@@ -472,8 +479,8 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
     switch (type) {
       case 'header': newBlock = { id, type, content: 'Header Text', fontSize: 18, alignment: 'center' }; break;
       case 'text': newBlock = { id, type, content: 'Static text content', fontSize: 12, alignment: 'left' }; break;
-      case 'field': newBlock = { id, type, fieldKey: fieldKeys[0] || '', fontSize: 12, alignment: 'left' }; break;
-      case 'field-row': newBlock = { id, type, fieldKeys: [], fontSize: 12, alignment: 'left' }; break;
+      case 'field': newBlock = { id, type, fieldKey: fieldKeys[0] || '', fontSize: 12, alignment: 'left', showLabel: true, labelBold: true, labelPosition: 'left', separator: ':' }; break;
+      case 'field-row': newBlock = { id, type, fieldKeys: [], fontSize: 12, alignment: 'left', showLabel: true, labelBold: true, labelPosition: 'left', separator: ':' }; break;
       case 'divider': newBlock = { id, type }; break;
       case 'footer': newBlock = { id, type, content: 'Footer text', fontSize: 10, alignment: 'center' }; break;
       case 'date': newBlock = { id, type, content: 'Date: {date}', fontSize: 12, alignment: 'right' }; break;
@@ -564,16 +571,56 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                 if (block.type === 'divider') return <hr className="border-text-muted" />;
 
                 if (block.type === 'field') {
-                  return <div style={style} className="text-primary font-medium">{'{'}{block.fieldKey || 'field_key'}{'}'}</div>;
+                  const labelStyle: React.CSSProperties = { fontWeight: block.labelBold ? 'bold' : 'normal' };
+                  const valStyle: React.CSSProperties = { ...style, textAlign: block.valueAlignment || block.alignment };
+                  const fieldLabel = block.labelText || block.fieldKey || 'field';
+                  const sep = block.separator || '';
+
+                  if (block.showLabel && block.labelPosition === 'top') {
+                    return (
+                      <div>
+                        <div style={{ ...style, ...labelStyle }}>{fieldLabel}{sep}</div>
+                        <div style={valStyle} className="text-primary">{'{'}{block.fieldKey || 'field_key'}{'}'}</div>
+                      </div>
+                    );
+                  }
+                  if (block.showLabel) {
+                    return (
+                      <div style={{ ...style, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                        <span style={labelStyle}>{fieldLabel}{sep}</span>
+                        <span style={{ textAlign: block.valueAlignment || 'right' }} className="text-primary">{'{'}{block.fieldKey || 'field_key'}{'}'}</span>
+                      </div>
+                    );
+                  }
+                  return <div style={valStyle} className="text-primary">{'{'}{block.fieldKey || 'field_key'}{'}'}</div>;
                 }
 
                 if (block.type === 'field-row') {
+                  const labelStyle: React.CSSProperties = { fontWeight: block.labelBold ? 'bold' : 'normal' };
+                  const sep = block.separator || '';
+
+                  if (!block.fieldKeys || block.fieldKeys.length === 0) {
+                    return <div className="text-text-muted" style={{ fontSize: block.fontSize }}>Select fields in properties →</div>;
+                  }
                   return (
-                    <div style={{ fontSize: block.fontSize }} className="flex gap-4">
-                      {(block.fieldKeys || []).map((fk) => (
-                        <span key={fk} style={style} className="text-primary font-medium flex-1">{'{'}{fk}{'}'}</span>
+                    <div style={{ fontSize: block.fontSize }} className="flex gap-6">
+                      {block.fieldKeys.map((fk) => (
+                        <div key={fk} className="flex-1">
+                          {block.showLabel && block.labelPosition === 'top' ? (
+                            <>
+                              <div style={{ ...style, ...labelStyle }}>{fk}{sep}</div>
+                              <div className="text-primary">{'{'}{fk}{'}'}</div>
+                            </>
+                          ) : block.showLabel ? (
+                            <div style={{ ...style, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                              <span style={labelStyle}>{fk}{sep}</span>
+                              <span className="text-primary">{'{'}{fk}{'}'}</span>
+                            </div>
+                          ) : (
+                            <div style={style} className="text-primary">{'{'}{fk}{'}'}</div>
+                          )}
+                        </div>
                       ))}
-                      {(!block.fieldKeys || block.fieldKeys.length === 0) && <span className="text-text-muted">Select fields in properties →</span>}
                     </div>
                   );
                 }
@@ -641,6 +688,76 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* Field display options */}
+              {(selected.type === 'field' || selected.type === 'field-row') && (
+                <>
+                  <div className="border-t border-border pt-3">
+                    <label className="block text-xs font-medium text-text mb-2">Label Display</label>
+                    <label className="flex items-center gap-2 text-xs text-text cursor-pointer mb-2">
+                      <input type="checkbox" checked={selected.showLabel !== false}
+                        onChange={(e) => updateBlock(selectedIdx!, { showLabel: e.target.checked })}
+                        className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary" />
+                      Show label
+                    </label>
+                    {selected.showLabel !== false && (
+                      <div className="space-y-2 ml-5">
+                        {selected.type === 'field' && (
+                          <div>
+                            <label className="block text-xs text-text-muted mb-1">Custom label text</label>
+                            <input value={selected.labelText || ''} onChange={(e) => updateBlock(selectedIdx!, { labelText: e.target.value })}
+                              placeholder={selected.fieldKey || 'Field name'}
+                              className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs text-text-muted mb-1">Position</label>
+                          <div className="flex gap-1">
+                            <button onClick={() => updateBlock(selectedIdx!, { labelPosition: 'left' })}
+                              className={`flex-1 px-2 py-1 rounded text-xs font-medium ${selected.labelPosition === 'left' || !selected.labelPosition ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                              Left
+                            </button>
+                            <button onClick={() => updateBlock(selectedIdx!, { labelPosition: 'top' })}
+                              className={`flex-1 px-2 py-1 rounded text-xs font-medium ${selected.labelPosition === 'top' ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                              Top
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-text-muted mb-1">Separator</label>
+                          <div className="flex gap-1">
+                            {[':', ' -', ' |', ''].map((s) => (
+                              <button key={s} onClick={() => updateBlock(selectedIdx!, { separator: s })}
+                                className={`flex-1 px-2 py-1 rounded text-xs font-medium ${selected.separator === s ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                                {s || 'None'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-text cursor-pointer">
+                          <input type="checkbox" checked={selected.labelBold !== false}
+                            onChange={(e) => updateBlock(selectedIdx!, { labelBold: e.target.checked })}
+                            className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary" />
+                          Bold label
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                  {selected.showLabel !== false && selected.labelPosition !== 'top' && (
+                    <div>
+                      <label className="block text-xs font-medium text-text mb-1">Value Alignment</label>
+                      <div className="flex gap-1">
+                        {(['left', 'center', 'right'] as const).map((a) => (
+                          <button key={a} onClick={() => updateBlock(selectedIdx!, { valueAlignment: a })}
+                            className={`flex-1 px-2 py-1 rounded text-xs font-medium ${(selected.valueAlignment || 'right') === a ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                            {a.charAt(0).toUpperCase() + a.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {selected.type !== 'divider' && (
