@@ -451,6 +451,11 @@ interface LayoutBlock {
   fieldKeys?: string[];
   fontSize?: number;
   alignment?: 'left' | 'center' | 'right';
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
+  bgColor?: string;
 }
 
 function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
@@ -543,32 +548,38 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
               </div>
 
               {/* Block content preview */}
-              {block.type === 'header' && (
-                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="font-bold text-text">{block.content}</div>
-              )}
-              {block.type === 'text' && (
-                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-text">{block.content}</div>
-              )}
-              {block.type === 'field' && (
-                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-primary font-medium">
-                  {'{'}{block.fieldKey || 'field_key'}{'}'}
-                </div>
-              )}
-              {block.type === 'field-row' && (
-                <div style={{ fontSize: block.fontSize }} className="flex gap-4">
-                  {(block.fieldKeys || []).map((fk) => (
-                    <span key={fk} className="text-primary font-medium flex-1">{'{'}{fk}{'}'}</span>
-                  ))}
-                  {(!block.fieldKeys || block.fieldKeys.length === 0) && <span className="text-text-muted">Select fields in properties →</span>}
-                </div>
-              )}
-              {block.type === 'divider' && <hr className="border-text-muted" />}
-              {block.type === 'footer' && (
-                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-text-secondary italic">{block.content}</div>
-              )}
-              {block.type === 'date' && (
-                <div style={{ fontSize: block.fontSize, textAlign: block.alignment }} className="text-text-secondary">{block.content}</div>
-              )}
+              {(() => {
+                const style: React.CSSProperties = {
+                  fontSize: block.fontSize,
+                  textAlign: block.alignment,
+                  fontWeight: block.bold ? 'bold' : undefined,
+                  fontStyle: block.italic ? 'italic' : undefined,
+                  textDecoration: block.underline ? 'underline' : undefined,
+                  color: block.color || undefined,
+                  backgroundColor: block.bgColor || undefined,
+                  padding: block.bgColor ? '4px 8px' : undefined,
+                  borderRadius: block.bgColor ? '4px' : undefined,
+                };
+
+                if (block.type === 'divider') return <hr className="border-text-muted" />;
+
+                if (block.type === 'field') {
+                  return <div style={style} className="text-primary font-medium">{'{'}{block.fieldKey || 'field_key'}{'}'}</div>;
+                }
+
+                if (block.type === 'field-row') {
+                  return (
+                    <div style={{ fontSize: block.fontSize }} className="flex gap-4">
+                      {(block.fieldKeys || []).map((fk) => (
+                        <span key={fk} style={style} className="text-primary font-medium flex-1">{'{'}{fk}{'}'}</span>
+                      ))}
+                      {(!block.fieldKeys || block.fieldKeys.length === 0) && <span className="text-text-muted">Select fields in properties →</span>}
+                    </div>
+                  );
+                }
+
+                return <div style={style}>{block.content}</div>;
+              })()}
 
               <span className="absolute top-1 right-2 text-[10px] text-text-muted uppercase">{block.type}</span>
             </div>
@@ -634,12 +645,32 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
 
               {selected.type !== 'divider' && (
                 <>
+                  {/* Font style toggles */}
+                  <div>
+                    <label className="block text-xs font-medium text-text mb-1">Style</label>
+                    <div className="flex gap-1">
+                      <button onClick={() => updateBlock(selectedIdx!, { bold: !selected.bold })}
+                        className={`flex-1 px-2 py-1.5 rounded text-xs font-bold ${selected.bold ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                        B
+                      </button>
+                      <button onClick={() => updateBlock(selectedIdx!, { italic: !selected.italic })}
+                        className={`flex-1 px-2 py-1.5 rounded text-xs italic ${selected.italic ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                        I
+                      </button>
+                      <button onClick={() => updateBlock(selectedIdx!, { underline: !selected.underline })}
+                        className={`flex-1 px-2 py-1.5 rounded text-xs underline ${selected.underline ? 'bg-primary text-white' : 'bg-bg text-text-secondary border border-border'}`}>
+                        U
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-medium text-text mb-1">Font Size</label>
-                    <input type="number" min={8} max={36} value={selected.fontSize || 12}
+                    <input type="number" min={8} max={48} value={selected.fontSize || 12}
                       onChange={(e) => updateBlock(selectedIdx!, { fontSize: parseInt(e.target.value) || 12 })}
                       className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
                   </div>
+
                   <div>
                     <label className="block text-xs font-medium text-text mb-1">Alignment</label>
                     <div className="flex gap-1">
@@ -649,6 +680,35 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                           {a.charAt(0).toUpperCase() + a.slice(1)}
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Colors */}
+                  <div>
+                    <label className="block text-xs font-medium text-text mb-1">Text Color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={selected.color || '#000000'}
+                        onChange={(e) => updateBlock(selectedIdx!, { color: e.target.value })}
+                        className="w-8 h-8 rounded border border-border cursor-pointer" />
+                      <span className="text-xs text-text-muted flex-1">{selected.color || 'Default'}</span>
+                      {selected.color && (
+                        <button onClick={() => updateBlock(selectedIdx!, { color: undefined })}
+                          className="text-xs text-text-muted hover:text-danger">Clear</button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-text mb-1">Background Color</label>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={selected.bgColor || '#ffffff'}
+                        onChange={(e) => updateBlock(selectedIdx!, { bgColor: e.target.value })}
+                        className="w-8 h-8 rounded border border-border cursor-pointer" />
+                      <span className="text-xs text-text-muted flex-1">{selected.bgColor || 'None'}</span>
+                      {selected.bgColor && (
+                        <button onClick={() => updateBlock(selectedIdx!, { bgColor: undefined })}
+                          className="text-xs text-text-muted hover:text-danger">Clear</button>
+                      )}
                     </div>
                   </div>
                 </>

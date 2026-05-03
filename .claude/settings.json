@@ -6,7 +6,8 @@
       "Bash(npx npm-check-updates:*)",
       "Bash(npx next:*)",
       "Bash(npx nest:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Program Files/Git/usr/bin:$PATH\")"
     ]
   }
 }
