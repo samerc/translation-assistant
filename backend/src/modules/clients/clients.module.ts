@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsService } from './clients.service.js';
 import { ClientsController } from './clients.controller.js';
 import { Client } from './entities/client.entity.js';
@@ -25,7 +26,13 @@ import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
       AppSettings,
       Job,
     ]),
-    JwtModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('jwt.secret'),
+      }),
+    }),
   ],
   controllers: [ClientsController],
   providers: [ClientsService, FileValidationPipe],
