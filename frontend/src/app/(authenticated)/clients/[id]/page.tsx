@@ -99,7 +99,7 @@ export default function ClientDetailPage() {
       {activeTab === 'overview' && <OverviewTab client={client} onUpdate={loadClient} />}
       {activeTab === 'contacts' && client.type === 'company' && <ContactsTab clientId={client.id} contacts={client.contacts} onUpdate={loadClient} />}
       {activeTab === 'passports' && <PassportsTab clientId={client.id} copies={client.passportCopies} onUpdate={loadClient} />}
-      {activeTab === 'jobs' && <JobsTab />}
+      {activeTab === 'jobs' && <JobsTab clientId={client.id} />}
     </div>
   );
 }
@@ -557,10 +557,55 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: number; copies
 
 // ── Jobs Tab (placeholder) ──
 
-function JobsTab() {
+function JobsTab({ clientId }: { clientId: number }) {
+  const [jobs, setJobs] = useState<{ id: number; title: string; status: string; sourceLanguage: { code: string }; targetLanguage: { code: string }; calculatedTotal: number; createdAt: string }[]>([]);
+  const router = useRouter();
+
+  useEffect(() => {
+    api.get<{ data: typeof jobs }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => setJobs(res.data));
+  }, [clientId]);
+
+  const statusColor: Record<string, string> = {
+    quote: 'bg-bg text-text-secondary', accepted: 'bg-primary-light text-primary',
+    in_progress: 'bg-primary-light text-primary', delivered: 'bg-success-light text-success',
+    invoiced: 'bg-warning-light text-warning', paid: 'bg-success-light text-success',
+    cancelled: 'bg-danger-light text-danger',
+  };
+
   return (
-    <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">
-      Jobs for this client will appear here after Phase 7.
+    <div className="max-w-3xl">
+      <div className="flex justify-end mb-4">
+        <button onClick={() => router.push(`/jobs/new?clientId=${clientId}`)}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ New Job</button>
+      </div>
+      {jobs.length === 0 ? (
+        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No jobs for this client yet.</div>
+      ) : (
+        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-bg border-b border-border">
+                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Title</th>
+                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Languages</th>
+                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
+                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Total</th>
+                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((j) => (
+                <tr key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
+                  <td className="px-4 py-3 font-medium text-text">{j.title}</td>
+                  <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage.code.toUpperCase()} → {j.targetLanguage.code.toUpperCase()}</td>
+                  <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
+                  <td className="px-4 py-3 text-text-secondary">${Number(j.calculatedTotal).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{new Date(j.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

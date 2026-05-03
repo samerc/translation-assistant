@@ -11,6 +11,7 @@ import { RolesModule } from './modules/roles/roles.module.js';
 import { SettingsModule } from './modules/settings/settings.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { TemplatesModule } from './modules/templates/templates.module.js';
+import { JobsModule } from './modules/jobs/jobs.module.js';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TemplatesModule } from './modules/templates/templates.module.js';
     SettingsModule,
     ClientsModule,
     TemplatesModule,
+    JobsModule,
   ],
   controllers: [],
   providers: [

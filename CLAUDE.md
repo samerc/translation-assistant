@@ -133,6 +133,14 @@ Light + dark mode supported (separate toggle from palette).
 - `POST/PATCH/DELETE /:id/fields/:fieldId` — Template fields
 - `PATCH /:id/fields/reorder` — Reorder fields
 
+### Jobs (`/api/jobs`)
+- Full CRUD with search, status filter, client filter, sort, pagination
+- `PATCH /:id/status` — Update job status
+- `POST/DELETE /:id/users/:userId` — Assign/remove users
+- `POST /:id/files` — Upload source/translated files (with FileValidationPipe)
+- `POST /:id/files/link` — Link file from another job
+- `DELETE /:id/files/:fileId` — Remove file
+
 ## Frontend Pages
 - `/login` — Login page (public)
 - `/` — Dashboard with summary cards, theme preview
@@ -140,6 +148,9 @@ Light + dark mode supported (separate toggle from palette).
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab placeholder)
 - `/templates` — Template list as card grid
 - `/templates/:id` — Template detail (Fields tab with grouped display, Settings tab)
+- `/jobs` — Jobs list with search, status filter, sort, pagination
+- `/jobs/new` — Create job form (type, client, languages, pricing, deadline)
+- `/jobs/:id` — Job detail (Details tab, Documents placeholder, Source Files, Translated Files)
 - `/settings` — Settings page (General, Languages, Labels, File Uploads tabs)
 
 ## File Upload Validation
@@ -155,7 +166,7 @@ Light + dark mode supported (separate toggle from palette).
 - [x] Phase 4: Clients (companies/persons, contacts, passport uploads, search/sort/paginate)
 - [x] Phase 5: Templates (CRUD, field definitions, labels per language)
 - [x] Phase 6: Document Designer (block-based + Word template with placeholders)
-- [ ] Phase 7: Jobs
+- [x] Phase 7: Jobs (CRUD, status workflow, pricing, files, user assignment)
 - [ ] Phase 8: Documents
 - [ ] Phase 9: Word Export
 - [ ] Phase 10: Invoicing
