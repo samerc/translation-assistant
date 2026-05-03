@@ -95,6 +95,44 @@ export class TemplatesService {
       throw new BadRequestException('This template is not a Word-based template');
     }
 
+    // Scan for placeholders before accepting
+    const buffer = readFileSync(file.path);
+    const result = await mammoth.convertToHtml({ buffer });
+    const rawText = result.value.replace(/<[^>]*>/g, '');
+
+    const validRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+    const placeholders: string[] = [];
+    let match;
+    while ((match = validRegex.exec(rawText)) !== null) {
+      if (!placeholders.includes(match[1])) placeholders.push(match[1]);
+    }
+
+    // Check for malformed placeholders
+    const allBracesRegex = /\{([^}]*)\}/g;
+    const malformed: string[] = [];
+    while ((match = allBracesRegex.exec(rawText)) !== null) {
+      const inner = match[1];
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(inner)) {
+        malformed.push(`{${inner}}`);
+      }
+    }
+
+    if (malformed.length > 0) {
+      const { unlinkSync } = await import('fs');
+      unlinkSync(file.path);
+      throw new BadRequestException(
+        `Word file contains malformed placeholders: ${malformed.join(', ')}. Fix them and re-upload.`,
+      );
+    }
+
+    if (placeholders.length === 0) {
+      const { unlinkSync } = await import('fs');
+      unlinkSync(file.path);
+      throw new BadRequestException(
+        'No placeholders found in the Word file. Add placeholders like {full_name} where field values should go.',
+      );
+    }
+
     template.wordFilePath = file.path;
     template.wordFileName = file.originalname;
     await this.templateRepository.save(template);
