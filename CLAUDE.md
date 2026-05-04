@@ -50,17 +50,31 @@ translation-assistant/
 - 3 default roles: Admin (all permissions), Translator (CRUD on core resources), Viewer (read-only)
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
 - Auth endpoints rate-limited (5 login attempts / 3 register attempts per minute)
+- Invite-only registration: admin generates invite tokens via `POST /api/auth/invite`
+- Invite tokens are email-bound, one-time use, 7-day expiry
+
+## Security
+- All IDs are UUIDs (not sequential integers) — prevents enumeration
+- Job access control: `JobAccessGuard` checks user assignment, admins bypass
+- View-only users blocked from write operations on jobs
+- File uploads validated against allowed types and max size
+- Filenames sanitized (basename extraction) to prevent path traversal
+- JWT token for file viewing passed via query param (not stored in URLs)
+- Pagination limits enforced server-side (max 100)
+- Client deletion prevented when jobs are linked
+- Centralized frontend logger (ready for Sentry/external service)
 
 ## Conventions
 - All API routes prefixed with `/api/`
 - RBAC permissions follow `resource:action` format (e.g., `clients:create`)
-- Database migrations managed via ORM
+- Database migrations managed via ORM (synchronize in dev, migrations in prod)
 - All tables searchable and sortable
 - File uploads validated against allowed types and max size (configurable in settings)
 - Security-first: input validation, parameterized queries, rate limiting, CSRF protection
+- Font: Plus Jakarta Sans (body), JetBrains Mono (code/monospace)
 
 ## Color Palettes
-Four palettes available (user selects in profile settings):
+Four palettes available (user selects in Settings > Appearance):
 - **Indigo Minimal** (default): Primary `#4F46E5`, Accent `#818CF8`
 - **Ocean Blue**: Primary `#1E40AF`, Accent `#3B82F6`
 - **Teal Focus**: Primary `#0D9488`, Accent `#2DD4BF`
@@ -74,6 +88,7 @@ Light + dark mode supported (separate toggle from palette).
 - **User** — email, password (bcrypt), firstName, lastName, avatar, isActive, colorPalette, darkMode, roleId, refreshToken
 - **Role** — name, description. M2M with Permission via `role_permissions`
 - **Permission** — resource, action (e.g., `clients:create`)
+- **InviteToken** — token, email, roleId, expiresAt, used, usedByUserId
 
 ### Settings
 - **AppSettings** — companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON)
@@ -89,13 +104,27 @@ Light + dark mode supported (separate toggle from palette).
 - **PassportCopy** — label, filePath, originalName, mimeType, fileSize. Reference images for name spellings.
 
 ### Templates
-- **Template** — type (designer/word), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive
+- **Template** — type (designer/word/simple), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive
   - **Designer type**: layout built with block-based designer, stored in layoutJson
   - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
+  - **Simple type**: pricing only, no fields or layout (used for freeform jobs)
 - **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey
   - Fields with same `groupKey` form a repeatable set (e.g., family extract rows)
   - Fields with no `groupKey` are fixed (appear once)
 - **TemplateFieldLabel** — label text per language per field (M2O to Language)
+
+### Jobs
+- **Job** — jobNumber (auto: JOB-0001), type (template/freeform), title, description, clientId, contactId, sourceLanguageId, targetLanguageId (nullable for non-translation), status, deadline, calculatedTotal, finalPrice, isFreeOfCharge, freeOfChargeReason, paymentCurrency, paymentAmount, notes
+  - Status flow: quote → accepted → in_progress → delivered → invoiced → paid (+ lost, cancelled)
+  - Locked when delivered/invoiced/paid — reopen to edit
+  - Documents auto-created for non-simple template line items
+- **JobLineItem** — jobId, templateId, description, pageCount, pricePerPage, discountedPricePerPage, useDiscountedPrice, lineTotal
+- **JobUser** — jobId, userId, permissionLevel (view/edit). Controls job access.
+- **JobFile** — jobId, category (source/translated), fileName, filePath, fileSize, mimeType, linkedFromJobId
+
+### Documents
+- **Document** — jobId, templateId, status (draft/completed), clonedFromId
+- **DocumentFieldValue** — documentId, templateFieldId, pageNumber, entryIndex, value
 
 ## API Endpoints
 
@@ -105,6 +134,7 @@ Light + dark mode supported (separate toggle from palette).
 - `POST /refresh` — Refresh access token
 - `POST /logout` — Invalidate refresh token
 - `GET /profile` — Get current user
+- `POST /invite` — Generate invite token (admin only)
 
 ### Users (`/api/users`)
 - Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`
@@ -132,11 +162,16 @@ Light + dark mode supported (separate toggle from palette).
 - Full CRUD with search, isActive filter, sort
 - `POST/PATCH/DELETE /:id/fields/:fieldId` — Template fields
 - `PATCH /:id/fields/reorder` — Reorder fields
+- `POST /:id/upload-word` — Upload Word template file
+- `GET /:id/word-preview` — Get HTML preview + placeholder validation
+- `POST /:id/word-placeholders` — Auto-create fields from placeholders
 
 ### Jobs (`/api/jobs`)
 - Full CRUD with search, status filter, client filter, sort, pagination
 - `PATCH /:id/status` — Update job status
+- `POST /:id/reopen` — Reopen a locked job
 - `POST/DELETE /:id/users/:userId` — Assign/remove users
+- `POST/PATCH/DELETE /:id/line-items/:itemId` — Job line items
 - `POST /:id/files` — Upload source/translated files (with FileValidationPipe)
 - `POST /:id/files/link` — Link file from another job
 - `DELETE /:id/files/:fileId` — Remove file
@@ -149,6 +184,7 @@ Light + dark mode supported (separate toggle from palette).
 - `POST /:id/save-values` — Save all field values (replace)
 - `PATCH /:id/status` — Mark draft/completed
 - `POST /:id/clone` — Clone document to another job
+- `POST /:id/export` — Export to .docx (designer: generate, word: replace placeholders)
 - `DELETE /:id` — Remove document
 
 ### Translate (`/api/translate`)
@@ -156,22 +192,23 @@ Light + dark mode supported (separate toggle from palette).
 
 ## Frontend Pages
 - `/login` — Login page (public)
-- `/` — Dashboard with summary cards, theme preview
+- `/` — Dashboard with summary cards
 - `/clients` — Client list with search, type filter, sort, pagination
-- `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab placeholder)
-- `/templates` — Template list as card grid
-- `/templates/:id` — Template detail (Fields tab with grouped display, Settings tab)
+- `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)
+- `/templates` — Template list (table + card view toggle, search, status filter, sort)
+- `/templates/:id` — Template detail (Fields tab with inline table editor, Layout Designer tab, Word Template tab, Settings tab)
 - `/jobs` — Jobs list with search, status filter, sort, pagination
-- `/jobs/new` — Create job form (type, client, languages, pricing, deadline)
+- `/jobs/new` — Create job form (type, client, languages, line items with template selection, pricing, deadline)
 - `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files)
-- `/documents/:id` — Document fill page (template fields, GT popup, save/complete)
-- `/settings` — Settings page (General, Languages, Labels, File Uploads tabs)
+- `/documents/:id` — Document fill page (template fields, GT popup, save/complete/export)
+- `/settings` — Settings page (General, Languages, Labels, File Uploads, Appearance tabs)
 
 ## File Upload Validation
 - `FileValidationPipe` checks every upload against:
   - `maxUploadSizeMb` from AppSettings
   - `allowedFileTypes` from AppSettings (if list is non-empty, only those extensions accepted)
-- Applied to passport copy uploads (and future upload endpoints)
+- Applied to passport copy uploads and job file uploads
+- Word template uploads additionally validated for placeholders (reject if none or malformed)
 
 ## Build Phases
 - [x] Phase 1: Project setup
