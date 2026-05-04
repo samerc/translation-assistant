@@ -5,6 +5,8 @@ import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
 import { JobFile } from './entities/job-file.entity.js';
 import { JobLineItem } from './entities/job-line-item.entity.js';
+import { Document } from '../documents/entities/document.entity.js';
+import { Template } from '../templates/entities/template.entity.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
 
 @Injectable()
@@ -18,6 +20,10 @@ export class JobsService {
     private readonly jobFileRepository: Repository<JobFile>,
     @InjectRepository(JobLineItem)
     private readonly lineItemRepository: Repository<JobLineItem>,
+    @InjectRepository(Document)
+    private readonly documentRepository: Repository<Document>,
+    @InjectRepository(Template)
+    private readonly templateRepository: Repository<Template>,
   ) {}
 
   private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
@@ -134,6 +140,22 @@ export class JobsService {
         }),
       );
       await this.lineItemRepository.save(items);
+    }
+
+    // Auto-create documents for non-simple templates
+    if (dto.type !== 'freeform' && dto.lineItems?.length) {
+      const templateIds = dto.lineItems
+        .map((li) => li.templateId)
+        .filter(Boolean) as string[];
+
+      for (const templateId of templateIds) {
+        const template = await this.templateRepository.findOne({ where: { id: templateId } });
+        if (template && template.type !== 'simple') {
+          await this.documentRepository.save(
+            this.documentRepository.create({ jobId: saved.id, templateId }),
+          );
+        }
+      }
     }
 
     // Recalculate total
