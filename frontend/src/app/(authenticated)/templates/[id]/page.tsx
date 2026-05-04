@@ -191,20 +191,31 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   // ── Delete ──
   const handleDelete = async (fieldId: string) => {
     if (!confirm('Delete this field?')) return;
-    await api.delete(`/templates/${template.id}/fields/${fieldId}`);
-    selected.delete(fieldId);
-    setSelected(new Set(selected));
-    onUpdate();
+    try {
+      await api.delete(`/templates/${template.id}/fields/${fieldId}`);
+      selected.delete(fieldId);
+      setSelected(new Set(selected));
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to delete field', err, 'templates');
+      alert('Failed to delete field');
+    }
   };
 
   const handleDeleteSelected = async () => {
     if (selected.size === 0) return;
     if (!confirm(`Delete ${selected.size} selected field(s)?`)) return;
-    for (const id of selected) {
-      await api.delete(`/templates/${template.id}/fields/${id}`);
+    try {
+      for (const id of selected) {
+        await api.delete(`/templates/${template.id}/fields/${id}`);
+      }
+      setSelected(new Set());
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to delete selected fields', err, 'templates');
+      alert('Failed to delete some fields');
+      onUpdate();
     }
-    setSelected(new Set());
-    onUpdate();
   };
 
   // ── Bulk group assign ──
