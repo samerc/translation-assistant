@@ -25,6 +25,7 @@ export default function DocumentFillPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string } | null>(null);
+  const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
 
   useEffect(() => {
     api.get<Doc>(`/documents/${id}`).then((d) => {
@@ -37,6 +38,27 @@ export default function DocumentFillPage() {
         map[key] = fv.value;
       });
       setValues(map);
+
+      // Count existing entries per group
+      const groupFields: Record<string, TemplateField[]> = {};
+      d.template.fields.filter((f) => f.groupKey).forEach((f) => {
+        if (!groupFields[f.groupKey!]) groupFields[f.groupKey!] = [];
+        groupFields[f.groupKey!].push(f);
+      });
+      const counts: Record<string, number> = {};
+      Object.keys(groupFields).forEach((gk) => {
+        const firstField = groupFields[gk][0];
+        let max = 0;
+        Object.keys(map).forEach((k) => {
+          if (k.startsWith(`${firstField.id}_`)) {
+            const parts = k.split('_');
+            const entry = parseInt(parts[2]) || 0;
+            if (entry > max) max = entry;
+          }
+        });
+        counts[gk] = Math.max(max + 1, 1);
+      });
+      setGroupEntries(counts);
     }).catch((err) => { logger.error('Failed to load document', err, 'documents'); router.push('/jobs'); });
   }, [id]);
 
@@ -135,24 +157,7 @@ export default function DocumentFillPage() {
     }
   };
 
-  // Repeatable group entries tracking
-  const [groupEntries, setGroupEntries] = useState<Record<string, number>>(() => {
-    // Count existing entries per group from loaded values
-    const counts: Record<string, number> = {};
-    Object.keys(groups).forEach((gk) => {
-      const firstField = groups[gk][0];
-      let max = 0;
-      Object.keys(values).forEach((k) => {
-        if (k.startsWith(`${firstField.id}_`)) {
-          const parts = k.split('_');
-          const entry = parseInt(parts[2]) || 0;
-          if (entry > max) max = entry;
-        }
-      });
-      counts[gk] = Math.max(max + 1, 1);
-    });
-    return counts;
-  });
+  // Repeatable group entries tracking (state initialized in useEffect above)
 
   const addGroupEntry = (groupKey: string) => {
     setGroupEntries({ ...groupEntries, [groupKey]: (groupEntries[groupKey] || 1) + 1 });
