@@ -1,9 +1,12 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  UseGuards,
+  Controller, Get, Post, Patch, Delete, Body, Param, Query, Res,
+  UseGuards, NotFoundException,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { createReadStream, existsSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { DocumentsService } from './documents.service.js';
+import { ExportService } from './export.service.js';
 import { CreateDocumentDto, SaveFieldValuesDto, UpdateDocumentStatusDto } from './dto/document.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -11,7 +14,10 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
+  constructor(
+    private readonly documentsService: DocumentsService,
+    private readonly exportService: ExportService,
+  ) {}
 
   @Get('by-job/:jobId')
   @RequirePermissions('documents:read')
@@ -68,6 +74,24 @@ export class DocumentsController {
     @Body('jobId') jobId: string,
   ) {
     return this.documentsService.clone(id, jobId);
+  }
+
+  @Post(':id/export')
+  @RequirePermissions('documents:read')
+  async exportDocument(
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { filePath, fileName } = await this.exportService.exportDocument(id);
+
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('Export file not found');
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    const stream = createReadStream(filePath);
+    stream.pipe(res);
   }
 
   @Delete(':id')

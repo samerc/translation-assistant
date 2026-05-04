@@ -182,7 +182,7 @@ Light + dark mode supported (separate toggle from palette).
 - [x] Phase 6: Document Designer (block-based + Word template with placeholders)
 - [x] Phase 7: Jobs (CRUD, status workflow, pricing, files, user assignment)
 - [x] Phase 8: Documents (fill templates, GT popup, clone, repeatable groups)
-- [ ] Phase 9: Word Export
+- [x] Phase 9: Word Export (designer layout + Word placeholder replacement)
 - [ ] Phase 10: Invoicing
 - [ ] Phase 11: Calendar
 - [ ] Phase 12: Notifications

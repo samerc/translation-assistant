@@ -101,6 +101,40 @@ export default function DocumentFillPage() {
     router.push(`/jobs/${doc.jobId}`);
   };
 
+  const handleExport = async () => {
+    await handleSave();
+    const token = localStorage.getItem('accessToken');
+    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/documents/${doc.id}/export`;
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ message: 'Export failed' }));
+        setMessage(data.message || 'Export failed');
+        return;
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'export.docx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      setMessage('Exported successfully');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      logger.error('Export failed', err, 'documents');
+      setMessage('Export failed');
+    }
+  };
+
   // Repeatable group entries tracking
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>(() => {
     // Count existing entries per group from loaded values
@@ -202,6 +236,12 @@ export default function DocumentFillPage() {
             className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
             Save & Complete
           </button>
+          {doc.template.type !== 'simple' && (
+            <button onClick={handleExport}
+              className="px-4 py-2 bg-bg border border-border text-text rounded-lg text-sm font-medium hover:bg-border/50">
+              Export .docx
+            </button>
+          )}
         </div>
       </div>
 
