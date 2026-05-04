@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 interface Language { id: string; code: string; name: string; direction: string; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -36,7 +37,7 @@ export default function DocumentFillPage() {
         map[key] = fv.value;
       });
       setValues(map);
-    }).catch(() => router.push('/jobs'));
+    }).catch((err) => { logger.error('Failed to load document', err, 'documents'); router.push('/jobs'); });
   }, [id]);
 
   if (!doc || !job) {

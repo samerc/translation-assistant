@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 interface Language { id: string; code: string; name: string; direction: string; isActive: boolean; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -34,7 +35,7 @@ export default function TemplateDetailPage() {
   const [languages, setLanguages] = useState<Language[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('fields');
 
-  const loadTemplate = () => { api.get<Template>(`/templates/${id}`).then(setTemplate).catch(() => router.push('/templates')); };
+  const loadTemplate = () => { api.get<Template>(`/templates/${id}`).then(setTemplate).catch((err) => { logger.error('Failed to load template', err, 'templates'); router.push('/templates'); }); };
   const loadLanguages = () => { api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive))); };
 
   useEffect(() => { loadTemplate(); loadLanguages(); }, [id]);
@@ -863,7 +864,8 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
     try {
       const data = await api.get<WordPreview>(`/templates/${template.id}/word-preview`);
       setPreview(data);
-    } catch {
+    } catch (err) {
+      logger.error('Failed to load preview', err, 'templates');
       setError('Failed to load preview');
     }
     setLoadingPreview(false);
@@ -897,7 +899,8 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
         fileInput.value = '';
         onUpdate();
       }
-    } catch {
+    } catch (err) {
+      logger.error('Word template upload failed', err, 'templates');
       setError('Upload failed');
     }
     setUploading(false);

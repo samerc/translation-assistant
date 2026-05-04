@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -46,7 +47,7 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('details');
 
-  const loadJob = () => { api.get<Job>(`/jobs/${id}`).then(setJob).catch(() => router.push('/jobs')); };
+  const loadJob = () => { api.get<Job>(`/jobs/${id}`).then(setJob).catch((err) => { logger.error('Failed to load job', err, 'jobs'); router.push('/jobs'); }); };
   useEffect(() => { loadJob(); }, [id]);
 
   if (!job) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
@@ -392,7 +393,7 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
         fileInput.value = '';
         onUpdate();
       }
-    } catch { setError('Upload failed'); }
+    } catch (err) { logger.error('Upload failed', err, 'jobs'); setError('Upload failed'); }
     setUploading(false);
   };
 

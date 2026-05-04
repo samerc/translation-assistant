@@ -323,11 +323,10 @@ export class TemplatesService {
     fieldIds: string[],
   ): Promise<void> {
     await this.findOne(templateId);
-    for (let i = 0; i < fieldIds.length; i++) {
-      await this.fieldRepository.update(
-        { id: fieldIds[i], templateId },
-        { sortOrder: i },
-      );
-    }
+    await Promise.all(
+      fieldIds.map((id, i) =>
+        this.fieldRepository.update({ id, templateId }, { sortOrder: i }),
+      ),
+    );
   }
 }

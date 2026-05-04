@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { logger } from '@/lib/logger';
 
 interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
 interface ClientPhone { id: string; phone: string; label: string | null; isPrimary: boolean; }
@@ -32,7 +33,7 @@ export default function ClientDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   const loadClient = () => {
-    api.get<Client>(`/clients/${id}`).then(setClient).catch(() => router.push('/clients'));
+    api.get<Client>(`/clients/${id}`).then(setClient).catch((err) => { logger.error('Failed to load client', err, 'clients'); router.push('/clients'); });
   };
 
   useEffect(() => { loadClient(); }, [id]);
@@ -482,7 +483,8 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
       setLabel('');
       fileInput.value = '';
       onUpdate();
-    } catch {
+    } catch (err) {
+      logger.error('Upload failed', err, 'clients');
       setError('Upload failed. Please try again.');
     }
     setUploading(false);

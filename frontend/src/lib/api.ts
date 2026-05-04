@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
 
 interface ApiOptions {
@@ -88,7 +90,8 @@ async function tryRefresh(): Promise<boolean> {
     localStorage.setItem('accessToken', data.accessToken);
     localStorage.setItem('refreshToken', data.refreshToken);
     return true;
-  } catch {
+  } catch (err) {
+    logger.error('Token refresh failed', err, 'api');
     return false;
   }
 }

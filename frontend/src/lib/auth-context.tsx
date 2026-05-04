@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { api } from './api';
+import { logger } from './logger';
 
 interface UserRole {
   id: string;
@@ -47,7 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       api
         .get<AuthUser>('/auth/profile')
         .then(setUser)
-        .catch(() => {
+        .catch((err) => {
+          logger.error('Profile fetch failed', err, 'auth');
           localStorage.removeItem('accessToken');
           localStorage.removeItem('refreshToken');
         })
@@ -67,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
-    } catch {
-      // Ignore errors on logout
+    } catch (err) {
+      logger.error('Logout request failed', err, 'auth');
     }
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');

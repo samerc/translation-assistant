@@ -59,12 +59,9 @@ export class JobsService {
     const qb = this.jobRepository
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.client', 'client')
-      .leftJoinAndSelect('job.contact', 'contact')
       .leftJoinAndSelect('job.sourceLanguage', 'sourceLang')
       .leftJoinAndSelect('job.targetLanguage', 'targetLang')
-      .leftJoinAndSelect('job.lineItems', 'lineItems')
-      .leftJoinAndSelect('job.assignedUsers', 'assignedUsers')
-      .leftJoinAndSelect('assignedUsers.user', 'assignedUser');
+      .leftJoinAndSelect('job.lineItems', 'lineItems');
 
     if (search) {
       qb.andWhere('(job.title LIKE :search OR job.jobNumber LIKE :search OR client.name LIKE :search)', { search: `%${search}%` });
@@ -121,25 +118,22 @@ export class JobsService {
 
     const saved = await this.jobRepository.save(job);
 
-    // Create line items
+    // Create line items (batch save)
     if (dto.lineItems?.length) {
-      for (let i = 0; i < dto.lineItems.length; i++) {
-        const li = dto.lineItems[i];
-        const lineTotal = this.calculateLineTotal(li);
-        await this.lineItemRepository.save(
-          this.lineItemRepository.create({
-            jobId: saved.id,
-            description: li.description,
-            templateId: li.templateId,
-            pageCount: li.pageCount,
-            pricePerPage: li.pricePerPage,
-            useDiscountedPrice: li.useDiscountedPrice,
-            discountedPricePerPage: li.discountedPricePerPage,
-            lineTotal,
-            sortOrder: i,
-          }),
-        );
-      }
+      const items = dto.lineItems.map((li, i) =>
+        this.lineItemRepository.create({
+          jobId: saved.id,
+          description: li.description,
+          templateId: li.templateId,
+          pageCount: li.pageCount,
+          pricePerPage: li.pricePerPage,
+          useDiscountedPrice: li.useDiscountedPrice,
+          discountedPricePerPage: li.discountedPricePerPage,
+          lineTotal: this.calculateLineTotal(li),
+          sortOrder: i,
+        }),
+      );
+      await this.lineItemRepository.save(items);
     }
 
     // Recalculate total
