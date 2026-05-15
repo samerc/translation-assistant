@@ -7,6 +7,8 @@ import { JobFile } from './entities/job-file.entity.js';
 import { JobLineItem } from './entities/job-line-item.entity.js';
 import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
+import { Client } from '../clients/entities/client.entity.js';
+import { Language } from '../settings/entities/language.entity.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
 
 @Injectable()
@@ -24,6 +26,10 @@ export class JobsService {
     private readonly documentRepository: Repository<Document>,
     @InjectRepository(Template)
     private readonly templateRepository: Repository<Template>,
+    @InjectRepository(Client)
+    private readonly clientRepository: Repository<Client>,
+    @InjectRepository(Language)
+    private readonly languageRepository: Repository<Language>,
   ) {}
 
   private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
@@ -102,6 +108,27 @@ export class JobsService {
   }
 
   async create(dto: CreateJobDto, userId: string): Promise<Job> {
+    // Validate referenced entities exist
+    const client = await this.clientRepository.findOne({ where: { id: dto.clientId } });
+    if (!client) throw new BadRequestException('Client not found');
+
+    const sourceLang = await this.languageRepository.findOne({ where: { id: dto.sourceLanguageId } });
+    if (!sourceLang) throw new BadRequestException('Source language not found');
+
+    if (dto.targetLanguageId) {
+      const targetLang = await this.languageRepository.findOne({ where: { id: dto.targetLanguageId } });
+      if (!targetLang) throw new BadRequestException('Target language not found');
+    }
+
+    if (dto.lineItems?.length) {
+      for (const li of dto.lineItems) {
+        if (li.templateId) {
+          const template = await this.templateRepository.findOne({ where: { id: li.templateId } });
+          if (!template) throw new BadRequestException(`Template not found for line item "${li.description}"`);
+        }
+      }
+    }
+
     const jobNumber = await this.generateJobNumber();
 
     const job = this.jobRepository.create({

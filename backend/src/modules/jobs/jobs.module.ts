@@ -9,11 +9,13 @@ import { JobLineItem } from './entities/job-line-item.entity.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
+import { Client } from '../clients/entities/client.entity.js';
+import { Language } from '../settings/entities/language.entity.js';
 import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
 import { JobAccessGuard } from '../../common/guards/job-access.guard.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Job, JobUser, JobFile, JobLineItem, AppSettings, Document, Template])],
+  imports: [TypeOrmModule.forFeature([Job, JobUser, JobFile, JobLineItem, AppSettings, Document, Template, Client, Language])],
   controllers: [JobsController],
   providers: [JobsService, FileValidationPipe, JobAccessGuard],
   exports: [JobsService],
