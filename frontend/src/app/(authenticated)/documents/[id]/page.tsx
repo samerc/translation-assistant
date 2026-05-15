@@ -26,6 +26,16 @@ export default function DocumentFillPage() {
   const [message, setMessage] = useState('');
   const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string } | null>(null);
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
+  const [dirty, setDirty] = useState(false);
+
+  // Warn on unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty) { e.preventDefault(); }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   useEffect(() => {
     api.get<Doc>(`/documents/${id}`).then((d) => {
@@ -84,6 +94,7 @@ export default function DocumentFillPage() {
 
   const setValue = (fieldId: string, page: number, value: string, entry?: number) => {
     setValues({ ...values, [getValueKey(fieldId, page, entry)]: value });
+    setDirty(true);
   };
 
   const getFieldLabel = (field: TemplateField): { target: string; source: string } => {
@@ -114,6 +125,7 @@ export default function DocumentFillPage() {
     await api.post(`/documents/${doc.id}/save-values`, { values: fieldValues });
     setMessage('Saved');
     setSaving(false);
+    setDirty(false);
     setTimeout(() => setMessage(''), 3000);
   };
 

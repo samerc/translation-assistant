@@ -29,6 +29,18 @@ const STATUSES = [
   { value: 'lost', label: 'Lost' }, { value: 'cancelled', label: 'Cancelled' },
 ];
 
+// Valid next statuses from each state
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  quote: ['accepted', 'in_progress', 'lost', 'cancelled'],
+  accepted: ['in_progress', 'lost', 'cancelled'],
+  in_progress: ['delivered', 'cancelled'],
+  delivered: ['invoiced', 'paid'],
+  invoiced: ['paid'],
+  paid: [],
+  lost: ['quote', 'in_progress'],
+  cancelled: ['quote', 'in_progress'],
+};
+
 const statusColor = (s: string) => {
   const map: Record<string, string> = {
     quote: 'bg-sky-100 text-sky-700', accepted: 'bg-teal-100 text-teal-700',
@@ -114,7 +126,10 @@ export default function JobDetailPage() {
         <div className="flex gap-2">
           <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
             className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-            {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {STATUSES.map((s) => {
+              const allowed = s.value === job.status || (VALID_TRANSITIONS[job.status] || []).includes(s.value);
+              return <option key={s.value} value={s.value} disabled={!allowed}>{s.label}{!allowed ? ' (N/A)' : ''}</option>;
+            })}
           </select>
           <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">Delete</button>
         </div>

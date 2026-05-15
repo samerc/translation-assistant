@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useSidebar } from '@/lib/sidebar-context';
 
 const navItems = [
   { label: 'Dashboard', href: '/', icon: DashboardIcon },
@@ -20,7 +20,7 @@ const bottomItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggle } = useSidebar();
 
   return (
     <aside
@@ -36,7 +36,7 @@ export default function Sidebar() {
           </span>
         )}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggle}
           className="ml-auto text-sidebar-text hover:text-white p-1"
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >

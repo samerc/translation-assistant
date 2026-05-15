@@ -1,18 +1,25 @@
 'use client';
 
 import { useTheme } from '@/lib/theme-context';
+import { useAuth } from '@/lib/auth-context';
+import { useSidebar } from '@/lib/sidebar-context';
 
 export default function Topbar() {
   const { darkMode, toggleDarkMode } = useTheme();
+  const { user } = useAuth();
+  const { collapsed } = useSidebar();
+
+  const initials = user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : '?';
 
   return (
-    <header className="fixed top-0 right-0 left-56 h-14 bg-surface border-b border-border flex items-center justify-between px-6 z-10 transition-all">
-      {/* Search */}
+    <header className={`fixed top-0 right-0 h-14 bg-surface border-b border-border flex items-center justify-between px-6 z-10 transition-all duration-200 ${collapsed ? 'left-16' : 'left-56'}`}>
+      {/* Search placeholder — will be implemented in Phase 14 */}
       <div className="relative flex-1 max-w-md">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
         <input
           type="text"
-          placeholder="Search clients, jobs, documents..."
+          placeholder="Search (coming soon)"
+          disabled
           className="w-full pl-10 pr-4 py-2 bg-bg border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         />
       </div>
@@ -28,18 +35,18 @@ export default function Topbar() {
           {darkMode ? <SunIcon className="w-5 h-5" /> : <MoonIcon className="w-5 h-5" />}
         </button>
 
-        {/* Notifications */}
+        {/* Notifications — placeholder, will be implemented in Phase 12 */}
         <button
-          className="relative p-2 rounded-lg text-text-secondary hover:bg-bg transition-colors"
-          aria-label="Notifications"
+          className="relative p-2 rounded-lg text-text-muted cursor-default"
+          aria-label="Notifications (coming soon)"
+          title="Notifications (coming soon)"
         >
           <BellIcon className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full" />
         </button>
 
         {/* User avatar */}
-        <button className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-semibold">
-          S
+        <button className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-semibold" title={user ? `${user.firstName} ${user.lastName}` : ''}>
+          {initials}
         </button>
       </div>
     </header>
