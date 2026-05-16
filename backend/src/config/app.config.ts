@@ -11,7 +11,7 @@ export const appConfig = () => ({
     refreshTokenTtl: parseInt(process.env.JWT_REFRESH_TTL || '604800', 10), // 7 days
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3080',
   },
   upload: {
     maxSizeMb: parseInt(process.env.UPLOAD_MAX_SIZE_MB || '5', 10),
