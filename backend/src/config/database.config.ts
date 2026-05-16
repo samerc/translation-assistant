@@ -8,7 +8,7 @@ export const databaseConfig = (): TypeOrmModuleOptions => ({
   password: process.env.DB_PASSWORD || 'translation_pass',
   database: process.env.DB_DATABASE || 'translation_assistant',
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-  synchronize: process.env.NODE_ENV !== 'production',
+  synchronize: true, // TODO: use migrations in production once schema is stable
   charset: 'utf8mb4',
   logging: process.env.NODE_ENV === 'development',
 });

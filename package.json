@@ -7,6 +7,7 @@
     "dev:backend": "cd backend && npm run start:dev",
     "dev:frontend": "cd frontend && npm run dev",
     "build": "concurrently \"cd backend && npm run build\" \"cd frontend && npm run build\"",
+    "deploy": "bash ./deploy.sh",
     "install:all": "cd backend && npm install && cd ../frontend && npm install"
   },
   "repository": {
