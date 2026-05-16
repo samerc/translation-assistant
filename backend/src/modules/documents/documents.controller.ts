@@ -10,6 +10,8 @@ import { ExportService } from './export.service.js';
 import { CreateDocumentDto, SaveFieldValuesDto, UpdateDocumentStatusDto } from './dto/document.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { User } from '../users/entities/user.entity.js';
 
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -19,60 +21,77 @@ export class DocumentsController {
     private readonly exportService: ExportService,
   ) {}
 
+  private isAdmin(user: User): boolean {
+    return user.role?.name === 'Admin';
+  }
+
   @Get('by-job/:jobId')
   @RequirePermissions('documents:read')
-  findByJob(@Param('jobId') jobId: string) {
+  async findByJob(@Param('jobId') jobId: string, @CurrentUser() user: User) {
+    await this.documentsService.verifyJobAccess(jobId, user.id, this.isAdmin(user));
     return this.documentsService.findByJob(jobId);
   }
 
   @Get('search-clone')
   @RequirePermissions('documents:read')
   searchForClone(
+    @CurrentUser() user: User,
     @Query('templateId') templateId?: string,
     @Query('search') search?: string,
   ) {
     return this.documentsService.searchForClone({
       templateId: templateId || undefined,
       search,
+      userId: user.id,
+      isAdmin: this.isAdmin(user),
     });
   }
 
   @Get(':id')
   @RequirePermissions('documents:read')
-  findOne(@Param('id') id: string) {
-    return this.documentsService.findOne(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
   }
 
   @Post()
   @RequirePermissions('documents:create')
-  create(@Body() dto: CreateDocumentDto) {
+  async create(@Body() dto: CreateDocumentDto, @CurrentUser() user: User) {
+    await this.documentsService.verifyJobAccess(dto.jobId, user.id, this.isAdmin(user));
     return this.documentsService.create(dto);
   }
 
   @Post(':id/save-values')
   @RequirePermissions('documents:update')
-  saveFieldValues(
+  async saveFieldValues(
     @Param('id') id: string,
     @Body() dto: SaveFieldValuesDto,
+    @CurrentUser() user: User,
   ) {
+    await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
     return this.documentsService.saveFieldValues(id, dto.values);
   }
 
   @Patch(':id/status')
   @RequirePermissions('documents:update')
-  updateStatus(
+  async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateDocumentStatusDto,
+    @CurrentUser() user: User,
   ) {
+    await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
     return this.documentsService.updateStatus(id, dto.status);
   }
 
   @Post(':id/clone')
   @RequirePermissions('documents:create')
-  clone(
+  async clone(
     @Param('id') id: string,
     @Body('jobId') jobId: string,
+    @CurrentUser() user: User,
   ) {
+    // Verify access to both source document's job AND target job
+    await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
+    await this.documentsService.verifyJobAccess(jobId, user.id, this.isAdmin(user));
     return this.documentsService.clone(id, jobId);
   }
 
@@ -81,7 +100,9 @@ export class DocumentsController {
   async exportDocument(
     @Param('id') id: string,
     @Res() res: Response,
+    @CurrentUser() user: User,
   ) {
+    await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
     const { filePath, fileName } = await this.exportService.exportDocument(id);
 
     if (!existsSync(filePath)) {
@@ -96,7 +117,8 @@ export class DocumentsController {
 
   @Delete(':id')
   @RequirePermissions('documents:delete')
-  remove(@Param('id') id: string) {
+  async remove(@Param('id') id: string, @CurrentUser() user: User) {
+    await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
     return this.documentsService.remove(id);
   }
 }

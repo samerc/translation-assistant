@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Document } from './entities/document.entity.js';
 import { DocumentFieldValue } from './entities/document-field-value.entity.js';
+import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { CreateDocumentDto, FieldValueDto } from './dto/document.dto.js';
 
 @Injectable()
@@ -12,7 +13,25 @@ export class DocumentsService {
     private readonly documentRepository: Repository<Document>,
     @InjectRepository(DocumentFieldValue)
     private readonly fieldValueRepository: Repository<DocumentFieldValue>,
+    @InjectRepository(JobUser)
+    private readonly jobUserRepository: Repository<JobUser>,
   ) {}
+
+  async verifyJobAccess(jobId: string, userId: string, isAdmin: boolean): Promise<void> {
+    if (isAdmin) return;
+    const assignment = await this.jobUserRepository.findOne({
+      where: { jobId, userId },
+    });
+    if (!assignment) {
+      throw new ForbiddenException('You do not have access to this job');
+    }
+  }
+
+  async verifyDocumentAccess(documentId: string, userId: string, isAdmin: boolean): Promise<Document> {
+    const doc = await this.findOne(documentId);
+    await this.verifyJobAccess(doc.jobId, userId, isAdmin);
+    return doc;
+  }
 
   async findByJob(jobId: string): Promise<Document[]> {
     return this.documentRepository.find({
@@ -115,6 +134,8 @@ export class DocumentsService {
     templateId?: string;
     search?: string;
     limit?: number;
+    userId?: string;
+    isAdmin?: boolean;
   }): Promise<Document[]> {
     const qb = this.documentRepository
       .createQueryBuilder('doc')
@@ -122,6 +143,11 @@ export class DocumentsService {
       .leftJoinAndSelect('doc.job', 'job')
       .leftJoinAndSelect('job.client', 'client')
       .where('doc.status = :status', { status: 'completed' });
+
+    // Non-admins can only see documents from their assigned jobs
+    if (query.userId && !query.isAdmin) {
+      qb.innerJoin('job_users', 'ju', 'ju.job_id = job.id AND ju.user_id = :userId', { userId: query.userId });
+    }
 
     if (query.templateId) {
       qb.andWhere('doc.template_id = :templateId', { templateId: query.templateId });

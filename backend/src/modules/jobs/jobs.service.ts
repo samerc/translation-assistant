@@ -63,6 +63,8 @@ export class JobsService {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
+    userId?: string;
+    isAdmin?: boolean;
   }) {
     const { search, status, clientId, type, sortBy = 'createdAt', sortOrder = 'DESC' } = query;
     const page = Math.max(1, query.page || 1);
@@ -74,6 +76,11 @@ export class JobsService {
       .leftJoinAndSelect('job.sourceLanguage', 'sourceLang')
       .leftJoinAndSelect('job.targetLanguage', 'targetLang')
       .leftJoinAndSelect('job.lineItems', 'lineItems');
+
+    // Non-admin users can only see jobs they are assigned to
+    if (query.userId && !query.isAdmin) {
+      qb.innerJoin('job.assignedUsers', 'jobUser', 'jobUser.user_id = :userId', { userId: query.userId });
+    }
 
     if (search) {
       qb.andWhere('(job.title LIKE :search OR job.jobNumber LIKE :search OR client.name LIKE :search)', { search: `%${search}%` });
@@ -295,6 +302,10 @@ export class JobsService {
   }
 
   // ── Job Users ──
+
+  async checkUserAssignment(jobId: string, userId: string): Promise<JobUser | null> {
+    return this.jobUserRepository.findOne({ where: { jobId, userId } });
+  }
 
   async assignUser(jobId: string, userId: string, permissionLevel: 'view' | 'edit' = 'edit'): Promise<JobUser> {
     await this.findOne(jobId);

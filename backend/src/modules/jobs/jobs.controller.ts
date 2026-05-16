@@ -31,6 +31,7 @@ export class JobsController {
   @Get()
   @RequirePermissions('jobs:read')
   findAll(
+    @CurrentUser() user: User,
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('clientId') clientId?: string,
@@ -45,6 +46,8 @@ export class JobsController {
       clientId: clientId || undefined,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
+      userId: user.id,
+      isAdmin: user.role?.name === 'Admin',
     });
   }
 
@@ -144,10 +147,19 @@ export class JobsController {
 
   @Post(':id/files/link')
   @RequirePermissions('jobs:update')
-  linkFile(
+  async linkFile(
     @Param('id') id: string,
     @Body() body: { sourceJobId: string; fileId: string },
+    @CurrentUser() user: User,
   ) {
+    // JobAccessGuard checks target job (:id). Also verify source job access.
+    const isAdmin = user.role?.name === 'Admin';
+    if (!isAdmin) {
+      const assignment = await this.jobsService.checkUserAssignment(body.sourceJobId, user.id);
+      if (!assignment) {
+        throw new (await import('@nestjs/common')).ForbiddenException('You do not have access to the source job');
+      }
+    }
     return this.jobsService.linkFile(id, body.sourceJobId, body.fileId);
   }
 
