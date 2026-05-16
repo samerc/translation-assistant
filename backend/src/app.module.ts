@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { appConfig } from './config/app.config.js';
 import { databaseConfig } from './config/database.config.js';
@@ -14,6 +15,11 @@ import { TemplatesModule } from './modules/templates/templates.module.js';
 import { JobsModule } from './modules/jobs/jobs.module.js';
 import { DocumentsModule } from './modules/documents/documents.module.js';
 import { TranslateModule } from './modules/translate/translate.module.js';
+import { InvoicesModule } from './modules/invoices/invoices.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
+import { CalendarModule } from './modules/calendar/calendar.module.js';
+import { ReportsModule } from './modules/reports/reports.module.js';
+import { SearchModule } from './modules/search/search.module.js';
 
 @Module({
   imports: [
@@ -30,6 +36,7 @@ import { TranslateModule } from './modules/translate/translate.module.js';
         },
       ],
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     UsersModule,
     RolesModule,
@@ -39,6 +46,11 @@ import { TranslateModule } from './modules/translate/translate.module.js';
     JobsModule,
     DocumentsModule,
     TranslateModule,
+    InvoicesModule,
+    NotificationsModule,
+    CalendarModule,
+    ReportsModule,
+    SearchModule,
   ],
   controllers: [],
   providers: [

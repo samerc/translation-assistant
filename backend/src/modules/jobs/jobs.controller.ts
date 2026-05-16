@@ -77,8 +77,8 @@ export class JobsController {
 
   @Patch(':id/status')
   @RequirePermissions('jobs:update')
-  updateStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.jobsService.updateStatus(id, status);
+  updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: User) {
+    return this.jobsService.updateStatus(id, status, user.id);
   }
 
   @Post(':id/reopen')

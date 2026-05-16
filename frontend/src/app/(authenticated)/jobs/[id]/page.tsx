@@ -53,14 +53,23 @@ const statusColor = (s: string) => {
 
 type Tab = 'details' | 'documents' | 'source-files' | 'translated-files';
 
+interface LinkedInvoice { id: string; invoiceNumber: string; status: string; total: number; currency: string; }
+
 export default function JobDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [job, setJob] = useState<Job | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('details');
+  const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([]);
 
   const loadJob = () => { api.get<Job>(`/jobs/${id}`).then(setJob).catch((err) => { logger.error('Failed to load job', err, 'jobs'); router.push('/jobs'); }); };
   useEffect(() => { loadJob(); }, [id]);
+
+  useEffect(() => {
+    api.get<LinkedInvoice[]>(`/invoices/by-job/${id}`)
+      .then(setLinkedInvoices)
+      .catch(() => setLinkedInvoices([]));
+  }, [id]);
 
   if (!job) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -121,9 +130,25 @@ export default function JobDetailPage() {
           </div>
           <p className="text-sm text-text-secondary mt-1">
             {job.client.name} — {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
+            {linkedInvoices.length > 0 && (
+              <span className="ml-3">
+                {linkedInvoices.map((inv) => (
+                  <button key={inv.id} onClick={() => router.push(`/invoices/${inv.id}`)}
+                    className="inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline">
+                    {inv.invoiceNumber} [{inv.status}]
+                  </button>
+                ))}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
+          {job.status === 'delivered' && (
+            <button onClick={() => router.push(`/invoices/new?jobId=${job.id}`)}
+              className="px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90">
+              Create Invoice
+            </button>
+          )}
           <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
             className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
             {STATUSES.map((s) => {

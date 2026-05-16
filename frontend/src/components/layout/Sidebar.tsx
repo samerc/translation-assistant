@@ -3,24 +3,29 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/lib/sidebar-context';
+import { useAuth } from '@/lib/auth-context';
 
-const navItems = [
+const allNavItems = [
   { label: 'Dashboard', href: '/', icon: DashboardIcon },
   { label: 'Clients', href: '/clients', icon: ClientsIcon },
   { label: 'Jobs', href: '/jobs', icon: JobsIcon },
   { label: 'Templates', href: '/templates', icon: TemplatesIcon },
-  { label: 'Calendar', href: '/calendar', icon: CalendarIcon },
-  { label: 'Invoices', href: '/invoices', icon: InvoicesIcon },
-  { label: 'Reports', href: '/reports', icon: ReportsIcon },
+  { label: 'Calendar', href: '/calendar', icon: CalendarIcon, permission: 'calendar:read' },
+  { label: 'Invoices', href: '/invoices', icon: InvoicesIcon, permission: 'invoices:read' },
+  { label: 'Reports', href: '/reports', icon: ReportsIcon, permission: 'reports:read' },
 ];
 
 const bottomItems = [
+  { label: 'Notifications', href: '/notifications', icon: NotificationsIcon },
   { label: 'Settings', href: '/settings', icon: SettingsIcon },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggle } = useSidebar();
+  const { hasPermission } = useAuth();
+
+  const navItems = allNavItems.filter((item) => !item.permission || hasPermission(item.permission));
 
   return (
     <aside
@@ -150,6 +155,14 @@ function ReportsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor">
       <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+    </svg>
+  );
+}
+
+function NotificationsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
     </svg>
   );
 }

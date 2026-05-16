@@ -109,8 +109,9 @@ export class DocumentsController {
       throw new NotFoundException('Export file not found');
     }
 
+    const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
     const stream = createReadStream(filePath);
     stream.pipe(res);
   }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { JobsService } from './jobs.service.js';
 import { JobsController } from './jobs.controller.js';
@@ -11,11 +11,16 @@ import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { Language } from '../settings/entities/language.entity.js';
+import { User } from '../users/entities/user.entity.js';
 import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
 import { JobAccessGuard } from '../../common/guards/job-access.guard.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Job, JobUser, JobFile, JobLineItem, AppSettings, Document, Template, Client, Language])],
+  imports: [
+    TypeOrmModule.forFeature([Job, JobUser, JobFile, JobLineItem, AppSettings, Document, Template, Client, Language, User]),
+    forwardRef(() => NotificationsModule),
+  ],
   controllers: [JobsController],
   providers: [JobsService, FileValidationPipe, JobAccessGuard],
   exports: [JobsService],

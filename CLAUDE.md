@@ -13,7 +13,10 @@ Internal multi-user web application for freelance translators. Two core modules:
 - **Auth:** JWT + refresh tokens, RBAC
 - **File uploads:** Local disk, compressed with `sharp` (images)
 - **Word export:** `docx` npm library
+- **PDF export:** `pdfkit` library (invoice export)
 - **Translation helper:** Google Cloud Translation API
+- **Charts:** `recharts` (reporting page)
+- **Scheduling:** `@nestjs/schedule` (notification cron jobs)
 - **Containerization:** Docker + Docker Compose
 
 ## Project Structure
@@ -55,21 +58,31 @@ translation-assistant/
 
 ## Security
 - All IDs are UUIDs (not sequential integers) — prevents enumeration
+- JWT secret required via env var in production (crashes on startup if missing)
+- Password complexity enforced: uppercase, lowercase, number, special character required
 - Job access control: `JobAccessGuard` checks user assignment, admins bypass
 - View-only users blocked from write operations on jobs
 - Non-admin job list filtered to only assigned jobs (innerJoin on job_users)
 - ALL document endpoints verify job access via `verifyDocumentAccess()`/`verifyJobAccess()`
+- ALL invoice endpoints verify access via `verifyInvoiceAccess()` (creator or linked job access)
 - Document clone validates access to both source and target jobs
 - Document search-for-clone filtered by user's accessible jobs
 - File linking validates access to source job
 - File uploads validated against allowed types and max size
-- Filenames sanitized (basename extraction) to prevent path traversal
+- Filenames sanitized in Content-Disposition headers (`replace(/[^\w.\-]/g, '_')`)
 - JWT token for file viewing passed via query param (not stored in URLs)
 - Pagination limits enforced server-side (max 100)
 - Client deletion prevented when jobs are linked
 - Job creation validates all referenced entities (client, language, template) exist
+- Job user assignment validates user exists before creating assignment
+- Invoice creation requires at least 1 line item
 - Word template uploads rejected if no valid placeholders found
+- Search access control: non-admins only see clients they have jobs with, only active templates
+- Translate endpoint: language code validation, 5000 char limit, 10s timeout, 30/min rate limit
+- Rate limiting: login (5/min), register (3/min), refresh (10/min), password change (3/hr), invite (5/hr)
 - Centralized frontend logger (ready for Sentry/external service)
+- Frontend: sidebar items hidden based on user permissions (no Invoices/Reports for Translator role)
+- Frontend: dashboard gracefully handles 403 for non-admin users
 - Frontend: unsaved changes warning on document fill page
 - Frontend: status transitions enforced (only valid next states selectable)
 
@@ -135,6 +148,17 @@ Light + dark mode supported (separate toggle from palette).
 - **Document** — jobId, templateId, status (draft/completed), clonedFromId
 - **DocumentFieldValue** — documentId, templateFieldId, pageNumber, entryIndex, value
 
+### Invoices
+- **Invoice** — invoiceNumber (auto: INV-0001), clientId, status (draft/sent/paid/overdue/cancelled), issueDate, dueDate, subtotal, taxRate, taxAmount, total, notes, currency, paidAt, paidAmount, createdByUserId
+  - Status flow: draft → sent → paid (or overdue → paid). Any → cancelled. Cancelled → draft.
+  - Sending invoice transitions linked jobs to 'invoiced'. Payment transitions to 'paid'.
+- **InvoiceItem** — invoiceId, jobId (optional link), description, quantity, unitPrice, lineTotal, sortOrder
+
+### Notifications
+- **Notification** — userId, type (job_status_change/deadline_approaching/invoice_overdue/job_assigned), title, message, link, isRead
+  - Auto-created on: job status changes, user assignment, deadline within 3 days, invoice overdue
+  - Daily cron at 8 AM checks deadlines and overdue invoices (@nestjs/schedule)
+
 ## API Endpoints
 
 ### Auth (`/api/auth`)
@@ -197,7 +221,33 @@ Light + dark mode supported (separate toggle from palette).
 - `DELETE /:id` — Remove document
 
 ### Translate (`/api/translate`)
-- `POST /` — Google Translate proxy (text, from, to)
+- `POST /` — Google Translate proxy (text, from, to). Validated: language codes (ISO 639-1), max 5000 chars, 10s timeout, 30 req/min
+
+### Invoices (`/api/invoices`)
+- Full CRUD with search, status/client/date filters, sort, pagination
+- `GET /by-job/:jobId` — List invoices linked to a job
+- `PATCH /:id/status` — Update invoice status (validated transitions)
+- `POST /:id/record-payment` — Record payment (sets paidAmount, paidAt, transitions to paid)
+- `POST /:id/export-pdf` — Export invoice as PDF
+- `POST /:id/export-word` — Export invoice as Word (.docx)
+
+### Notifications (`/api/notifications`)
+- `GET /` — List notifications (filterable by isRead, paginated)
+- `GET /unread-count` — Get unread count
+- `PATCH /:id/read` — Mark as read
+- `POST /mark-all-read` — Mark all read
+
+### Calendar (`/api/calendar`)
+- `GET /events?month=5&year=2026` — Get events (job deadlines + invoice due dates)
+
+### Reports (`/api/reports`)
+- `GET /dashboard-stats` — Active jobs, monthly revenue, pending invoices, due this week
+- `GET /revenue?period=monthly&from=2026-01&to=2026-05` — Revenue over time
+- `GET /by-client` — Revenue per client
+- `GET /job-status` — Jobs by status breakdown
+
+### Search (`/api/search`)
+- `GET /?q=term` — Global search across clients, jobs, templates, invoices (min 2 chars)
 
 ## Frontend Pages
 - `/login` — Login page (public)
@@ -208,8 +258,14 @@ Light + dark mode supported (separate toggle from palette).
 - `/templates/:id` — Template detail (Fields tab with inline table editor, Layout Designer tab, Word Template tab, Settings tab)
 - `/jobs` — Jobs list with search, status filter, sort, pagination
 - `/jobs/new` — Create job form (type, client, languages, line items with template selection, pricing, deadline)
-- `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files)
+- `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files, linked invoice display, "Create Invoice" button on delivered jobs)
 - `/documents/:id` — Document fill page (template fields, GT popup, save/complete/export)
+- `/invoices` — Invoice list with search, status/client filters, sort, pagination
+- `/invoices/new` — Create invoice form (client, dates, tax rate, line items with job linking). Supports `?jobId=` query param for pre-fill from job detail page
+- `/invoices/:id` — Invoice detail (status workflow, edit mode for drafts, payment recording modal, line items with job links, PDF/Word export buttons)
+- `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
+- `/notifications` — Full notifications list with read/unread filter
+- `/reports` — Reports page (Revenue line chart, By Client bar chart, Job Status donut chart via recharts)
 - `/settings` — Settings page (General, Languages, Labels, File Uploads, Appearance tabs)
 
 ## File Upload Validation
@@ -229,8 +285,8 @@ Light + dark mode supported (separate toggle from palette).
 - [x] Phase 7: Jobs (CRUD, status workflow, pricing, files, user assignment)
 - [x] Phase 8: Documents (fill templates, GT popup, clone, repeatable groups)
 - [x] Phase 9: Word Export (designer layout + Word placeholder replacement)
-- [ ] Phase 10: Invoicing
-- [ ] Phase 11: Calendar
-- [ ] Phase 12: Notifications
-- [ ] Phase 13: Reporting
-- [ ] Phase 14: Search
+- [x] Phase 10: Invoicing (multi-job invoices, payment recording, status workflow)
+- [x] Phase 11: Calendar (month grid, job deadlines + invoice due dates)
+- [x] Phase 12: Notifications (in-app, bell badge, deadline/overdue cron)
+- [x] Phase 13: Reporting (revenue charts, client breakdown, job status, dashboard stats)
+- [x] Phase 14: Search (global search across clients, jobs, templates, invoices)

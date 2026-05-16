@@ -1,7 +1,12 @@
+const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-only-secret-not-for-production');
+if (!jwtSecret) {
+  throw new Error('JWT_SECRET environment variable is required in production');
+}
+
 export const appConfig = () => ({
   port: parseInt(process.env.PORT || '3005', 10),
   jwt: {
-    secret: process.env.JWT_SECRET || 'change-this-secret-in-production',
+    secret: jwtSecret,
     accessTokenTtl: parseInt(process.env.JWT_ACCESS_TTL || '900', 10), // 15 minutes
     refreshTokenTtl: parseInt(process.env.JWT_REFRESH_TTL || '604800', 10), // 7 days
   },

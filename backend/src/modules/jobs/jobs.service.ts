@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from './entities/job.entity.js';
@@ -9,6 +9,8 @@ import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { Language } from '../settings/entities/language.entity.js';
+import { User } from '../users/entities/user.entity.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
 
 @Injectable()
@@ -30,6 +32,10 @@ export class JobsService {
     private readonly clientRepository: Repository<Client>,
     @InjectRepository(Language)
     private readonly languageRepository: Repository<Language>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
@@ -284,10 +290,20 @@ export class JobsService {
 
   // ── Status ──
 
-  async updateStatus(id: string, status: string): Promise<Job> {
+  async updateStatus(id: string, status: string, changedByUserId?: string): Promise<Job> {
     const job = await this.findOne(id);
+    const oldStatus = job.status;
     job.status = status;
     await this.jobRepository.save(job);
+
+    // Notify assigned users about status change
+    if (changedByUserId && oldStatus !== status) {
+      this.notificationsService.notifyJobStatusChange(
+        { id: job.id, jobNumber: job.jobNumber, title: job.title },
+        oldStatus, status, changedByUserId,
+      ).catch(() => {});
+    }
+
     return this.findOne(id);
   }
 
@@ -308,13 +324,23 @@ export class JobsService {
   }
 
   async assignUser(jobId: string, userId: string, permissionLevel: 'view' | 'edit' = 'edit'): Promise<JobUser> {
-    await this.findOne(jobId);
+    const job = await this.findOne(jobId);
+
+    // Validate user exists
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+
     const existing = await this.jobUserRepository.findOne({ where: { jobId, userId } });
     if (existing) {
       existing.permissionLevel = permissionLevel;
       return this.jobUserRepository.save(existing);
     }
-    return this.jobUserRepository.save(this.jobUserRepository.create({ jobId, userId, permissionLevel }));
+    const result = await this.jobUserRepository.save(this.jobUserRepository.create({ jobId, userId, permissionLevel }));
+
+    // Notify the assigned user
+    this.notificationsService.notifyJobAssigned(jobId, job.jobNumber, job.title, userId).catch(() => {});
+
+    return result;
   }
 
   async removeUser(jobId: string, userId: string): Promise<void> {

@@ -36,6 +36,7 @@ export class AuthController {
   @Post('refresh')
   @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async refresh(@Req() req: any) {
     return this.authService.refreshTokens(req.user.sub, req.user.refreshToken);
   }
@@ -57,6 +58,7 @@ export class AuthController {
   @Post('invite')
   @UseGuards(AuthGuard('jwt'), PermissionsGuard)
   @RequirePermissions('users:create')
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
   async createInvite(@Body() body: { email: string; roleId?: string }) {
     return this.authService.createInvite(body.email, body.roleId);
   }
