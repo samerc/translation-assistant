@@ -57,12 +57,21 @@ translation-assistant/
 - All IDs are UUIDs (not sequential integers) — prevents enumeration
 - Job access control: `JobAccessGuard` checks user assignment, admins bypass
 - View-only users blocked from write operations on jobs
+- Non-admin job list filtered to only assigned jobs (innerJoin on job_users)
+- ALL document endpoints verify job access via `verifyDocumentAccess()`/`verifyJobAccess()`
+- Document clone validates access to both source and target jobs
+- Document search-for-clone filtered by user's accessible jobs
+- File linking validates access to source job
 - File uploads validated against allowed types and max size
 - Filenames sanitized (basename extraction) to prevent path traversal
 - JWT token for file viewing passed via query param (not stored in URLs)
 - Pagination limits enforced server-side (max 100)
 - Client deletion prevented when jobs are linked
+- Job creation validates all referenced entities (client, language, template) exist
+- Word template uploads rejected if no valid placeholders found
 - Centralized frontend logger (ready for Sentry/external service)
+- Frontend: unsaved changes warning on document fill page
+- Frontend: status transitions enforced (only valid next states selectable)
 
 ## Conventions
 - All API routes prefixed with `/api/`
