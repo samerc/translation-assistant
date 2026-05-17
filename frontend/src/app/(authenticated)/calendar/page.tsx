@@ -122,7 +122,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Calendar grid */}
         <div className="flex-1">
           <div className="bg-surface border border-border rounded-xl overflow-hidden">
@@ -172,7 +172,7 @@ export default function CalendarPage() {
         </div>
 
         {/* Event detail panel */}
-        <div className="w-80 flex-shrink-0">
+        <div className="w-full lg:w-80 lg:flex-shrink-0">
           <div className="bg-surface border border-border rounded-xl p-5 sticky top-20">
             <h3 className="text-sm font-semibold text-text-secondary mb-3">
               {selectedDate

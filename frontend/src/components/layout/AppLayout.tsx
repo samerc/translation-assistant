@@ -10,7 +10,7 @@ function LayoutInner({ children }: { children: React.ReactNode }) {
     <div className="h-screen overflow-hidden bg-bg">
       <Sidebar />
       <Topbar />
-      <main className={`mt-14 p-6 transition-all duration-200 overflow-y-auto h-[calc(100vh-3.5rem)] ${collapsed ? 'ml-16' : 'ml-56'}`}>
+      <main className={`mt-14 p-4 md:p-6 transition-all duration-200 overflow-y-auto h-[calc(100vh-3.5rem)] ${collapsed ? 'md:ml-16' : 'md:ml-56'}`}>
         {children}
       </main>
     </div>

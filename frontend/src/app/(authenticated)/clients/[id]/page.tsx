@@ -405,7 +405,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
 
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-5 mb-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="First Name *" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} required />
             <Field label="Last Name *" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} required />
             <Field label="Email" type="email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />

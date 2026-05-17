@@ -96,7 +96,7 @@ export default function InvoicesPage() {
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
         <input placeholder="Search invoices..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
+          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
           <option value="">All Statuses</option>
@@ -111,8 +111,8 @@ export default function InvoicesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[650px]">
           <thead>
             <tr className="bg-bg border-b border-border">
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('invoiceNumber')}>

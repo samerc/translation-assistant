@@ -204,7 +204,7 @@ export default function InvoiceDetailPage() {
           <h1 className="text-2xl font-bold text-text">{invoice.invoiceNumber}</h1>
           <p className="text-text-secondary mt-1">{invoice.client.name}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.color}`}>{badge.label}</span>
           <button onClick={() => handleExport('pdf')}
             className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 flex items-center gap-1.5">
@@ -320,7 +320,7 @@ export default function InvoiceDetailPage() {
       )}
 
       {/* Line items */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden mb-6">
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto mb-6">
         <div className="px-5 py-4 border-b border-border">
           <h3 className="text-sm font-semibold text-text-secondary">Line Items</h3>
         </div>

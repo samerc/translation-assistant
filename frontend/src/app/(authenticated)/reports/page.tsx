@@ -170,8 +170,9 @@ export default function ReportsPage() {
           {statusData.length === 0 ? (
             <div className="text-center py-16 text-text-muted text-sm">No job data yet</div>
           ) : (
-            <div className="flex items-start gap-8">
-              <ResponsiveContainer width="50%" height={320}>
+            <div className="flex flex-col lg:flex-row items-start gap-8">
+              <div className="w-full lg:w-1/2">
+              <ResponsiveContainer width="100%" height={320}>
                 <PieChart>
                   <Pie data={statusData} dataKey="count" nameKey="status" cx="50%" cy="50%"
                     innerRadius={60} outerRadius={120} paddingAngle={2}
@@ -184,7 +185,8 @@ export default function ReportsPage() {
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="flex-1">
+              </div>
+              <div className="w-full lg:flex-1">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">

@@ -30,7 +30,7 @@ export default function Sidebar() {
   return (
     <aside
       className={`fixed left-0 top-0 h-screen bg-sidebar-bg flex flex-col transition-all duration-200 z-20 ${
-        collapsed ? 'w-16' : 'w-56'
+        collapsed ? 'w-16 -translate-x-full md:translate-x-0' : 'w-56'
       }`}
     >
       {/* Logo */}

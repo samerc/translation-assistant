@@ -188,14 +188,14 @@ export default function NewInvoicePage() {
 
           <div className="space-y-3">
             {items.map((item, i) => (
-              <div key={i} className="grid grid-cols-12 gap-3 items-start">
-                <div className="col-span-5">
+              <div key={i} className="grid grid-cols-2 md:grid-cols-12 gap-3 items-start">
+                <div className="col-span-2 md:col-span-5">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Description</label>}
                   <input value={item.description} onChange={(e) => updateItem(i, 'description', e.target.value)}
                     placeholder="Description..."
                     className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
-                <div className="col-span-3">
+                <div className="col-span-2 md:col-span-3">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Link Job</label>}
                   <select value={item.jobId} onChange={(e) => selectJob(i, e.target.value)}
                     className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
@@ -203,19 +203,19 @@ export default function NewInvoicePage() {
                     {jobs.map((j) => <option key={j.id} value={j.id}>{j.jobNumber} — {j.title}</option>)}
                   </select>
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-1 md:col-span-1">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Qty</label>}
                   <input type="number" min="0" step="0.01" value={item.quantity}
                     onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
                     className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-1 md:col-span-2">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Unit Price</label>}
                   <input type="number" min="0" step="0.01" value={item.unitPrice}
                     onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
                     className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
-                <div className="col-span-1 flex items-end">
+                <div className="col-span-2 md:col-span-1 flex items-end">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">&nbsp;</label>}
                   <button type="button" onClick={() => removeItem(i)} disabled={items.length <= 1}
                     className="p-2 text-text-muted hover:text-danger disabled:opacity-30">

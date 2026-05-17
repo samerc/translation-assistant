@@ -141,9 +141,9 @@ export default function Topbar() {
   };
 
   return (
-    <header className={`fixed top-0 right-0 h-14 bg-surface border-b border-border flex items-center justify-between px-6 z-10 transition-all duration-200 ${collapsed ? 'left-16' : 'left-56'}`}>
+    <header className={`fixed top-0 right-0 h-14 bg-surface border-b border-border flex items-center justify-between px-3 md:px-6 z-10 transition-all duration-200 left-0 ${collapsed ? 'md:left-16' : 'md:left-56'}`}>
       {/* Global Search */}
-      <div className="relative flex-1 max-w-md" ref={searchRef}>
+      <div className="relative flex-1 max-w-xs md:max-w-md" ref={searchRef}>
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
         <input
           type="text"
@@ -266,7 +266,7 @@ export default function Topbar() {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 top-full mt-2 w-96 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
+            <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] md:w-96 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <span className="text-sm font-semibold text-text">Notifications</span>
                 {unreadCount > 0 && (

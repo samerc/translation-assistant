@@ -146,7 +146,7 @@ export default function NewJobPage() {
         {/* Basic info */}
         <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
           <h3 className="font-semibold text-text">Job Details</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Type</label>
               <select value={form.type} onChange={(e) => { setForm({ ...form, type: e.target.value as 'template' | 'freeform' }); setLineItems([]); }} className={inputClass}>
@@ -176,7 +176,7 @@ export default function NewJobPage() {
         {/* Client & Language */}
         <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
           <h3 className="font-semibold text-text">Client & Languages</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Client *</label>
               <select value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value, contactId: '' })} required className={inputClass}>
@@ -247,9 +247,9 @@ export default function NewJobPage() {
           <div className="space-y-3">
             {lineItems.map((li) => (
               <div key={li.key} className="border border-border rounded-lg p-4 bg-bg">
-                <div className="grid grid-cols-12 gap-3 items-end">
+                <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-end">
                   {/* Template selector */}
-                  <div className="col-span-4">
+                  <div className="col-span-2 md:col-span-4">
                     <label className="block text-xs font-medium text-text mb-1">
                       {form.type === 'template' ? 'Template' : 'Document Type'}
                     </label>
@@ -261,7 +261,7 @@ export default function NewJobPage() {
                   </div>
 
                   {/* Pages */}
-                  <div className="col-span-1">
+                  <div className="col-span-1 md:col-span-1">
                     <label className="block text-xs font-medium text-text mb-1">Pages</label>
                     <input type="number" min={1} value={li.pageCount}
                       onChange={(e) => updateLineItem(li.key, { pageCount: parseInt(e.target.value) || 1 })}
