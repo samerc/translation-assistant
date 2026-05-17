@@ -233,8 +233,9 @@ export class JobsService {
   async remove(id: string): Promise<void> {
     const job = await this.findOne(id);
     // Delete physical files before cascade-deleting DB records
+    // Skip linked files — the physical file belongs to the source job
     for (const file of job.files || []) {
-      if (file.filePath && existsSync(file.filePath)) unlinkSync(file.filePath);
+      if (!file.linkedFromJobId && file.filePath && existsSync(file.filePath)) unlinkSync(file.filePath);
     }
     await this.jobRepository.remove(job);
   }
@@ -390,7 +391,8 @@ export class JobsService {
   async removeFile(jobId: string, fileId: string): Promise<void> {
     const jf = await this.jobFileRepository.findOne({ where: { id: fileId, jobId } });
     if (!jf) throw new NotFoundException('File not found');
-    if (jf.filePath && existsSync(jf.filePath)) unlinkSync(jf.filePath);
+    // Only delete physical file if it's not linked from another job
+    if (!jf.linkedFromJobId && jf.filePath && existsSync(jf.filePath)) unlinkSync(jf.filePath);
     await this.jobFileRepository.remove(jf);
   }
 }
