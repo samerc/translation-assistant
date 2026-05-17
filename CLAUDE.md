@@ -85,6 +85,32 @@ translation-assistant/
 - Frontend: dashboard gracefully handles 403 for non-admin users
 - Frontend: unsaved changes warning on document fill page
 - Frontend: status transitions enforced (only valid next states selectable)
+- Frontend: fully responsive (mobile hamburger menu, table scroll, stacked forms)
+
+## Database & Performance
+- Connection pool: 20 max, 10s connect timeout, 30s idle timeout (configurable via env)
+- Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
+- Transactions: job creation and invoice creation wrapped in `dataSource.transaction()`
+- No eager loading on entities — all relations loaded explicitly per query
+- List endpoints use `loadRelationCountAndMap` for counts (not full relation joins)
+- N+1 eliminated: batch `IN()` queries, `Promise.all` for parallel validation
+- `recalculateTotal` uses DB `SUM()` aggregation (not in-memory)
+- Cron job overlap prevention: in-memory lock + error handling + logging
+- Overdue invoice check: single batch `UPDATE` (not N individual saves)
+
+## File Management
+- Physical files deleted on entity removal (job files, passport copies, templates)
+- Linked files (`linkedFromJobId`) skipped during deletion (shared with source job)
+- Export files (PDF/DOCX) deleted from disk after streaming to client
+- Old word template files deleted when replaced with new upload
+
+## Deployment
+- Server: `translate.fancyshark.com` (144.91.89.20)
+- IIS reverse proxy: `/api/*` → localhost:3005, `/*` → localhost:3080
+- PM2 manages backend + frontend processes
+- `npm run deploy` — builds, packages, uploads, restarts on server
+- Frontend uses Next.js standalone output (~4MB deploy)
+- PM2 auto-resurrect on reboot via Windows Scheduled Task
 
 ## Conventions
 - All API routes prefixed with `/api/`
