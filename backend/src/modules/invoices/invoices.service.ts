@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Invoice } from './entities/invoice.entity.js';
 import { InvoiceItem } from './entities/invoice-item.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
@@ -34,14 +34,13 @@ export class InvoicesService {
     // Check if user created the invoice
     if (invoice.createdByUserId === userId) return invoice;
 
-    // Check if user has access to any linked job
-    for (const item of invoice.items) {
-      if (item.jobId) {
-        const assignment = await this.jobUserRepository.findOne({
-          where: { jobId: item.jobId, userId },
-        });
-        if (assignment) return invoice;
-      }
+    // Check if user has access to any linked job (batch lookup)
+    const jobIds = invoice.items.filter((i) => i.jobId).map((i) => i.jobId);
+    if (jobIds.length > 0) {
+      const assignment = await this.jobUserRepository.findOne({
+        where: { jobId: In(jobIds), userId },
+      });
+      if (assignment) return invoice;
     }
 
     throw new ForbiddenException('You do not have access to this invoice');
@@ -158,21 +157,26 @@ export class InvoicesService {
   }
 
   async create(dto: CreateInvoiceDto, userId: string): Promise<Invoice> {
-    const client = await this.clientRepository.findOne({ where: { id: dto.clientId } });
+    // Validate all entities in parallel
+    const jobIds = dto.items.filter((i) => i.jobId).map((i) => i.jobId!);
+    const [client, jobs, settings] = await Promise.all([
+      this.clientRepository.findOne({ where: { id: dto.clientId } }),
+      jobIds.length > 0 ? this.jobRepository.find({ where: { id: In(jobIds) } }) : Promise.resolve([]),
+      this.settingsRepository.find(),
+    ]);
+
     if (!client) throw new BadRequestException('Client not found');
 
-    // Validate linked jobs exist and belong to the client
+    const jobMap = new Map(jobs.map((j) => [j.id, j]));
     for (const item of dto.items) {
       if (item.jobId) {
-        const job = await this.jobRepository.findOne({ where: { id: item.jobId } });
+        const job = jobMap.get(item.jobId);
         if (!job) throw new BadRequestException(`Job not found: ${item.jobId}`);
         if (job.clientId !== dto.clientId) {
           throw new BadRequestException(`Job "${job.jobNumber}" does not belong to this client`);
         }
       }
     }
-
-    const settings = await this.settingsRepository.find();
     const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
     const { subtotal, taxAmount, total } = this.calculateTotals(dto.items, taxRate);
@@ -263,31 +267,23 @@ export class InvoicesService {
       throw new BadRequestException(`Cannot transition from "${invoice.status}" to "${status}"`);
     }
 
+    const oldStatus = invoice.status;
     invoice.status = status;
 
-    // When sending, transition linked jobs to 'invoiced'
-    if (status === 'sent') {
-      for (const item of invoice.items) {
-        if (item.jobId) {
-          const job = await this.jobRepository.findOne({ where: { id: item.jobId } });
-          if (job && job.status === 'delivered') {
-            job.status = 'invoiced';
-            await this.jobRepository.save(job);
-          }
-        }
+    // Batch update linked jobs
+    const jobIds = invoice.items.filter((i) => i.jobId).map((i) => i.jobId);
+    if (jobIds.length > 0) {
+      if (status === 'sent') {
+        await this.jobRepository.update(
+          { id: In(jobIds), status: 'delivered' },
+          { status: 'invoiced' },
+        );
       }
-    }
-
-    // When cancelling a sent/overdue invoice, revert jobs to 'delivered'
-    if (status === 'cancelled' && ['sent', 'overdue'].includes(invoice.status)) {
-      for (const item of invoice.items) {
-        if (item.jobId) {
-          const job = await this.jobRepository.findOne({ where: { id: item.jobId } });
-          if (job && job.status === 'invoiced') {
-            job.status = 'delivered';
-            await this.jobRepository.save(job);
-          }
-        }
+      if (status === 'cancelled' && ['sent', 'overdue'].includes(oldStatus)) {
+        await this.jobRepository.update(
+          { id: In(jobIds), status: 'invoiced' },
+          { status: 'delivered' },
+        );
       }
     }
 
@@ -305,15 +301,13 @@ export class InvoicesService {
     invoice.paidAmount = dto.paidAmount;
     invoice.paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
 
-    // Transition linked jobs to 'paid'
-    for (const item of invoice.items) {
-      if (item.jobId) {
-        const job = await this.jobRepository.findOne({ where: { id: item.jobId } });
-        if (job && ['invoiced', 'delivered'].includes(job.status)) {
-          job.status = 'paid';
-          await this.jobRepository.save(job);
-        }
-      }
+    // Batch transition linked jobs to 'paid'
+    const jobIds = invoice.items.filter((i) => i.jobId).map((i) => i.jobId);
+    if (jobIds.length > 0) {
+      await this.jobRepository.update(
+        { id: In(jobIds), status: In(['invoiced', 'delivered']) },
+        { status: 'paid' },
+      );
     }
 
     await this.invoiceRepository.save(invoice);

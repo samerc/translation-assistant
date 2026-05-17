@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
 import { JobFile } from './entities/job-file.entity.js';
@@ -128,24 +128,25 @@ export class JobsService {
   }
 
   async create(dto: CreateJobDto, userId: string): Promise<Job> {
-    // Validate referenced entities exist
-    const client = await this.clientRepository.findOne({ where: { id: dto.clientId } });
+    // Validate referenced entities in parallel
+    const templateIds = (dto.lineItems || []).map((li) => li.templateId).filter(Boolean) as string[];
+
+    const [client, sourceLang, targetLang, templates] = await Promise.all([
+      this.clientRepository.findOne({ where: { id: dto.clientId } }),
+      this.languageRepository.findOne({ where: { id: dto.sourceLanguageId } }),
+      dto.targetLanguageId ? this.languageRepository.findOne({ where: { id: dto.targetLanguageId } }) : Promise.resolve(null),
+      templateIds.length > 0 ? this.templateRepository.find({ where: { id: In(templateIds) } }) : Promise.resolve([]),
+    ]);
+
     if (!client) throw new BadRequestException('Client not found');
-
-    const sourceLang = await this.languageRepository.findOne({ where: { id: dto.sourceLanguageId } });
     if (!sourceLang) throw new BadRequestException('Source language not found');
+    if (dto.targetLanguageId && !targetLang) throw new BadRequestException('Target language not found');
 
-    if (dto.targetLanguageId) {
-      const targetLang = await this.languageRepository.findOne({ where: { id: dto.targetLanguageId } });
-      if (!targetLang) throw new BadRequestException('Target language not found');
-    }
-
-    if (dto.lineItems?.length) {
-      for (const li of dto.lineItems) {
-        if (li.templateId) {
-          const template = await this.templateRepository.findOne({ where: { id: li.templateId } });
-          if (!template) throw new BadRequestException(`Template not found for line item "${li.description}"`);
-        }
+    // Validate all templates exist
+    const templateMap = new Map(templates.map((t) => [t.id, t]));
+    for (const li of dto.lineItems || []) {
+      if (li.templateId && !templateMap.has(li.templateId)) {
+        throw new BadRequestException(`Template not found for line item "${li.description}"`);
       }
     }
 
@@ -189,19 +190,13 @@ export class JobsService {
       await this.lineItemRepository.save(items);
     }
 
-    // Auto-create documents for non-simple templates
-    if (dto.type !== 'freeform' && dto.lineItems?.length) {
-      const templateIds = dto.lineItems
-        .map((li) => li.templateId)
-        .filter(Boolean) as string[];
-
-      for (const templateId of templateIds) {
-        const template = await this.templateRepository.findOne({ where: { id: templateId } });
-        if (template && template.type !== 'simple') {
-          await this.documentRepository.save(
-            this.documentRepository.create({ jobId: saved.id, templateId }),
-          );
-        }
+    // Auto-create documents for non-simple templates (batch, using already-fetched templates)
+    if (dto.type !== 'freeform' && templateIds.length > 0) {
+      const docsToCreate = templates
+        .filter((t) => t.type !== 'simple')
+        .map((t) => this.documentRepository.create({ jobId: saved.id, templateId: t.id }));
+      if (docsToCreate.length > 0) {
+        await this.documentRepository.save(docsToCreate);
       }
     }
 
@@ -217,7 +212,7 @@ export class JobsService {
   }
 
   async update(id: string, dto: UpdateJobDto): Promise<Job> {
-    const job = await this.findOne(id);
+    const job = await this.findOneBasic(id);
 
     if (this.isLocked(job) && !('status' in dto && Object.keys(dto).length === 1)) {
       throw new BadRequestException(`Cannot edit a job with status "${job.status}". Reopen it first.`);
@@ -239,7 +234,7 @@ export class JobsService {
     description: string; templateId?: string;
     pageCount: number; pricePerPage: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number;
   }): Promise<JobLineItem> {
-    const job = await this.findOne(jobId);
+    const job = await this.findOneBasic(jobId);
     if (this.isLocked(job)) throw new BadRequestException('Job is locked');
 
     const maxSort = await this.lineItemRepository
@@ -266,7 +261,7 @@ export class JobsService {
     description: string; pageCount: number; pricePerPage: number;
     useDiscountedPrice: boolean; discountedPricePerPage: number;
   }>): Promise<JobLineItem> {
-    const job = await this.findOne(jobId);
+    const job = await this.findOneBasic(jobId);
     if (this.isLocked(job)) throw new BadRequestException('Job is locked');
 
     const li = await this.lineItemRepository.findOne({ where: { id: itemId, jobId } });
@@ -280,7 +275,7 @@ export class JobsService {
   }
 
   async removeLineItem(jobId: string, itemId: string): Promise<void> {
-    const job = await this.findOne(jobId);
+    const job = await this.findOneBasic(jobId);
     if (this.isLocked(job)) throw new BadRequestException('Job is locked');
 
     const li = await this.lineItemRepository.findOne({ where: { id: itemId, jobId } });
@@ -290,9 +285,12 @@ export class JobsService {
   }
 
   private async recalculateTotal(jobId: string): Promise<void> {
-    const items = await this.lineItemRepository.find({ where: { jobId } });
-    const total = items.reduce((sum, li) => sum + Number(li.lineTotal), 0);
-    await this.jobRepository.update(jobId, { calculatedTotal: total });
+    const result = await this.lineItemRepository
+      .createQueryBuilder('li')
+      .select('COALESCE(SUM(li.lineTotal), 0)', 'total')
+      .where('li.job_id = :jobId', { jobId })
+      .getRawOne();
+    await this.jobRepository.update(jobId, { calculatedTotal: Number(result?.total || 0) });
   }
 
   // ── Status ──
@@ -331,10 +329,11 @@ export class JobsService {
   }
 
   async assignUser(jobId: string, userId: string, permissionLevel: 'view' | 'edit' = 'edit'): Promise<JobUser> {
-    const job = await this.findOne(jobId);
-
-    // Validate user exists
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    // Validate both exist in parallel
+    const [job, user] = await Promise.all([
+      this.findOneBasic(jobId),
+      this.userRepository.findOne({ where: { id: userId } }),
+    ]);
     if (!user) throw new BadRequestException('User not found');
 
     const existing = await this.jobUserRepository.findOne({ where: { jobId, userId } });

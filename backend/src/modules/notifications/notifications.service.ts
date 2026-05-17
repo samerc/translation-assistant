@@ -136,24 +136,43 @@ export class NotificationsService {
       },
     });
 
+    if (jobs.length === 0) return;
+
+    const jobIds = jobs.map((j) => j.id);
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // Batch fetch all assignments and recent notifications
+    const [allAssignments, recentNotifications] = await Promise.all([
+      this.jobUserRepository.find({ where: { jobId: In(jobIds) } }),
+      this.notificationRepository.find({
+        where: {
+          type: 'deadline_approaching',
+          createdAt: Between(oneDayAgo, now),
+        },
+        select: ['userId', 'link'],
+      }),
+    ]);
+
+    // Build set of already-notified user+job pairs
+    const notifiedSet = new Set(recentNotifications.map((n) => `${n.userId}:${n.link}`));
+
+    // Group assignments by job
+    const assignmentsByJob = new Map<string, typeof allAssignments>();
+    for (const a of allAssignments) {
+      if (!assignmentsByJob.has(a.jobId)) assignmentsByJob.set(a.jobId, []);
+      assignmentsByJob.get(a.jobId)!.push(a);
+    }
+
+    // Batch create notifications
+    const notificationsToCreate: Notification[] = [];
     for (const job of jobs) {
-      const assignments = await this.jobUserRepository.find({ where: { jobId: job.id } });
-
-      for (const assignment of assignments) {
-        // Check if we already sent a deadline notification for this job+user in last 24 hours
-        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        const existing = await this.notificationRepository
-          .createQueryBuilder('n')
-          .where('n.user_id = :userId', { userId: assignment.userId })
-          .andWhere('n.type = :type', { type: 'deadline_approaching' })
-          .andWhere('n.link = :link', { link: `/jobs/${job.id}` })
-          .andWhere('n.createdAt > :since', { since: oneDayAgo })
-          .getCount();
-
-        if (existing === 0) {
-          await this.notificationRepository.save(
+      const assignments = assignmentsByJob.get(job.id) || [];
+      for (const a of assignments) {
+        const key = `${a.userId}:/jobs/${job.id}`;
+        if (!notifiedSet.has(key)) {
+          notificationsToCreate.push(
             this.notificationRepository.create({
-              userId: assignment.userId,
+              userId: a.userId,
               type: 'deadline_approaching',
               title: 'Deadline approaching',
               message: `${job.jobNumber} "${job.title}" is due on ${job.deadline}`,
@@ -162,6 +181,10 @@ export class NotificationsService {
           );
         }
       }
+    }
+
+    if (notificationsToCreate.length > 0) {
+      await this.notificationRepository.save(notificationsToCreate);
     }
   }
 

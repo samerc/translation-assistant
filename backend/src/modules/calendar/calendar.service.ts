@@ -42,18 +42,6 @@ export class CalendarService {
       jobQb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
     }
 
-    const jobs = await jobQb.getMany();
-
-    const jobEvents: CalendarEvent[] = jobs.map((job) => ({
-      id: job.id,
-      type: 'job_deadline',
-      title: `${job.jobNumber} — ${job.title}`,
-      date: job.deadline,
-      status: job.status,
-      color: 'primary',
-      link: `/jobs/${job.id}`,
-    }));
-
     // Invoice due dates
     const invQb = this.invoiceRepository
       .createQueryBuilder('inv')
@@ -74,7 +62,18 @@ export class CalendarService {
       );
     }
 
-    const invoices = await invQb.getMany();
+    // Run both queries in parallel
+    const [jobs, invoices] = await Promise.all([jobQb.getMany(), invQb.getMany()]);
+
+    const jobEvents: CalendarEvent[] = jobs.map((job) => ({
+      id: job.id,
+      type: 'job_deadline',
+      title: `${job.jobNumber} — ${job.title}`,
+      date: job.deadline,
+      status: job.status,
+      color: 'primary',
+      link: `/jobs/${job.id}`,
+    }));
 
     const invoiceEvents: CalendarEvent[] = invoices.map((inv) => ({
       id: inv.id,
