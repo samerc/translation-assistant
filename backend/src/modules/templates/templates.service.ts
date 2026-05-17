@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
@@ -81,6 +81,10 @@ export class TemplatesService {
 
   async remove(id: string): Promise<void> {
     const template = await this.findOne(id);
+    // Delete word file from disk if present
+    if (template.wordFilePath && existsSync(template.wordFilePath)) {
+      unlinkSync(template.wordFilePath);
+    }
     await this.templateRepository.remove(template);
   }
 
@@ -133,6 +137,10 @@ export class TemplatesService {
       );
     }
 
+    // Delete old word file if replacing
+    if (template.wordFilePath && template.wordFilePath !== file.path && existsSync(template.wordFilePath)) {
+      unlinkSync(template.wordFilePath);
+    }
     template.wordFilePath = file.path;
     template.wordFileName = file.originalname;
     await this.templateRepository.save(template);

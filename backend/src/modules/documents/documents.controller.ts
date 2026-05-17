@@ -3,7 +3,7 @@ import {
   UseGuards, NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, unlinkSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { DocumentsService } from './documents.service.js';
 import { ExportService } from './export.service.js';
@@ -114,6 +114,7 @@ export class DocumentsController {
     res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
     const stream = createReadStream(filePath);
     stream.pipe(res);
+    stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
   }
 
   @Delete(':id')

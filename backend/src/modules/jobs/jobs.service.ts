@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
+import { existsSync, unlinkSync } from 'fs';
 import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
 import { JobFile } from './entities/job-file.entity.js';
@@ -231,6 +232,10 @@ export class JobsService {
 
   async remove(id: string): Promise<void> {
     const job = await this.findOne(id);
+    // Delete physical files before cascade-deleting DB records
+    for (const file of job.files || []) {
+      if (file.filePath && existsSync(file.filePath)) unlinkSync(file.filePath);
+    }
     await this.jobRepository.remove(job);
   }
 
@@ -385,6 +390,7 @@ export class JobsService {
   async removeFile(jobId: string, fileId: string): Promise<void> {
     const jf = await this.jobFileRepository.findOne({ where: { id: fileId, jobId } });
     if (!jf) throw new NotFoundException('File not found');
+    if (jf.filePath && existsSync(jf.filePath)) unlinkSync(jf.filePath);
     await this.jobFileRepository.remove(jf);
   }
 }

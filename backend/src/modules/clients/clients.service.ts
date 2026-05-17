@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { basename } from 'path';
+import { existsSync, unlinkSync } from 'fs';
 import { Client } from './entities/client.entity.js';
 import { Contact } from './entities/contact.entity.js';
 import { PassportCopy } from './entities/passport-copy.entity.js';
@@ -115,6 +116,11 @@ export class ClientsService {
       throw new BadRequestException(
         `Cannot delete client "${client.name}" — ${jobCount} job(s) are linked to this client.`,
       );
+    }
+    // Delete passport files from disk before cascade-deleting DB records
+    const passports = await this.passportCopyRepository.find({ where: { clientId: id } });
+    for (const pc of passports) {
+      if (pc.filePath && existsSync(pc.filePath)) unlinkSync(pc.filePath);
     }
     await this.clientRepository.remove(client);
   }
@@ -261,6 +267,7 @@ export class ClientsService {
       where: { id: copyId, clientId },
     });
     if (!pc) throw new NotFoundException('Passport copy not found');
+    if (pc.filePath && existsSync(pc.filePath)) unlinkSync(pc.filePath);
     await this.passportCopyRepository.remove(pc);
   }
 }

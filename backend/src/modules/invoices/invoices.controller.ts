@@ -3,7 +3,7 @@ import {
   UseGuards, Res, NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, unlinkSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceExportService } from './invoice-export.service.js';
@@ -99,7 +99,9 @@ export class InvoicesController {
     const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
-    createReadStream(filePath).pipe(res);
+    const stream = createReadStream(filePath);
+    stream.pipe(res);
+    stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
   }
 
   @Post(':id/export-word')
@@ -111,7 +113,9 @@ export class InvoicesController {
     const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
-    createReadStream(filePath).pipe(res);
+    const stream = createReadStream(filePath);
+    stream.pipe(res);
+    stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
   }
 
   @Delete(':id')
