@@ -32,28 +32,28 @@ export class Job {
   @Column({ type: 'text', nullable: true })
   description: string;
 
-  @ManyToOne(() => Client, { eager: true })
+  @ManyToOne(() => Client)
   @JoinColumn({ name: 'client_id' })
   client: Client;
 
   @Column({ name: 'client_id' })
   clientId: string;
 
-  @ManyToOne(() => Contact, { nullable: true, eager: true })
+  @ManyToOne(() => Contact, { nullable: true })
   @JoinColumn({ name: 'contact_id' })
   contact: Contact;
 
   @Column({ name: 'contact_id', nullable: true })
   contactId: string;
 
-  @ManyToOne(() => Language, { eager: true })
+  @ManyToOne(() => Language)
   @JoinColumn({ name: 'source_language_id' })
   sourceLanguage: Language;
 
   @Column({ name: 'source_language_id' })
   sourceLanguageId: string;
 
-  @ManyToOne(() => Language, { nullable: true, eager: true })
+  @ManyToOne(() => Language, { nullable: true })
   @JoinColumn({ name: 'target_language_id' })
   targetLanguage: Language;
 
@@ -91,7 +91,7 @@ export class Job {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
-  @OneToMany(() => JobLineItem, (li) => li.job, { cascade: true, eager: true })
+  @OneToMany(() => JobLineItem, (li) => li.job, { cascade: true })
   lineItems: JobLineItem[];
 
   @OneToMany(() => JobUser, (ju) => ju.job, { cascade: true })

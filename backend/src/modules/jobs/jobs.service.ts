@@ -81,7 +81,7 @@ export class JobsService {
       .leftJoinAndSelect('job.client', 'client')
       .leftJoinAndSelect('job.sourceLanguage', 'sourceLang')
       .leftJoinAndSelect('job.targetLanguage', 'targetLang')
-      .leftJoinAndSelect('job.lineItems', 'lineItems');
+      .loadRelationCountAndMap('job.lineItemCount', 'job.lineItems');
 
     // Non-admin users can only see jobs they are assigned to
     if (query.userId && !query.isAdmin) {
@@ -116,6 +116,13 @@ export class JobsService {
       where: { id },
       relations: ['client', 'contact', 'sourceLanguage', 'targetLanguage', 'lineItems', 'assignedUsers', 'assignedUsers.user', 'files'],
     });
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
+  }
+
+  // Lightweight find for internal use (status checks, etc.)
+  private async findOneBasic(id: string): Promise<Job> {
+    const job = await this.jobRepository.findOne({ where: { id } });
     if (!job) throw new NotFoundException('Job not found');
     return job;
   }

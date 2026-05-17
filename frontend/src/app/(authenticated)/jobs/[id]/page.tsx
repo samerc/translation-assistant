@@ -309,7 +309,7 @@ interface DocSummary {
   id: string;
   status: string;
   template: { id: string; name: string; type: string };
-  fieldValues: { id: string }[];
+  fieldValueCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -387,7 +387,7 @@ function DocumentsTab({ job }: { job: Job }) {
                 }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
               </div>
               <div className="text-xs text-text-muted mt-1">
-                {doc.fieldValues.length} field(s) filled — Last updated {new Date(doc.updatedAt).toLocaleDateString()}
+                {doc.fieldValueCount || 0} field(s) filled — Last updated {new Date(doc.updatedAt).toLocaleDateString()}
               </div>
             </div>
             <div className="flex gap-2">

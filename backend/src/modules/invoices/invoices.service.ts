@@ -96,7 +96,7 @@ export class InvoicesService {
     const qb = this.invoiceRepository
       .createQueryBuilder('inv')
       .leftJoinAndSelect('inv.client', 'client')
-      .leftJoinAndSelect('inv.items', 'items');
+      .loadRelationCountAndMap('inv.itemCount', 'inv.items');
 
     // Non-admins: only see invoices they created or where they have access to linked jobs
     if (query.userId && !query.isAdmin) {
@@ -144,10 +144,15 @@ export class InvoicesService {
   }
 
   async findOne(id: string): Promise<Invoice> {
-    const invoice = await this.invoiceRepository.findOne({
-      where: { id },
-      relations: ['client', 'items', 'items.job'],
-    });
+    const invoice = await this.invoiceRepository
+      .createQueryBuilder('inv')
+      .leftJoinAndSelect('inv.client', 'client')
+      .leftJoinAndSelect('inv.items', 'items')
+      .leftJoin('items.job', 'job')
+      .addSelect(['job.id', 'job.jobNumber', 'job.title'])
+      .where('inv.id = :id', { id })
+      .orderBy('items.sortOrder', 'ASC')
+      .getOne();
     if (!invoice) throw new NotFoundException('Invoice not found');
     return invoice;
   }

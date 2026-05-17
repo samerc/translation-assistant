@@ -19,7 +19,7 @@ export class Invoice {
   @Column({ length: 20, unique: true })
   invoiceNumber: string;
 
-  @ManyToOne(() => Client, { eager: true })
+  @ManyToOne(() => Client)
   @JoinColumn({ name: 'client_id' })
   client: Client;
 
@@ -66,7 +66,7 @@ export class Invoice {
   @Column({ name: 'created_by_user_id', nullable: true })
   createdByUserId: string;
 
-  @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: true, eager: true })
+  @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: true })
   items: InvoiceItem[];
 
   @CreateDateColumn()

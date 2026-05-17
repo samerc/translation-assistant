@@ -14,7 +14,7 @@ interface Job {
   sourceLanguage: { code: string; name: string };
   targetLanguage: { code: string; name: string } | null;
   deadline: string | null;
-  lineItems: { id: string; pageCount: number }[];
+  lineItemCount: number;
   calculatedTotal: number;
   finalPrice: number | null;
   isFreeOfCharge: boolean;
@@ -164,7 +164,7 @@ export default function JobsPage() {
                   <td className="px-4 py-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge.color}`}>{badge.label}</span>
                   </td>
-                  <td className="px-4 py-3 text-text-secondary">{job.lineItems?.length || 0}</td>
+                  <td className="px-4 py-3 text-text-secondary">{job.lineItemCount || 0}</td>
                   <td className="px-4 py-3 text-text-secondary">{getPrice(job)}</td>
                   <td className="px-4 py-3 text-text-secondary">{job.deadline ? new Date(job.deadline).toLocaleDateString() : '—'}</td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(job.createdAt).toLocaleDateString()}</td>

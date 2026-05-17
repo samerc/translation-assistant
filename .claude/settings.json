@@ -9,7 +9,29 @@
       "Bash(npm run:*)",
       "Bash(export PATH=\"/c/Program Files/nodejs:/c/Program Files/Git/usr/bin:$PATH\")",
       "Bash(npm ls:*)",
-      "Bash(find . -name \"page.tsx\" -path \"*clients*\" -exec wc -l {} \\\\;)"
+      "Bash(find . -name \"page.tsx\" -path \"*clients*\" -exec wc -l {} \\\\;)",
+      "Bash(npx tsc:*)",
+      "Bash(npm audit:*)",
+      "Bash(node -e \"console.log\\(require\\('next/package.json'\\).version\\)\")",
+      "Bash(node -e 'console.log\\(JSON.parse\\(require\\('\\\\''fs'\\\\''\\).readFileSync\\(process.argv[1],'\\\\''utf8'\\\\''\\)\\).accessToken\\)' C:/tmp/login.json)",
+      "Bash(curl -s http://localhost:3005/api/reports/dashboard-stats -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(node -e \"process.stdin.on\\('data',d=>console.log\\(JSON.stringify\\(JSON.parse\\(d\\),null,2\\)\\)\\)\")",
+      "Bash(curl -s 'http://localhost:3005/api/jobs?limit=100' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{const j=JSON.parse\\(d\\);console.log\\('Total:',j.total\\);j.data.forEach\\(j=>console.log\\(j.jobNumber,j.title,'['+j.status+']','client='+j.client?.name,'total=$'+Number\\(j.calculatedTotal\\).toFixed\\(2\\),'deadline='+j.deadline\\)\\)}\\)\")",
+      "Bash(curl -s http://localhost:3005/api/invoices -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{const j=JSON.parse\\(d\\);console.log\\('Events:',j.length\\);j.forEach\\(e=>console.log\\(' ',e.date,e.type,e.title.substring\\(0,50\\),'['+e.status+']'\\)\\)}\\)\")",
+      "Bash(curl -s 'http://localhost:3005/api/search?q=birth' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{const j=JSON.parse\\(d\\);j.length?j.forEach\\(c=>console.log\\(' ',c.clientName,'revenue=$'+Number\\(c.totalRevenue\\).toFixed\\(2\\)\\)\\):console.log\\('No client revenue data yet'\\)}\\)\")",
+      "Bash(curl -s 'http://localhost:3005/api/jobs?status=delivered&limit=1' -H 'Authorization: Bearer __TRACKED_VAR__')",
+      "Bash(curl -s http://localhost:3000 -o /dev/null -w \"Frontend: HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:3000/login -o /dev/null -w \"Login page: HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:3000/invoices -o /dev/null -w \"Invoices page: HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:3000/calendar -o /dev/null -w \"Calendar page: HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:3000/reports -o /dev/null -w \"Reports page: HTTP %{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:3005/api/invoices -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWM2OGMyMS0yODE0LTRkMjMtYWI4OS1mNjVkNzMyMjdlMWUiLCJlbWFpbCI6InRlc3RlckB0ZXN0LmNvbSIsImlhdCI6MTc3ODk0MTg2NiwiZXhwIjoxNzc4OTQyNzY2fQ.c8zJzZrBol8g0RFRNL5emQwjvYpLHBcEpxzhycp4UwA')",
+      "Bash(curl -s http://localhost:3005/api/reports/dashboard-stats -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWM2OGMyMS0yODE0LTRkMjMtYWI4OS1mNjVkNzMyMjdlMWUiLCJlbWFpbCI6InRlc3RlckB0ZXN0LmNvbSIsImlhdCI6MTc3ODk0MTg2NiwiZXhwIjoxNzc4OTQyNzY2fQ.c8zJzZrBol8g0RFRNL5emQwjvYpLHBcEpxzhycp4UwA')",
+      "Bash(curl -s 'http://localhost:3005/api/calendar/events?month=5&year=2026' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWM2OGMyMS0yODE0LTRkMjMtYWI4OS1mNjVkNzMyMjdlMWUiLCJlbWFpbCI6InRlc3RlckB0ZXN0LmNvbSIsImlhdCI6MTc3ODk0MTg2NiwiZXhwIjoxNzc4OTQyNzY2fQ.c8zJzZrBol8g0RFRNL5emQwjvYpLHBcEpxzhycp4UwA')",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{try{const j=JSON.parse\\(d\\);console.log\\(j.statusCode?'BLOCKED: '+j.message:'Events: '+j.length\\)}catch{console.log\\(d.toString\\(\\)\\)}}\\)\")"
     ]
   }
 }

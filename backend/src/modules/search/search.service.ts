@@ -50,7 +50,9 @@ export class SearchService {
     // Build job query
     const jobQb = this.jobRepository
       .createQueryBuilder('j')
-      .leftJoinAndSelect('j.client', 'client')
+      .select(['j.id', 'j.jobNumber', 'j.title', 'j.status'])
+      .leftJoin('j.client', 'client')
+      .addSelect(['client.name'])
       .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
     if (!isAdmin) {
       jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
@@ -76,7 +78,9 @@ export class SearchService {
     // Build invoice query
     const invoiceQb = this.invoiceRepository
       .createQueryBuilder('inv')
-      .leftJoinAndSelect('inv.client', 'client')
+      .select(['inv.id', 'inv.invoiceNumber', 'inv.status'])
+      .leftJoin('inv.client', 'client')
+      .addSelect(['client.name'])
       .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like });
     if (!isAdmin) {
       invoiceQb.andWhere(

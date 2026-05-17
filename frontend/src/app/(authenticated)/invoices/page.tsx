@@ -17,7 +17,7 @@ interface Invoice {
   total: number;
   currency: string;
   paidAmount: number | null;
-  items: { id: string }[];
+  itemCount: number;
   createdAt: string;
 }
 
@@ -153,7 +153,7 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(inv.issueDate).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(inv.dueDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-text-secondary">{inv.items?.length || 0}</td>
+                  <td className="px-4 py-3 text-text-secondary">{inv.itemCount || 0}</td>
                   <td className="px-4 py-3 text-text-secondary font-medium">
                     {inv.currency} {Number(inv.total).toFixed(2)}
                   </td>

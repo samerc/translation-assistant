@@ -34,7 +34,7 @@ export class CalendarService {
     // Job deadlines
     const jobQb = this.jobRepository
       .createQueryBuilder('job')
-      .leftJoinAndSelect('job.client', 'client')
+      .select(['job.id', 'job.jobNumber', 'job.title', 'job.deadline', 'job.status'])
       .where('job.deadline BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('job.status NOT IN (:...excluded)', { excluded: ['paid', 'cancelled', 'lost'] });
 
@@ -57,7 +57,9 @@ export class CalendarService {
     // Invoice due dates
     const invQb = this.invoiceRepository
       .createQueryBuilder('inv')
-      .leftJoinAndSelect('inv.client', 'client')
+      .select(['inv.id', 'inv.invoiceNumber', 'inv.dueDate', 'inv.status'])
+      .leftJoin('inv.client', 'client')
+      .addSelect(['client.name'])
       .where('inv.dueDate BETWEEN :start AND :end', { start: startDate, end: endDate })
       .andWhere('inv.status NOT IN (:...excluded)', { excluded: ['paid', 'cancelled'] });
 

@@ -29,13 +29,13 @@ export class Client {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
-  @OneToMany(() => ClientEmail, (e) => e.client, { cascade: true, eager: true })
+  @OneToMany(() => ClientEmail, (e) => e.client, { cascade: true })
   emails: ClientEmail[];
 
-  @OneToMany(() => ClientPhone, (p) => p.client, { cascade: true, eager: true })
+  @OneToMany(() => ClientPhone, (p) => p.client, { cascade: true })
   phones: ClientPhone[];
 
-  @OneToMany(() => ClientAddress, (a) => a.client, { cascade: true, eager: true })
+  @OneToMany(() => ClientAddress, (a) => a.client, { cascade: true })
   addresses: ClientAddress[];
 
   @OneToMany(() => Contact, (contact) => contact.client, { cascade: true })

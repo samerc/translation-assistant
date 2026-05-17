@@ -34,11 +34,14 @@ export class DocumentsService {
   }
 
   async findByJob(jobId: string): Promise<Document[]> {
-    return this.documentRepository.find({
-      where: { jobId },
-      relations: ['template', 'fieldValues', 'fieldValues.templateField'],
-      order: { createdAt: 'ASC' },
-    });
+    return this.documentRepository
+      .createQueryBuilder('doc')
+      .leftJoin('doc.template', 'template')
+      .addSelect(['template.id', 'template.name', 'template.type'])
+      .loadRelationCountAndMap('doc.fieldValueCount', 'doc.fieldValues')
+      .where('doc.jobId = :jobId', { jobId })
+      .orderBy('doc.createdAt', 'ASC')
+      .getMany();
   }
 
   async findOne(id: string): Promise<Document> {

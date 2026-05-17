@@ -14,7 +14,7 @@ export class InvoiceItem {
   @Column({ name: 'invoice_id' })
   invoiceId: string;
 
-  @ManyToOne(() => Job, { nullable: true, eager: true })
+  @ManyToOne(() => Job, { nullable: true })
   @JoinColumn({ name: 'job_id' })
   job: Job;
 
