@@ -191,20 +191,35 @@ export class NotificationsService {
   async checkOverdueInvoices(): Promise<void> {
     const today = new Date().toISOString().split('T')[0];
 
+    // Find overdue invoices before updating (need IDs for notifications)
     const overdueInvoices = await this.invoiceRepository.find({
-      where: {
-        status: 'sent',
-        dueDate: LessThan(today),
-      },
+      where: { status: 'sent', dueDate: LessThan(today) },
+      select: ['id', 'invoiceNumber', 'createdByUserId'],
     });
 
-    for (const invoice of overdueInvoices) {
-      invoice.status = 'overdue';
-      await this.invoiceRepository.save(invoice);
+    if (overdueInvoices.length === 0) return;
 
-      if (invoice.createdByUserId) {
-        await this.notifyInvoiceOverdue(invoice);
-      }
+    // Batch update all to overdue in one query
+    await this.invoiceRepository.update(
+      { id: In(overdueInvoices.map((i) => i.id)) },
+      { status: 'overdue' },
+    );
+
+    // Batch create notifications
+    const notifications = overdueInvoices
+      .filter((inv) => inv.createdByUserId)
+      .map((inv) =>
+        this.notificationRepository.create({
+          userId: inv.createdByUserId,
+          type: 'invoice_overdue',
+          title: 'Invoice overdue',
+          message: `Invoice ${inv.invoiceNumber} is past due`,
+          link: `/invoices/${inv.id}`,
+        }),
+      );
+
+    if (notifications.length > 0) {
+      await this.notificationRepository.save(notifications);
     }
   }
 }
