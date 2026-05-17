@@ -22,16 +22,23 @@ const bottomItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { collapsed, toggle } = useSidebar();
+  const { collapsed, toggle, mobileOpen, setMobileOpen } = useSidebar();
   const { hasPermission } = useAuth();
 
   const navItems = allNavItems.filter((item) => !item.permission || hasPermission(item.permission));
 
   return (
+    <>
+    {/* Mobile backdrop */}
+    {mobileOpen && (
+      <div className="fixed inset-0 bg-black/50 z-10 md:hidden" onClick={() => setMobileOpen(false)} />
+    )}
     <aside
-      className={`fixed left-0 top-0 h-screen bg-sidebar-bg flex flex-col transition-all duration-200 z-20 ${
-        collapsed ? 'w-16 -translate-x-full md:translate-x-0' : 'w-56'
-      }`}
+      className={`fixed left-0 top-0 h-screen bg-sidebar-bg flex flex-col transition-all duration-200 z-20
+        ${collapsed ? 'w-16' : 'w-56'}
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0
+      `}
     >
       {/* Logo */}
       <div className="flex items-center h-14 px-4 border-b border-white/10">
@@ -63,6 +70,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
                 isActive
                   ? 'bg-white/12 text-white font-semibold border-l-3 border-sidebar-active'
@@ -85,6 +93,7 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
                 isActive
                   ? 'bg-white/12 text-white font-semibold border-l-3 border-sidebar-active'
@@ -99,6 +108,7 @@ export default function Sidebar() {
         })}
       </div>
     </aside>
+    </>
   );
 }
 

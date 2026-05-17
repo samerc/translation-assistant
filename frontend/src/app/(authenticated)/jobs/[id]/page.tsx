@@ -117,12 +117,12 @@ export default function JobDetailPage() {
       )}
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
+      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
+        <div className="min-w-0">
           <button onClick={() => router.push('/jobs')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">← Back to Jobs</button>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono text-text-muted">{job.jobNumber}</span>
-            <h1 className="text-2xl font-bold text-text">{job.title}</h1>
+            <h1 className="text-xl md:text-2xl font-bold text-text">{job.title}</h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor(job.status)}`}>
               {STATUSES.find((s) => s.value === job.status)?.label}
             </span>
@@ -142,7 +142,7 @@ export default function JobDetailPage() {
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {job.status === 'delivered' && (
             <button onClick={() => router.push(`/invoices/new?jobId=${job.id}`)}
               className="px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90">
@@ -161,10 +161,10 @@ export default function JobDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border mb-6">
+      <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
         {tabs.map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'}`}>
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'}`}>
             {tab.label}
           </button>
         ))}

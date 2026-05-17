@@ -29,7 +29,7 @@ interface SearchResults {
 export default function Topbar() {
   const { darkMode, toggleDarkMode } = useTheme();
   const { user } = useAuth();
-  const { collapsed } = useSidebar();
+  const { collapsed, setMobileOpen } = useSidebar();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -142,8 +142,18 @@ export default function Topbar() {
 
   return (
     <header className={`fixed top-0 right-0 h-14 bg-surface border-b border-border flex items-center justify-between px-3 md:px-6 z-10 transition-all duration-200 left-0 ${collapsed ? 'md:left-16' : 'md:left-56'}`}>
+      {/* Mobile hamburger */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="p-2 rounded-lg text-text-secondary hover:bg-bg md:hidden mr-2"
+        aria-label="Open menu"
+      >
+        <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+        </svg>
+      </button>
       {/* Global Search */}
-      <div className="relative flex-1 max-w-xs md:max-w-md" ref={searchRef}>
+      <div className="relative flex-1 min-w-0 max-w-[180px] sm:max-w-xs md:max-w-md" ref={searchRef}>
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
         <input
           type="text"

@@ -144,7 +144,7 @@ export default function CalendarPage() {
                 return (
                   <button key={i}
                     onClick={() => setSelectedDate(key === selectedDate ? null : key)}
-                    className={`min-h-[90px] p-1.5 border-b border-r border-border text-left transition-colors
+                    className={`min-h-[60px] md:min-h-[90px] p-1 md:p-1.5 border-b border-r border-border text-left transition-colors
                       ${!d.isCurrentMonth ? 'bg-bg/50' : 'bg-surface hover:bg-bg/30'}
                       ${isSelected ? 'ring-2 ring-primary ring-inset' : ''}
                     `}>
