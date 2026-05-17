@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
 import { JobFile } from './entities/job-file.entity.js';
@@ -36,6 +36,7 @@ export class JobsService {
     private readonly userRepository: Repository<User>,
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
@@ -152,63 +153,68 @@ export class JobsService {
 
     const jobNumber = await this.generateJobNumber();
 
-    const job = this.jobRepository.create({
-      jobNumber,
-      type: dto.type,
-      title: dto.title,
-      description: dto.description,
-      clientId: dto.clientId,
-      contactId: dto.contactId,
-      sourceLanguageId: dto.sourceLanguageId,
-      targetLanguageId: dto.targetLanguageId,
-      status: dto.status || 'in_progress',
-      deadline: dto.deadline,
-      finalPrice: dto.finalPrice,
-      isFreeOfCharge: dto.isFreeOfCharge,
-      freeOfChargeReason: dto.freeOfChargeReason,
-      notes: dto.notes,
-      createdByUserId: userId,
+    // Wrap all writes in a transaction
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      const job = manager.create(Job, {
+        jobNumber,
+        type: dto.type,
+        title: dto.title,
+        description: dto.description,
+        clientId: dto.clientId,
+        contactId: dto.contactId,
+        sourceLanguageId: dto.sourceLanguageId,
+        targetLanguageId: dto.targetLanguageId,
+        status: dto.status || 'in_progress',
+        deadline: dto.deadline,
+        finalPrice: dto.finalPrice,
+        isFreeOfCharge: dto.isFreeOfCharge,
+        freeOfChargeReason: dto.freeOfChargeReason,
+        notes: dto.notes,
+        createdByUserId: userId,
+      });
+
+      const saved = await manager.save(job);
+
+      // Create line items (batch save)
+      if (dto.lineItems?.length) {
+        const items = dto.lineItems.map((li, i) =>
+          manager.create(JobLineItem, {
+            jobId: saved.id,
+            description: li.description,
+            templateId: li.templateId,
+            pageCount: li.pageCount,
+            pricePerPage: li.pricePerPage,
+            useDiscountedPrice: li.useDiscountedPrice,
+            discountedPricePerPage: li.discountedPricePerPage,
+            lineTotal: this.calculateLineTotal(li),
+            sortOrder: i,
+          }),
+        );
+        await manager.save(items);
+      }
+
+      // Auto-create documents for non-simple templates
+      if (dto.type !== 'freeform' && templateIds.length > 0) {
+        const docsToCreate = templates
+          .filter((t) => t.type !== 'simple')
+          .map((t) => manager.create(Document, { jobId: saved.id, templateId: t.id }));
+        if (docsToCreate.length > 0) {
+          await manager.save(docsToCreate);
+        }
+      }
+
+      // Auto-assign creator
+      await manager.save(
+        manager.create(JobUser, { jobId: saved.id, userId, permissionLevel: 'edit' }),
+      );
+
+      return saved.id;
     });
 
-    const saved = await this.jobRepository.save(job);
+    // Recalculate total (outside transaction — reads committed data)
+    await this.recalculateTotal(savedId);
 
-    // Create line items (batch save)
-    if (dto.lineItems?.length) {
-      const items = dto.lineItems.map((li, i) =>
-        this.lineItemRepository.create({
-          jobId: saved.id,
-          description: li.description,
-          templateId: li.templateId,
-          pageCount: li.pageCount,
-          pricePerPage: li.pricePerPage,
-          useDiscountedPrice: li.useDiscountedPrice,
-          discountedPricePerPage: li.discountedPricePerPage,
-          lineTotal: this.calculateLineTotal(li),
-          sortOrder: i,
-        }),
-      );
-      await this.lineItemRepository.save(items);
-    }
-
-    // Auto-create documents for non-simple templates (batch, using already-fetched templates)
-    if (dto.type !== 'freeform' && templateIds.length > 0) {
-      const docsToCreate = templates
-        .filter((t) => t.type !== 'simple')
-        .map((t) => this.documentRepository.create({ jobId: saved.id, templateId: t.id }));
-      if (docsToCreate.length > 0) {
-        await this.documentRepository.save(docsToCreate);
-      }
-    }
-
-    // Recalculate total
-    await this.recalculateTotal(saved.id);
-
-    // Auto-assign creator
-    await this.jobUserRepository.save(
-      this.jobUserRepository.create({ jobId: saved.id, userId, permissionLevel: 'edit' }),
-    );
-
-    return this.findOne(saved.id);
+    return this.findOne(savedId);
   }
 
   async update(id: string, dto: UpdateJobDto): Promise<Job> {

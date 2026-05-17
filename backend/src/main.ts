@@ -27,6 +27,9 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api');
 
+  // Graceful shutdown — drains connection pool on SIGTERM/SIGINT
+  app.enableShutdownHooks();
+
   // Run seed on first startup
   const dataSource = app.get(DataSource);
   await seed(dataSource);

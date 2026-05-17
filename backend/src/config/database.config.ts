@@ -11,4 +11,11 @@ export const databaseConfig = (): TypeOrmModuleOptions => ({
   synchronize: true, // TODO: use migrations in production once schema is stable
   charset: 'utf8mb4',
   logging: process.env.NODE_ENV === 'development',
+  extra: {
+    connectionLimit: parseInt(process.env.DB_POOL_SIZE || '20', 10),
+    waitForConnections: true,
+    queueLimit: 0,
+    connectTimeout: 10000,
+    idleTimeout: 30000,
+  },
 });

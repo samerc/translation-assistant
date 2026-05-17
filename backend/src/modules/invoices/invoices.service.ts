@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Invoice } from './entities/invoice.entity.js';
 import { InvoiceItem } from './entities/invoice-item.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
@@ -24,6 +24,7 @@ export class InvoicesService {
     private readonly clientRepository: Repository<Client>,
     @InjectRepository(AppSettings)
     private readonly settingsRepository: Repository<AppSettings>,
+    private readonly dataSource: DataSource,
   ) {}
 
   // Verify user has access to this invoice (created it or has access to a linked job)
@@ -183,38 +184,42 @@ export class InvoicesService {
 
     const invoiceNumber = await this.generateInvoiceNumber();
 
-    const invoice = this.invoiceRepository.create({
-      invoiceNumber,
-      clientId: dto.clientId,
-      status: 'draft',
-      issueDate: dto.issueDate,
-      dueDate: dto.dueDate,
-      subtotal,
-      taxRate,
-      taxAmount,
-      total,
-      notes: dto.notes,
-      currency,
-      createdByUserId: userId,
+    // Wrap invoice + items creation in a transaction
+    const savedId = await this.dataSource.transaction(async (manager) => {
+      const invoice = manager.create(Invoice, {
+        invoiceNumber,
+        clientId: dto.clientId,
+        status: 'draft',
+        issueDate: dto.issueDate,
+        dueDate: dto.dueDate,
+        subtotal,
+        taxRate,
+        taxAmount,
+        total,
+        notes: dto.notes,
+        currency,
+        createdByUserId: userId,
+      });
+
+      const saved = await manager.save(invoice);
+
+      const items = dto.items.map((item, i) =>
+        manager.create(InvoiceItem, {
+          invoiceId: saved.id,
+          jobId: item.jobId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          lineTotal: Number(item.quantity) * Number(item.unitPrice),
+          sortOrder: i,
+        }),
+      );
+      await manager.save(items);
+
+      return saved.id;
     });
 
-    const saved = await this.invoiceRepository.save(invoice);
-
-    // Create items
-    const items = dto.items.map((item, i) =>
-      this.itemRepository.create({
-        invoiceId: saved.id,
-        jobId: item.jobId,
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        lineTotal: Number(item.quantity) * Number(item.unitPrice),
-        sortOrder: i,
-      }),
-    );
-    await this.itemRepository.save(items);
-
-    return this.findOne(saved.id);
+    return this.findOne(savedId);
   }
 
   async update(id: string, dto: UpdateInvoiceDto): Promise<Invoice> {
