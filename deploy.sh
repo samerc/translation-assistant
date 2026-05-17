@@ -31,31 +31,7 @@ echo "  Upload complete"
 
 # Step 4: Extract, install deps if needed, copy static, restart ONLY our apps
 echo "[4/4] Deploying on server..."
-ssh $SSH_OPTS "$SERVER" bash -c "'
-cd \"$REMOTE_DIR\"
-
-# Extract backend (dist + package files only, node_modules stays)
-tar xzf backend-deploy.tar.gz -C backend
-rm -f backend-deploy.tar.gz
-
-# Extract frontend
-tar xzf frontend-deploy.tar.gz -C frontend
-rm -f frontend-deploy.tar.gz
-
-# Copy static assets into standalone dir
-cp -r frontend/.next/static frontend/.next/standalone/frontend/.next/static 2>/dev/null
-
-# Install backend production deps if package-lock changed
-cd backend
-npm install --omit=dev --prefer-offline 2>&1 | tail -1
-cd ..
-
-# Restart only translation assistant apps (not mj-wedding or others)
-pm2 restart ta-backend ta-frontend --update-env 2>&1 | tail -1
-pm2 save 2>&1 | tail -1
-
-echo DEPLOY_OK
-'"
+ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR && tar xzf backend-deploy.tar.gz -C backend && tar xzf frontend-deploy.tar.gz -C frontend && del backend-deploy.tar.gz frontend-deploy.tar.gz 2>nul && xcopy /E /I /Y frontend\.next\static frontend\.next\standalone\frontend\.next\static >nul 2>&1 && cd backend && npm install --omit=dev --prefer-offline 2>&1 && cd .. && pm2 restart ta-backend ta-frontend --update-env 2>&1 && pm2 save 2>&1 && echo DEPLOY_OK" 2>&1 | grep -E "DEPLOY_OK|added|up to date|restarted|error|Error" | head -5
 
 echo ""
 echo "========================================="
