@@ -14,7 +14,7 @@ echo ""
 # Step 1: Build
 echo "[1/4] Building..."
 cd "$PROJECT_DIR/backend"  && npm run build 2>&1 | tail -1
-cd "$PROJECT_DIR/frontend" && NEXT_PUBLIC_API_URL="http://translate.fancyshark.com/api" npm run build 2>&1 | tail -1
+cd "$PROJECT_DIR/frontend" && NEXT_PUBLIC_API_URL="https://translate.fancyshark.com/api" npm run build 2>&1 | tail -1
 
 # Step 2: Package (exclude node_modules — they stay on server)
 echo "[2/4] Packaging..."

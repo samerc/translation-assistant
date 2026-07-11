@@ -8,9 +8,12 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Override explicitly with DB_SYNCHRONIZE=true|false if needed (e.g. to disable
 // sync in a staging env). See src/migrations and the "Database & Performance" notes
 // in CLAUDE.md for the baseline-migration cutover.
+// Trim the env value — Windows .env files (CRLF) leave a trailing "\r" that would
+// make a strict === 'true' comparison fail silently.
+const dbSyncEnv = process.env.DB_SYNCHRONIZE?.trim();
 const synchronize =
-  process.env.DB_SYNCHRONIZE !== undefined
-    ? process.env.DB_SYNCHRONIZE === 'true'
+  dbSyncEnv !== undefined && dbSyncEnv !== ''
+    ? dbSyncEnv === 'true'
     : !isProduction;
 
 export const databaseConfig = (): TypeOrmModuleOptions => ({

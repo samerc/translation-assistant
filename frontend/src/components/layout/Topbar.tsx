@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useSidebar } from '@/lib/sidebar-context';
 import { api } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 interface NotificationItem {
   id: string;
@@ -28,7 +29,7 @@ interface SearchResults {
 
 export default function Topbar() {
   const { darkMode, toggleDarkMode } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { collapsed, setMobileOpen } = useSidebar();
   const router = useRouter();
   const pathname = usePathname();
@@ -37,6 +38,17 @@ export default function Topbar() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // User menu (avatar dropdown) + change-password modal
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleLogout = async () => {
+    setShowUserMenu(false);
+    await logout();
+    router.push('/login');
+  };
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,6 +101,9 @@ export default function Topbar() {
       }
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setShowSearch(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClick);
@@ -309,11 +324,46 @@ export default function Topbar() {
           )}
         </div>
 
-        {/* User avatar */}
-        <button className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-semibold" title={user ? `${user.firstName} ${user.lastName}` : ''}>
-          {initials}
-        </button>
+        {/* User avatar + menu */}
+        <div className="relative" ref={userMenuRef}>
+          <button
+            onClick={() => setShowUserMenu((v) => !v)}
+            className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-semibold hover:ring-2 hover:ring-primary/40 transition"
+            title={user ? `${user.firstName} ${user.lastName}` : ''}
+            aria-label="Account menu"
+          >
+            {initials}
+          </button>
+
+          {showUserMenu && (
+            <div className="absolute right-0 top-full mt-2 w-56 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50">
+              {user && (
+                <div className="px-4 py-3 border-b border-border">
+                  <div className="text-sm font-semibold text-text truncate">{user.firstName} {user.lastName}</div>
+                  <div className="text-xs text-text-muted truncate">{user.email}</div>
+                </div>
+              )}
+              <button
+                onClick={() => { setShowUserMenu(false); setShowPasswordModal(true); }}
+                className="w-full text-left px-4 py-2.5 text-sm text-text hover:bg-bg/50 flex items-center gap-2.5"
+              >
+                <KeyIcon className="w-4 h-4 text-text-muted" />
+                Change Password
+              </button>
+              <div className="border-t border-border" />
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-4 py-2.5 text-sm text-danger hover:bg-danger-light/40 flex items-center gap-2.5"
+              >
+                <LogoutIcon className="w-4 h-4" />
+                Log out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
     </header>
   );
 }
@@ -394,6 +444,22 @@ function TemplateIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor">
       <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function KeyIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v2H2v-4l4.257-4.257A6 6 0 1118 8zm-6-4a1 1 0 100 2 2 2 0 012 2 1 1 0 102 0 4 4 0 00-4-4z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+function LogoutIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 001 1h5a1 1 0 100-2H4V5h4a1 1 0 000-2H3zm10.293 3.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L14.586 11H7a1 1 0 110-2h7.586l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
     </svg>
   );
 }
