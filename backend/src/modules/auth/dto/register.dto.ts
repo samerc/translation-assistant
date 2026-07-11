@@ -1,4 +1,5 @@
-import { IsEmail, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsEmail, IsString, MinLength, MaxLength } from 'class-validator';
+import { IsNotCommonPassword } from '../../../common/validators/is-not-common-password.js';
 
 export class RegisterDto {
   @IsEmail()
@@ -7,9 +8,7 @@ export class RegisterDto {
   @IsString()
   @MinLength(8)
   @MaxLength(100)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>])/, {
-    message: 'Password must contain uppercase, lowercase, number, and special character',
-  })
+  @IsNotCommonPassword()
   password: string;
 
   @IsString()
@@ -23,5 +22,6 @@ export class RegisterDto {
   lastName: string;
 
   @IsString()
+  @MaxLength(500)
   inviteToken: string;
 }

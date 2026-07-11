@@ -7,15 +7,19 @@ import {
   Body,
   Param,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesService } from './roles.service.js';
 import { CreateRoleDto, UpdateRoleDto } from './dto/create-role.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
+import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 
 @Controller('roles')
-@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
+@AdminOnly()
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
@@ -33,7 +37,7 @@ export class RolesController {
 
   @Get(':id')
   @RequirePermissions('roles:read')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.rolesService.findOne(id);
   }
 
@@ -45,13 +49,13 @@ export class RolesController {
 
   @Patch(':id')
   @RequirePermissions('roles:update')
-  update(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRoleDto) {
     return this.rolesService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('roles:delete')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.rolesService.remove(id);
   }
 }

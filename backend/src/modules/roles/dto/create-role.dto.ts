@@ -1,4 +1,4 @@
-import { IsString, MinLength, MaxLength, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsUUID, MinLength, MaxLength, IsOptional, IsArray, ArrayMaxSize } from 'class-validator';
 
 export class CreateRoleDto {
   @IsString()
@@ -8,11 +8,13 @@ export class CreateRoleDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
   permissionIds?: string[];
 }
 
@@ -25,10 +27,12 @@ export class UpdateRoleDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   description?: string;
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
   permissionIds?: string[];
 }

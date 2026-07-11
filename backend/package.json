@@ -11,13 +11,19 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "typeorm": "typeorm -d dist/config/data-source.js",
+    "migration:generate": "npm run build && npm run typeorm -- migration:generate",
+    "migration:create": "typeorm migration:create",
+    "migration:run": "npm run build && npm run typeorm -- migration:run",
+    "migration:revert": "npm run build && npm run typeorm -- migration:revert",
+    "migration:show": "npm run build && npm run typeorm -- migration:show"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.19",
@@ -32,6 +38,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cookie-parser": "^1.4.7",
     "docx": "^9.6.1",
     "docxtemplater": "^3.68.6",
     "helmet": "^8.1.0",
@@ -43,6 +50,7 @@
     "pizzip": "^3.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sanitize-html": "^2.17.4",
     "typeorm": "^0.3.28"
   },
   "devDependencies": {
@@ -52,12 +60,14 @@
     "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.19",
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.1.0",
     "@types/node": "^25.6.0",
     "@types/passport-jwt": "^4.0.1",
     "@types/pdfkit": "^0.17.6",
+    "@types/sanitize-html": "^2.16.1",
     "@types/supertest": "^7.2.0",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
@@ -82,8 +92,22 @@
     ],
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "module": "commonjs",
+            "moduleResolution": "node",
+            "resolvePackageJsonExports": false,
+            "ignoreDeprecations": "6.0",
+            "verbatimModuleSyntax": false
+          }
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

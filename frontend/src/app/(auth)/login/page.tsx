@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 
 export default function LoginPage() {
@@ -96,6 +97,12 @@ export default function LoginPage() {
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
+
+          <div className="mt-4 text-center">
+            <Link href="/forgot-password" className="text-sm text-primary hover:text-primary-hover font-medium">
+              Forgot password?
+            </Link>
+          </div>
         </form>
       </div>
     </div>

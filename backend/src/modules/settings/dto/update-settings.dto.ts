@@ -6,6 +6,7 @@ import {
   Min,
   Max,
   MaxLength,
+  ArrayMaxSize,
 } from 'class-validator';
 
 export class UpdateSettingsDto {
@@ -16,10 +17,12 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   companyAddress?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   companyLogo?: string;
 
   @IsOptional()
@@ -40,6 +43,8 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
+  @MaxLength(20, { each: true })
   allowedFileTypes?: string[];
 }

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -50,6 +51,8 @@ export class ClientsService {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
+    userId?: string;
+    isAdmin?: boolean;
   }) {
     const {
       search,
@@ -65,6 +68,18 @@ export class ClientsService {
       .leftJoinAndSelect('client.emails', 'emails')
       .leftJoinAndSelect('client.phones', 'phones')
       .loadRelationCountAndMap('client.contactsCount', 'client.contacts');
+
+    // Non-admins only see clients they have jobs with
+    if (!query.isAdmin && query.userId) {
+      qb.andWhere(
+        `client.id IN (
+          SELECT j.client_id FROM jobs j
+          INNER JOIN job_users ju ON ju.job_id = j.id
+          WHERE ju.user_id = :accessUserId
+        )`,
+        { accessUserId: query.userId },
+      );
+    }
 
     if (search) {
       qb.andWhere(
@@ -85,6 +100,18 @@ export class ClientsService {
 
     const [data, total] = await qb.getManyAndCount();
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async verifyClientAccess(clientId: string, userId: string, isAdmin: boolean): Promise<void> {
+    if (isAdmin) return;
+    const hasAccess = await this.jobRepository
+      .createQueryBuilder('j')
+      .innerJoin('j.assignedUsers', 'ju', 'ju.userId = :userId', { userId })
+      .where('j.client_id = :clientId', { clientId })
+      .getCount();
+    if (hasAccess === 0) {
+      throw new ForbiddenException('You do not have access to this client');
+    }
   }
 
   async findOne(id: string): Promise<Client> {
@@ -114,7 +141,7 @@ export class ClientsService {
     const jobCount = await this.jobRepository.count({ where: { clientId: id } });
     if (jobCount > 0) {
       throw new BadRequestException(
-        `Cannot delete client "${client.name}" — ${jobCount} job(s) are linked to this client.`,
+        'Cannot delete this client because jobs are linked to it',
       );
     }
     // Delete passport files from disk before cascade-deleting DB records

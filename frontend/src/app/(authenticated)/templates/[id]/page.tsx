@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import DOMPurify from 'dompurify';
 import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
 
@@ -986,7 +987,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
             <div className="lg:col-span-2">
               <h3 className="font-semibold text-text mb-3">Document Preview</h3>
               <div className="bg-white border border-border rounded-xl p-8 shadow-sm prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: preview.html }} />
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html) }} />
             </div>
 
             {/* Placeholder validation */}

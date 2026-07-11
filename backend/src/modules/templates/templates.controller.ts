@@ -10,6 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -17,7 +18,7 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { TemplatesService } from './templates.service.js';
-import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto.js';
+import { CreateTemplateDto, UpdateTemplateDto, ReorderFieldsDto, WordPlaceholdersDto } from './dto/template.dto.js';
 import {
   CreateTemplateFieldDto,
   UpdateTemplateFieldDto,
@@ -58,7 +59,7 @@ export class TemplatesController {
 
   @Get(':id')
   @RequirePermissions('templates:read')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.findOne(id);
   }
 
@@ -70,13 +71,13 @@ export class TemplatesController {
 
   @Patch(':id')
   @RequirePermissions('templates:update')
-  update(@Param('id') id: string, @Body() dto: UpdateTemplateDto) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTemplateDto) {
     return this.templatesService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('templates:delete')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.remove(id);
   }
 
@@ -86,7 +87,7 @@ export class TemplatesController {
   @RequirePermissions('templates:update')
   @UseInterceptors(FileInterceptor('file', { storage: templateStorage }))
   uploadWord(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
     return this.templatesService.uploadWordFile(id, file);
@@ -94,17 +95,17 @@ export class TemplatesController {
 
   @Get(':id/word-preview')
   @RequirePermissions('templates:read')
-  getWordPreview(@Param('id') id: string) {
+  getWordPreview(@Param('id', ParseUUIDPipe) id: string) {
     return this.templatesService.getWordPreview(id);
   }
 
   @Post(':id/word-placeholders')
   @RequirePermissions('templates:update')
   setWordPlaceholders(
-    @Param('id') id: string,
-    @Body() body: { placeholders: { find: string; fieldKey: string }[] },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: WordPlaceholdersDto,
   ) {
-    return this.templatesService.setWordPlaceholders(id, body.placeholders);
+    return this.templatesService.setWordPlaceholders(id, dto.placeholders);
   }
 
   // ── Fields ──
@@ -112,7 +113,7 @@ export class TemplatesController {
   @Post(':id/fields')
   @RequirePermissions('templates:update')
   addField(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateTemplateFieldDto,
   ) {
     return this.templatesService.addField(id, dto);
@@ -121,8 +122,8 @@ export class TemplatesController {
   @Patch(':id/fields/:fieldId')
   @RequirePermissions('templates:update')
   updateField(
-    @Param('id') id: string,
-    @Param('fieldId') fieldId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fieldId', ParseUUIDPipe) fieldId: string,
     @Body() dto: UpdateTemplateFieldDto,
   ) {
     return this.templatesService.updateField(id, fieldId, dto);
@@ -131,8 +132,8 @@ export class TemplatesController {
   @Delete(':id/fields/:fieldId')
   @RequirePermissions('templates:update')
   removeField(
-    @Param('id') id: string,
-    @Param('fieldId') fieldId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fieldId', ParseUUIDPipe) fieldId: string,
   ) {
     return this.templatesService.removeField(id, fieldId);
   }
@@ -140,9 +141,9 @@ export class TemplatesController {
   @Patch(':id/fields/reorder')
   @RequirePermissions('templates:update')
   reorderFields(
-    @Param('id') id: string,
-    @Body('fieldIds') fieldIds: string[],
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReorderFieldsDto,
   ) {
-    return this.templatesService.reorderFields(id, fieldIds);
+    return this.templatesService.reorderFields(id, dto.fieldIds);
   }
 }

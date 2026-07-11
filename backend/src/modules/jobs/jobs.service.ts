@@ -148,7 +148,7 @@ export class JobsService {
     const templateMap = new Map(templates.map((t) => [t.id, t]));
     for (const li of dto.lineItems || []) {
       if (li.templateId && !templateMap.has(li.templateId)) {
-        throw new BadRequestException(`Template not found for line item "${li.description}"`);
+        throw new BadRequestException('Template not found for one of the line items');
       }
     }
 
@@ -222,7 +222,7 @@ export class JobsService {
     const job = await this.findOneBasic(id);
 
     if (this.isLocked(job) && !('status' in dto && Object.keys(dto).length === 1)) {
-      throw new BadRequestException(`Cannot edit a job with status "${job.status}". Reopen it first.`);
+      throw new BadRequestException('Cannot edit a locked job. Reopen it first.');
     }
 
     Object.assign(job, dto);

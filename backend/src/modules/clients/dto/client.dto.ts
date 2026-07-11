@@ -22,6 +22,7 @@ export class CreateClientDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 }
 
@@ -39,5 +40,6 @@ export class UpdateClientDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 }

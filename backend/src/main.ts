@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { DataSource } from 'typeorm';
 import { AppModule } from './app.module.js';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
 import { seed } from './config/seed.js';
 
 async function bootstrap() {
@@ -10,10 +12,14 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
+  app.use(cookieParser());
   app.enableCors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3080',
     credentials: true,
   });
+
+  // Global exception filter — sanitizes all error responses, logs details server-side
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Global validation pipe
   app.useGlobalPipes(

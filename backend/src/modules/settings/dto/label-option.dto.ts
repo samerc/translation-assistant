@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, MinLength, MaxLength, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsInt, MinLength, MaxLength, Min, Max, IsIn } from 'class-validator';
 
 export const LABEL_CATEGORIES = ['email', 'phone', 'address'] as const;
 export type LabelCategory = (typeof LABEL_CATEGORIES)[number];
@@ -14,6 +14,8 @@ export class CreateLabelOptionDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(10000)
   sortOrder?: number;
 }
 
@@ -26,5 +28,7 @@ export class UpdateLabelOptionDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(10000)
   sortOrder?: number;
 }

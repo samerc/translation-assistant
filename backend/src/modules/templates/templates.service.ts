@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
+import sanitizeHtml from 'sanitize-html';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
@@ -208,7 +209,16 @@ export class TemplatesService {
     const valid = foundValid.filter((p) => fieldKeys.includes(p));
     const unlinked = foundValid.filter((p) => !fieldKeys.includes(p));
 
-    return { html: result.value, valid, unlinked, malformed };
+    const cleanHtml = sanitizeHtml(result.value, {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span']),
+      allowedAttributes: {
+        ...sanitizeHtml.defaults.allowedAttributes,
+        '*': ['style', 'class'],
+        img: ['src', 'alt', 'width', 'height'],
+      },
+      allowedSchemes: ['http', 'https', 'data'],
+    });
+    return { html: cleanHtml, valid, unlinked, malformed };
   }
 
   async setWordPlaceholders(

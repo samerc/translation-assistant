@@ -18,8 +18,17 @@ class ApiError extends Error {
   }
 }
 
+// Inject honeypot field into write request bodies.
+function withHoneypot(method: string, body: unknown): unknown {
+  if (method === 'GET' || method === 'HEAD' || !body || typeof body !== 'object' || Array.isArray(body)) {
+    return body;
+  }
+  return { ...(body as Record<string, unknown>), _hp: '' };
+}
+
 async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const method = options.method || 'GET';
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -30,22 +39,25 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const finalBody = options.body ? withHoneypot(method, options.body) : undefined;
+
   const res = await fetch(`${API_URL}${endpoint}`, {
-    method: options.method || 'GET',
+    method,
     headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    credentials: 'include', // Send httpOnly cookies
+    body: finalBody ? JSON.stringify(finalBody) : undefined,
   });
 
   if (res.status === 401) {
-    // Try refresh
+    // Try refresh — cookie is sent automatically
     const refreshed = await tryRefresh();
     if (refreshed) {
-      // Retry with new token
       headers['Authorization'] = `Bearer ${localStorage.getItem('accessToken')}`;
       const retryRes = await fetch(`${API_URL}${endpoint}`, {
-        method: options.method || 'GET',
+        method,
         headers,
-        body: options.body ? JSON.stringify(options.body) : undefined,
+        credentials: 'include',
+        body: finalBody ? JSON.stringify(finalBody) : undefined,
       });
 
       if (!retryRes.ok) {
@@ -56,9 +68,8 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
       return retryRes.json();
     }
 
-    // Refresh failed, clear tokens
+    // Refresh failed
     localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
     window.location.href = '/login';
     throw new ApiError(401, 'Session expired');
   }
@@ -72,23 +83,19 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
 }
 
 async function tryRefresh(): Promise<boolean> {
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) return false;
-
   try {
+    // Refresh token is in httpOnly cookie — sent automatically with credentials: 'include'
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${refreshToken}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
     });
 
     if (!res.ok) return false;
 
     const data = await res.json();
     localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
+    // refreshToken is set as httpOnly cookie by the server — not in response body
     return true;
   } catch (err) {
     logger.error('Token refresh failed', err, 'api');

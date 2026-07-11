@@ -47,12 +47,15 @@ translation-assistant/
 - `docker compose down` — Stop all containers
 
 ## Auth
-- JWT access tokens (15 min TTL) + refresh tokens (7 days)
+- JWT access tokens (15 min TTL, returned in body → localStorage) + refresh tokens (7 days)
+- **Refresh token delivered as an httpOnly, SameSite=Lax cookie** (`refresh_token`, path `/api/auth`, `secure` in prod) — never exposed in the response body. Requires `cookie-parser` (wired in `main.ts`) and CORS `credentials: true`.
 - Refresh token rotation with bcrypt hashing
+- **Session tracking**: each login/refresh records a `Session` (IP, user-agent, lastUsed). Users can list active sessions (`GET /auth/sessions`), revoke one (`DELETE /auth/sessions/:id`), or `logout-everywhere` (revokes all + clears cookie). Password reset revokes all sessions.
+- **Password reset flow**: `forgot-password` → `verify-reset-token` → `reset-password`. Tokens are 32-byte random, single-use, 30-min expiry (`PasswordResetToken`). No email service yet — in **non-production** the token is returned in the response for testing; in production only a generic message is returned (see `requestPasswordReset` TODO to wire email).
 - Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run)
 - 3 default roles: Admin (all permissions), Translator (CRUD on core resources), Viewer (read-only)
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
-- Auth endpoints rate-limited (5 login attempts / 3 register attempts per minute)
+- **`@AdminOnly()` + `AdminGuard`**: hard role-name check (DB) on top of RBAC for privilege-sensitive endpoints (e.g. invite, role management) — prevents a `roles:update` holder from self-escalating
 - Invite-only registration: admin generates invite tokens via `POST /api/auth/invite`
 - Invite tokens are email-bound, one-time use, 7-day expiry
 
@@ -79,8 +82,13 @@ translation-assistant/
 - Word template uploads rejected if no valid placeholders found
 - Search access control: non-admins only see clients they have jobs with, only active templates
 - Translate endpoint: language code validation, 5000 char limit, 10s timeout, 30/min rate limit
-- Rate limiting: login (5/min), register (3/min), refresh (10/min), password change (3/hr), invite (5/hr)
+- **Global guard chain (registration order in `app.module.ts`)**: `HoneypotGuard` (rejects writes with a filled hidden `_hp` field — bot trap) → `AbuseDetectionGuard` (blocks SQL-injection / XSS payloads in body/query/params) → `ThrottlerGuard` (global 300 req/min) → `WriteThrottleGuard` (120 write ops/min per user or IP). `AdminGuard` is applied per-controller (needs `req.user`).
+- **`GlobalExceptionFilter`** (`main.ts`): logs full technical details server-side, returns only sanitized messages to clients (no stack traces, SQL, or file paths); maps TypeORM `QueryFailedError`/`EntityNotFoundError` to safe 409/404/400
+- **Common-password blocklist**: registration/password-change reject the top ~550 breached passwords via `@IsNotCommonPassword` validator
+- Password reset tokens single-use, 30-min expiry; reset revokes all sessions
+- Rate limiting: login (15/min), register (10/min), refresh (10/min), forgot-password (3/min), verify-reset (10/min), reset-password (5/min), change-password (5/min), invite (5/hr). Global fallback 300/min + 120 writes/min per identity.
 - Centralized frontend logger (ready for Sentry/external service)
+- Frontend: `ErrorBoundary` component wraps the app (`layout.tsx`) — graceful fallback UI on render errors
 - Frontend: sidebar items hidden based on user permissions (no Invoices/Reports for Translator role)
 - Frontend: dashboard gracefully handles 403 for non-admin users
 - Frontend: unsaved changes warning on document fill page
@@ -88,6 +96,10 @@ translation-assistant/
 - Frontend: fully responsive (mobile hamburger menu, table scroll, stacked forms)
 
 ## Database & Performance
+- **Schema management**: dev uses TypeORM `synchronize` (auto-sync entities→schema); **production runs migrations** (`synchronize: false`, `migrationsRun: true` on boot). Gated by `NODE_ENV`, overridable via `DB_SYNCHRONIZE=true|false`. Config in `database.config.ts`; CLI DataSource in `config/data-source.ts`.
+  - Migration scripts (in `backend/`): `npm run migration:generate -- src/migrations/Name`, `migration:run`, `migration:revert`, `migration:show`. All build first (CLI runs against compiled `dist/`).
+  - `src/migrations/*-InitialBaseline.ts` is the baseline (full current schema, validated: generates zero diff against the live schema).
+  - **Prod cutover runbook** (one-time — the prod DB predates the `sessions`/`password_reset_tokens` tables): (1) deploy once with `DB_SYNCHRONIZE=true` to create the two new tables, OR create them manually; (2) create a `migrations` table and insert the baseline row `(timestamp, name)` so `migrationsRun` treats the baseline as already applied; (3) set `DB_SYNCHRONIZE=false` (or `NODE_ENV=production`) for subsequent deploys. A fresh/empty DB instead just runs the baseline migration on first boot.
 - Connection pool: 20 max, 10s connect timeout, 30s idle timeout (configurable via env)
 - Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
 - Transactions: job creation and invoice creation wrapped in `dataSource.transaction()`
@@ -137,6 +149,8 @@ Light + dark mode supported (separate toggle from palette).
 - **Role** — name, description. M2M with Permission via `role_permissions`
 - **Permission** — resource, action (e.g., `clients:create`)
 - **InviteToken** — token, email, roleId, expiresAt, used, usedByUserId
+- **Session** — userId, refreshTokenHash, ip, userAgent, lastUsedAt, revoked. One row per active login; powers session list/revoke and logout-everywhere.
+- **PasswordResetToken** — token, userId, expiresAt, used. 32-byte single-use, 30-min expiry.
 
 ### Settings
 - **AppSettings** — companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON)
@@ -188,12 +202,19 @@ Light + dark mode supported (separate toggle from palette).
 ## API Endpoints
 
 ### Auth (`/api/auth`)
-- `POST /login` — Login, returns JWT tokens
-- `POST /register` — Register with invite token
-- `POST /refresh` — Refresh access token
-- `POST /logout` — Invalidate refresh token
+- `POST /login` — Login; returns `{ user, accessToken }`, sets `refresh_token` httpOnly cookie
+- `POST /register` — Register with invite token (same response/cookie as login)
+- `POST /refresh` — Rotate tokens (reads `refresh_token` cookie via `jwt-refresh` strategy)
+- `POST /logout` — Invalidate refresh token + clear cookie
+- `POST /logout-everywhere` — Revoke all sessions + clear cookie
+- `GET /sessions` — List active sessions
+- `DELETE /sessions/:sessionId` — Revoke a specific session
 - `GET /profile` — Get current user
-- `POST /invite` — Generate invite token (admin only)
+- `POST /invite` — Generate invite token (admin only, `@AdminOnly()`)
+- `POST /file-token` — Short-lived token for file viewing
+- `POST /forgot-password` — Request a password reset token
+- `POST /verify-reset-token` — Check a reset token is valid (returns masked email)
+- `POST /reset-password` — Set a new password with a valid token
 
 ### Users (`/api/users`)
 - Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`
@@ -276,7 +297,9 @@ Light + dark mode supported (separate toggle from palette).
 - `GET /?q=term` — Global search across clients, jobs, templates, invoices (min 2 chars)
 
 ## Frontend Pages
-- `/login` — Login page (public)
+- `/login` — Login page (public, links to Forgot Password)
+- `/forgot-password` — Request a reset link (public). In dev shows the generated reset link directly (no email service).
+- `/reset-password?token=` — Verify token and set a new password (public)
 - `/` — Dashboard with summary cards
 - `/clients` — Client list with search, type filter, sort, pagination
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)

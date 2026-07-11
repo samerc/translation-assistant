@@ -25,7 +25,6 @@ interface AuthUser {
 interface LoginResponse {
   user: AuthUser;
   accessToken: string;
-  refreshToken: string;
 }
 
 interface AuthContextType {
@@ -33,6 +32,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  logoutEverywhere: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
 }
 
@@ -51,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .catch((err) => {
           logger.error('Profile fetch failed', err, 'auth');
           localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
         })
         .finally(() => setLoading(false));
     } else {
@@ -62,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<LoginResponse>('/auth/login', { email, password });
     localStorage.setItem('accessToken', data.accessToken);
-    localStorage.setItem('refreshToken', data.refreshToken);
+    // refreshToken is set as httpOnly cookie by the server — not stored in localStorage
     setUser(data.user);
   }, []);
 
@@ -73,7 +72,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logger.error('Logout request failed', err, 'auth');
     }
     localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+    setUser(null);
+  }, []);
+
+  const logoutEverywhere = useCallback(async () => {
+    try {
+      await api.post('/auth/logout-everywhere');
+    } catch (err) {
+      logger.error('Logout everywhere failed', err, 'auth');
+    }
+    localStorage.removeItem('accessToken');
     setUser(null);
   }, []);
 
@@ -86,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, hasPermission }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, logoutEverywhere, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

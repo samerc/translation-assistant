@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  UseGuards, Res, NotFoundException,
+  UseGuards, Res, NotFoundException, ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream, existsSync, unlinkSync } from 'fs';
@@ -53,13 +53,14 @@ export class InvoicesController {
 
   @Get('by-job/:jobId')
   @RequirePermissions('invoices:read')
-  findByJob(@Param('jobId') jobId: string) {
+  async findByJob(@Param('jobId', ParseUUIDPipe) jobId: string, @CurrentUser() user: User) {
+    await this.invoicesService.verifyJobAccess(jobId, user.id, this.isAdmin(user));
     return this.invoicesService.findByJob(jobId);
   }
 
   @Get(':id')
   @RequirePermissions('invoices:read')
-  async findOne(@Param('id') id: string, @CurrentUser() user: User) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
     return this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
   }
 
@@ -71,28 +72,28 @@ export class InvoicesController {
 
   @Patch(':id')
   @RequirePermissions('invoices:update')
-  async update(@Param('id') id: string, @Body() dto: UpdateInvoiceDto, @CurrentUser() user: User) {
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateInvoiceDto, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
     return this.invoicesService.update(id, dto);
   }
 
   @Patch(':id/status')
   @RequirePermissions('invoices:update')
-  async updateStatus(@Param('id') id: string, @Body() dto: UpdateInvoiceStatusDto, @CurrentUser() user: User) {
+  async updateStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateInvoiceStatusDto, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
     return this.invoicesService.updateStatus(id, dto.status);
   }
 
   @Post(':id/record-payment')
   @RequirePermissions('invoices:update')
-  async recordPayment(@Param('id') id: string, @Body() dto: RecordPaymentDto, @CurrentUser() user: User) {
+  async recordPayment(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RecordPaymentDto, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
     return this.invoicesService.recordPayment(id, dto);
   }
 
   @Post(':id/export-pdf')
   @RequirePermissions('invoices:read')
-  async exportPdf(@Param('id') id: string, @Res() res: Response, @CurrentUser() user: User) {
+  async exportPdf(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
     const { filePath, fileName } = await this.exportService.exportPdf(id);
     if (!existsSync(filePath)) throw new NotFoundException('Export file not found');
@@ -106,7 +107,7 @@ export class InvoicesController {
 
   @Post(':id/export-word')
   @RequirePermissions('invoices:read')
-  async exportWord(@Param('id') id: string, @Res() res: Response, @CurrentUser() user: User) {
+  async exportWord(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
     const { filePath, fileName } = await this.exportService.exportWord(id);
     if (!existsSync(filePath)) throw new NotFoundException('Export file not found');
@@ -120,7 +121,7 @@ export class InvoicesController {
 
   @Delete(':id')
   @RequirePermissions('invoices:delete')
-  async remove(@Param('id') id: string, @CurrentUser() user: User) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
     return this.invoicesService.remove(id);
   }

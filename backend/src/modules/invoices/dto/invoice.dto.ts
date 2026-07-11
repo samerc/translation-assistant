@@ -1,31 +1,34 @@
 import {
-  IsString, IsOptional, IsNumber, IsArray, ValidateNested,
-  IsDateString, MaxLength, Min, IsIn, ArrayMinSize,
+  IsString, IsOptional, IsNumber, IsUUID, IsArray, ValidateNested,
+  IsDateString, MinLength, MaxLength, Min, Max, IsIn, ArrayMinSize, ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateInvoiceItemDto {
   @IsString()
+  @MinLength(1)
   @MaxLength(500)
   description: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   jobId?: string;
 
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(999999.99)
   quantity: number;
 
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(99999999.99)
   unitPrice: number;
 }
 
 export class CreateInvoiceDto {
-  @IsString()
+  @IsUUID()
   clientId: string;
 
   @IsDateString()
@@ -38,10 +41,12 @@ export class CreateInvoiceDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(100)
   taxRate?: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 
   @IsOptional()
@@ -51,6 +56,7 @@ export class CreateInvoiceDto {
 
   @IsArray()
   @ArrayMinSize(1, { message: 'Invoice must have at least one item' })
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => CreateInvoiceItemDto)
   items: CreateInvoiceItemDto[];
@@ -69,10 +75,12 @@ export class UpdateInvoiceDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(100)
   taxRate?: number;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 
   @IsOptional()
@@ -82,6 +90,7 @@ export class UpdateInvoiceDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => CreateInvoiceItemDto)
   items?: CreateInvoiceItemDto[];
@@ -96,6 +105,7 @@ export class RecordPaymentDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(99999999.99)
   paidAmount: number;
 
   @IsOptional()

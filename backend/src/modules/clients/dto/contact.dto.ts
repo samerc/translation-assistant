@@ -27,6 +27,7 @@ export class CreateContactDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 }
 
@@ -59,5 +60,6 @@ export class UpdateContactDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 }

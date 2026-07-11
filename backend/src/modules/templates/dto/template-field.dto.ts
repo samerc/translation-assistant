@@ -4,15 +4,19 @@ import {
   IsInt,
   IsBoolean,
   IsIn,
+  IsUUID,
   IsArray,
   ValidateNested,
   MinLength,
   MaxLength,
+  Min,
+  Max,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class FieldLabelDto {
-  @IsString()
+  @IsUUID()
   languageId: string;
 
   @IsString()
@@ -32,6 +36,8 @@ export class CreateTemplateFieldDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(10000)
   sortOrder?: number;
 
   @IsOptional()
@@ -45,6 +51,7 @@ export class CreateTemplateFieldDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => FieldLabelDto)
   labels?: FieldLabelDto[];
@@ -63,6 +70,8 @@ export class UpdateTemplateFieldDto {
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(10000)
   sortOrder?: number;
 
   @IsOptional()
@@ -76,6 +85,7 @@ export class UpdateTemplateFieldDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => FieldLabelDto)
   labels?: FieldLabelDto[];

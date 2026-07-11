@@ -47,6 +47,16 @@ export class InvoicesService {
     throw new ForbiddenException('You do not have access to this invoice');
   }
 
+  async verifyJobAccess(jobId: string, userId: string, isAdmin: boolean): Promise<void> {
+    if (isAdmin) return;
+    const assignment = await this.jobUserRepository.findOne({
+      where: { jobId, userId },
+    });
+    if (!assignment) {
+      throw new ForbiddenException('You do not have access to this job');
+    }
+  }
+
   private static readonly VALID_TRANSITIONS: Record<string, string[]> = {
     draft: ['sent', 'cancelled'],
     sent: ['paid', 'overdue', 'cancelled'],
@@ -172,9 +182,9 @@ export class InvoicesService {
     for (const item of dto.items) {
       if (item.jobId) {
         const job = jobMap.get(item.jobId);
-        if (!job) throw new BadRequestException(`Job not found: ${item.jobId}`);
+        if (!job) throw new BadRequestException('One of the linked jobs was not found');
         if (job.clientId !== dto.clientId) {
-          throw new BadRequestException(`Job "${job.jobNumber}" does not belong to this client`);
+          throw new BadRequestException('One of the linked jobs does not belong to this client');
         }
       }
     }
@@ -269,7 +279,7 @@ export class InvoicesService {
     const invoice = await this.findOne(id);
     const validNext = InvoicesService.VALID_TRANSITIONS[invoice.status] || [];
     if (!validNext.includes(status)) {
-      throw new BadRequestException(`Cannot transition from "${invoice.status}" to "${status}"`);
+      throw new BadRequestException('This status transition is not allowed');
     }
 
     const oldStatus = invoice.status;

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean, MaxLength, IsEmail } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, MinLength, MaxLength, IsEmail } from 'class-validator';
 
 export class CreateClientEmailDto {
   @IsEmail()
@@ -16,6 +16,7 @@ export class CreateClientEmailDto {
 
 export class CreateClientPhoneDto {
   @IsString()
+  @MinLength(1)
   @MaxLength(50)
   phone: string;
 
@@ -31,6 +32,8 @@ export class CreateClientPhoneDto {
 
 export class CreateClientAddressDto {
   @IsString()
+  @MinLength(1)
+  @MaxLength(1000)
   address: string;
 
   @IsOptional()

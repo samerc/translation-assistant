@@ -2,42 +2,53 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   IsArray,
   ValidateNested,
   IsIn,
+  MaxLength,
+  Min,
+  Max,
+  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class FieldValueDto {
-  @IsString()
+  @IsUUID()
   templateFieldId: string;
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(1000)
   pageNumber?: number;
 
   @IsOptional()
   @IsInt()
+  @Min(0)
+  @Max(1000)
   entryIndex?: number;
 
   @IsString()
+  @MaxLength(50000)
   value: string;
 }
 
 export class CreateDocumentDto {
-  @IsString()
+  @IsUUID()
   jobId: string;
 
-  @IsString()
+  @IsUUID()
   templateId: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   clonedFromId?: string;
 }
 
 export class SaveFieldValuesDto {
   @IsArray()
+  @ArrayMaxSize(5000)
   @ValidateNested({ each: true })
   @Type(() => FieldValueDto)
   values: FieldValueDto[];
@@ -46,4 +57,9 @@ export class SaveFieldValuesDto {
 export class UpdateDocumentStatusDto {
   @IsIn(['draft', 'completed'])
   status: 'draft' | 'completed';
+}
+
+export class CloneDocumentDto {
+  @IsUUID()
+  jobId: string;
 }

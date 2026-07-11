@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 interface AppSettings {
   id: string;
@@ -29,7 +30,7 @@ interface LabelOption {
   sortOrder: number;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security';
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -40,6 +41,7 @@ export default function SettingsPage() {
     { id: 'labels', label: 'Labels' },
     { id: 'uploads', label: 'File Uploads' },
     { id: 'appearance', label: 'Appearance' },
+    { id: 'security', label: 'Security' },
   ];
 
   return (
@@ -68,6 +70,7 @@ export default function SettingsPage() {
       {activeTab === 'labels' && <LabelsSettings />}
       {activeTab === 'uploads' && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
+      {activeTab === 'security' && <SecuritySettings />}
     </div>
   );
 }
@@ -683,6 +686,96 @@ function LoadingSpinner() {
   return (
     <div className="flex justify-center py-12">
       <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+// ── Security Settings ──
+
+interface SessionInfo {
+  id: string;
+  ipAddress: string;
+  userAgent: string;
+  createdAt: string;
+  lastUsedAt: string;
+}
+
+function SecuritySettings() {
+  const { logoutEverywhere } = useAuth();
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [revoking, setRevoking] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const data = await api.get<SessionInfo[]>('/auth/sessions');
+      setSessions(data);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  const handleLogoutEverywhere = async () => {
+    if (!confirm('This will log you out of all devices, including this one. Continue?')) return;
+    setRevoking(true);
+    await logoutEverywhere();
+    window.location.href = '/login';
+  };
+
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      await api.delete(`/auth/sessions/${sessionId}`);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Log out everywhere */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-2">Log Out Everywhere</h3>
+        <p className="text-sm text-text-secondary mb-4">
+          This will invalidate all active sessions across all devices. You will need to log in again.
+        </p>
+        <button
+          onClick={handleLogoutEverywhere}
+          disabled={revoking}
+          className="px-4 py-2 bg-danger text-white rounded-lg text-sm font-medium hover:bg-danger/90 disabled:opacity-50"
+        >
+          {revoking ? 'Logging out...' : 'Log Out All Devices'}
+        </button>
+      </div>
+
+      {/* Active sessions */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-4">Active Sessions</h3>
+        {loading ? (
+          <p className="text-sm text-text-muted">Loading sessions...</p>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-text-muted">No active sessions found.</p>
+        ) : (
+          <div className="space-y-3">
+            {sessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between border border-border rounded-lg p-3">
+                <div>
+                  <div className="text-sm font-medium text-text">{s.ipAddress}</div>
+                  <div className="text-xs text-text-muted mt-0.5">{s.userAgent}</div>
+                  <div className="text-xs text-text-muted mt-0.5">
+                    Last used: {new Date(s.lastUsedAt).toLocaleString()}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleRevokeSession(s.id)}
+                  className="text-xs text-danger hover:text-danger/80 font-medium"
+                >
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

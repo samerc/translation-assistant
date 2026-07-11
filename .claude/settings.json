@@ -32,7 +32,10 @@
       "Bash(curl -s http://localhost:3005/api/reports/dashboard-stats -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWM2OGMyMS0yODE0LTRkMjMtYWI4OS1mNjVkNzMyMjdlMWUiLCJlbWFpbCI6InRlc3RlckB0ZXN0LmNvbSIsImlhdCI6MTc3ODk0MTg2NiwiZXhwIjoxNzc4OTQyNzY2fQ.c8zJzZrBol8g0RFRNL5emQwjvYpLHBcEpxzhycp4UwA')",
       "Bash(curl -s 'http://localhost:3005/api/calendar/events?month=5&year=2026' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjYWM2OGMyMS0yODE0LTRkMjMtYWI4OS1mNjVkNzMyMjdlMWUiLCJlbWFpbCI6InRlc3RlckB0ZXN0LmNvbSIsImlhdCI6MTc3ODk0MTg2NiwiZXhwIjoxNzc4OTQyNzY2fQ.c8zJzZrBol8g0RFRNL5emQwjvYpLHBcEpxzhycp4UwA')",
       "Bash(node -e \"process.stdin.on\\('data',d=>{try{const j=JSON.parse\\(d\\);console.log\\(j.statusCode?'BLOCKED: '+j.message:'Events: '+j.length\\)}catch{console.log\\(d.toString\\(\\)\\)}}\\)\")",
-      "Bash(ssh samer@144.91.89.20 \"powershell -Command \\\\\"Get-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter 'system.webServer/proxy' -name 'enabled'\\\\\"\")"
+      "Bash(ssh samer@144.91.89.20 \"powershell -Command \\\\\"Get-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter 'system.webServer/proxy' -name 'enabled'\\\\\"\")",
+      "Bash(find frontend/src -name \"*.tsx\" -exec grep -l \"\\\\.name\\\\|\\\\.title\\\\|\\\\.description\" {} \\\\;)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3005/api)",
+      "Bash(bash test-all.sh)"
     ]
   }
 }

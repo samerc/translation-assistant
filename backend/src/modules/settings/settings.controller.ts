@@ -6,8 +6,8 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service.js';
@@ -17,10 +17,12 @@ import { CreateLabelOptionDto, UpdateLabelOptionDto } from './dto/label-option.d
 import type { LabelCategory } from './dto/label-option.dto.js';
 import { CreateFreeformJobTypeDto, UpdateFreeformJobTypeDto } from './dto/freeform-job-type.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
+import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 
 @Controller('settings')
-@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
@@ -34,6 +36,7 @@ export class SettingsController {
 
   @Patch()
   @RequirePermissions('settings:update')
+  @AdminOnly()
   updateSettings(@Body() dto: UpdateSettingsDto) {
     return this.settingsService.updateSettings(dto);
   }
@@ -48,14 +51,16 @@ export class SettingsController {
 
   @Post('languages')
   @RequirePermissions('settings:create')
+  @AdminOnly()
   createLanguage(@Body() dto: CreateLanguageDto) {
     return this.settingsService.createLanguage(dto);
   }
 
   @Patch('languages/:id')
   @RequirePermissions('settings:update')
+  @AdminOnly()
   updateLanguage(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLanguageDto,
   ) {
     return this.settingsService.updateLanguage(id, dto);
@@ -63,7 +68,8 @@ export class SettingsController {
 
   @Delete('languages/:id')
   @RequirePermissions('settings:delete')
-  removeLanguage(@Param('id') id: string) {
+  @AdminOnly()
+  removeLanguage(@Param('id', ParseUUIDPipe) id: string) {
     return this.settingsService.removeLanguage(id);
   }
 
@@ -83,14 +89,16 @@ export class SettingsController {
 
   @Post('labels')
   @RequirePermissions('settings:create')
+  @AdminOnly()
   createLabel(@Body() dto: CreateLabelOptionDto) {
     return this.settingsService.createLabel(dto);
   }
 
   @Patch('labels/:id')
   @RequirePermissions('settings:update')
+  @AdminOnly()
   updateLabel(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLabelOptionDto,
   ) {
     return this.settingsService.updateLabel(id, dto);
@@ -98,7 +106,8 @@ export class SettingsController {
 
   @Delete('labels/:id')
   @RequirePermissions('settings:delete')
-  removeLabel(@Param('id') id: string) {
+  @AdminOnly()
+  removeLabel(@Param('id', ParseUUIDPipe) id: string) {
     return this.settingsService.removeLabel(id);
   }
 
@@ -112,14 +121,16 @@ export class SettingsController {
 
   @Post('freeform-job-types')
   @RequirePermissions('settings:create')
+  @AdminOnly()
   createFreeformJobType(@Body() dto: CreateFreeformJobTypeDto) {
     return this.settingsService.createFreeformJobType(dto);
   }
 
   @Patch('freeform-job-types/:id')
   @RequirePermissions('settings:update')
+  @AdminOnly()
   updateFreeformJobType(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFreeformJobTypeDto,
   ) {
     return this.settingsService.updateFreeformJobType(id, dto);
@@ -127,7 +138,8 @@ export class SettingsController {
 
   @Delete('freeform-job-types/:id')
   @RequirePermissions('settings:delete')
-  removeFreeformJobType(@Param('id') id: string) {
+  @AdminOnly()
+  removeFreeformJobType(@Param('id', ParseUUIDPipe) id: string) {
     return this.settingsService.removeFreeformJobType(id);
   }
 }

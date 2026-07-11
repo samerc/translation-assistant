@@ -539,10 +539,12 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  const token = localStorage.getItem('accessToken');
-                  const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports/${pc.id}/file`;
-                  window.open(`${url}?token=${token}`, '_blank');
+                onClick={async () => {
+                  try {
+                    const { token } = await api.post<{ token: string }>('/auth/file-token');
+                    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports/${pc.id}/file`;
+                    window.open(`${url}?token=${token}`, '_blank');
+                  } catch { /* ignore */ }
                 }}
                 className="text-xs text-primary hover:text-primary-hover font-medium"
               >

@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  UseGuards, UseInterceptors, UploadedFile,
+  UseGuards, UseInterceptors, UploadedFile, ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -8,7 +8,11 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { JobsService } from './jobs.service.js';
-import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
+import {
+  CreateJobDto, UpdateJobDto, UpdateJobStatusDto,
+  CreateJobLineItemDto, UpdateJobLineItemDto,
+  AssignJobUserDto, LinkFileDto,
+} from './dto/job.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { JobAccessGuard } from '../../common/guards/job-access.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -53,7 +57,7 @@ export class JobsController {
 
   @Get(':id')
   @RequirePermissions('jobs:read')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.findOne(id);
   }
 
@@ -65,25 +69,29 @@ export class JobsController {
 
   @Patch(':id')
   @RequirePermissions('jobs:update')
-  update(@Param('id') id: string, @Body() dto: UpdateJobDto) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateJobDto) {
     return this.jobsService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('jobs:delete')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.remove(id);
   }
 
   @Patch(':id/status')
   @RequirePermissions('jobs:update')
-  updateStatus(@Param('id') id: string, @Body('status') status: string, @CurrentUser() user: User) {
-    return this.jobsService.updateStatus(id, status, user.id);
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateJobStatusDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.jobsService.updateStatus(id, dto.status, user.id);
   }
 
   @Post(':id/reopen')
   @RequirePermissions('jobs:update')
-  reopenJob(@Param('id') id: string) {
+  reopenJob(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.reopenJob(id);
   }
 
@@ -91,26 +99,26 @@ export class JobsController {
 
   @Post(':id/line-items')
   @RequirePermissions('jobs:update')
-  addLineItem(@Param('id') id: string, @Body() body: {
-    description: string; templateId?: string;
-    pageCount: number; pricePerPage: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number;
-  }) {
-    return this.jobsService.addLineItem(id, body);
+  addLineItem(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateJobLineItemDto) {
+    return this.jobsService.addLineItem(id, dto);
   }
 
   @Patch(':id/line-items/:itemId')
   @RequirePermissions('jobs:update')
   updateLineItem(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
-    @Body() body: { description?: string; pageCount?: number; pricePerPage?: number; useDiscountedPrice?: boolean; discountedPricePerPage?: number },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: UpdateJobLineItemDto,
   ) {
-    return this.jobsService.updateLineItem(id, itemId, body);
+    return this.jobsService.updateLineItem(id, itemId, dto);
   }
 
   @Delete(':id/line-items/:itemId')
   @RequirePermissions('jobs:update')
-  removeLineItem(@Param('id') id: string, @Param('itemId') itemId: string) {
+  removeLineItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+  ) {
     return this.jobsService.removeLineItem(id, itemId);
   }
 
@@ -119,15 +127,18 @@ export class JobsController {
   @Post(':id/users')
   @RequirePermissions('jobs:update')
   assignUser(
-    @Param('id') id: string,
-    @Body() body: { userId: string; permissionLevel?: 'view' | 'edit' },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AssignJobUserDto,
   ) {
-    return this.jobsService.assignUser(id, body.userId, body.permissionLevel);
+    return this.jobsService.assignUser(id, dto.userId, dto.permissionLevel);
   }
 
   @Delete(':id/users/:userId')
   @RequirePermissions('jobs:update')
-  removeUser(@Param('id') id: string, @Param('userId') userId: string) {
+  removeUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
     return this.jobsService.removeUser(id, userId);
   }
 
@@ -137,35 +148,39 @@ export class JobsController {
   @RequirePermissions('jobs:update')
   @UseInterceptors(FileInterceptor('file', { storage: jobFileStorage }))
   uploadFile(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body('category') category: 'source' | 'translated',
     @UploadedFile(FileValidationPipe) file: Express.Multer.File,
     @CurrentUser() user: User,
   ) {
-    return this.jobsService.uploadFile(id, category || 'source', file, user.id);
+    const validCategory = ['source', 'translated'].includes(category) ? category : 'source';
+    return this.jobsService.uploadFile(id, validCategory, file, user.id);
   }
 
   @Post(':id/files/link')
   @RequirePermissions('jobs:update')
   async linkFile(
-    @Param('id') id: string,
-    @Body() body: { sourceJobId: string; fileId: string },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LinkFileDto,
     @CurrentUser() user: User,
   ) {
     // JobAccessGuard checks target job (:id). Also verify source job access.
     const isAdmin = user.role?.name === 'Admin';
     if (!isAdmin) {
-      const assignment = await this.jobsService.checkUserAssignment(body.sourceJobId, user.id);
+      const assignment = await this.jobsService.checkUserAssignment(dto.sourceJobId, user.id);
       if (!assignment) {
         throw new (await import('@nestjs/common')).ForbiddenException('You do not have access to the source job');
       }
     }
-    return this.jobsService.linkFile(id, body.sourceJobId, body.fileId);
+    return this.jobsService.linkFile(id, dto.sourceJobId, dto.fileId);
   }
 
   @Delete(':id/files/:fileId')
   @RequirePermissions('jobs:update')
-  removeFile(@Param('id') id: string, @Param('fileId') fileId: string) {
+  removeFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+  ) {
     return this.jobsService.removeFile(id, fileId);
   }
 }

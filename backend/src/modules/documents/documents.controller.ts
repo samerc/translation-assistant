@@ -1,13 +1,13 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query, Res,
-  UseGuards, NotFoundException,
+  UseGuards, NotFoundException, ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream, existsSync, unlinkSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { DocumentsService } from './documents.service.js';
 import { ExportService } from './export.service.js';
-import { CreateDocumentDto, SaveFieldValuesDto, UpdateDocumentStatusDto } from './dto/document.dto.js';
+import { CreateDocumentDto, SaveFieldValuesDto, UpdateDocumentStatusDto, CloneDocumentDto } from './dto/document.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -27,7 +27,7 @@ export class DocumentsController {
 
   @Get('by-job/:jobId')
   @RequirePermissions('documents:read')
-  async findByJob(@Param('jobId') jobId: string, @CurrentUser() user: User) {
+  async findByJob(@Param('jobId', ParseUUIDPipe) jobId: string, @CurrentUser() user: User) {
     await this.documentsService.verifyJobAccess(jobId, user.id, this.isAdmin(user));
     return this.documentsService.findByJob(jobId);
   }
@@ -49,7 +49,7 @@ export class DocumentsController {
 
   @Get(':id')
   @RequirePermissions('documents:read')
-  async findOne(@Param('id') id: string, @CurrentUser() user: User) {
+  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
     return this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
   }
 
@@ -63,7 +63,7 @@ export class DocumentsController {
   @Post(':id/save-values')
   @RequirePermissions('documents:update')
   async saveFieldValues(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SaveFieldValuesDto,
     @CurrentUser() user: User,
   ) {
@@ -74,7 +74,7 @@ export class DocumentsController {
   @Patch(':id/status')
   @RequirePermissions('documents:update')
   async updateStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateDocumentStatusDto,
     @CurrentUser() user: User,
   ) {
@@ -85,20 +85,20 @@ export class DocumentsController {
   @Post(':id/clone')
   @RequirePermissions('documents:create')
   async clone(
-    @Param('id') id: string,
-    @Body('jobId') jobId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CloneDocumentDto,
     @CurrentUser() user: User,
   ) {
     // Verify access to both source document's job AND target job
     await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
-    await this.documentsService.verifyJobAccess(jobId, user.id, this.isAdmin(user));
-    return this.documentsService.clone(id, jobId);
+    await this.documentsService.verifyJobAccess(dto.jobId, user.id, this.isAdmin(user));
+    return this.documentsService.clone(id, dto.jobId);
   }
 
   @Post(':id/export')
   @RequirePermissions('documents:read')
   async exportDocument(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
     @CurrentUser() user: User,
   ) {
@@ -112,6 +112,7 @@ export class DocumentsController {
     const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     const stream = createReadStream(filePath);
     stream.pipe(res);
     stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
@@ -119,7 +120,7 @@ export class DocumentsController {
 
   @Delete(':id')
   @RequirePermissions('documents:delete')
-  async remove(@Param('id') id: string, @CurrentUser() user: User) {
+  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
     await this.documentsService.verifyDocumentAccess(id, user.id, this.isAdmin(user));
     return this.documentsService.remove(id);
   }

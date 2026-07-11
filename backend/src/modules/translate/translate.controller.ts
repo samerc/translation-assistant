@@ -37,7 +37,7 @@ export class TranslateController {
     if (!apiKey || apiKey === 'your-google-translate-api-key') {
       return {
         translatedText: `[GT: ${body.text}]`,
-        note: 'Google Translate API key not configured. Set GOOGLE_TRANSLATE_API_KEY in .env',
+        note: 'Translation service is not configured',
       };
     }
 
