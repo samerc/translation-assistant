@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, FormEvent } from 'react';
+import { useState, useEffect, useCallback, FormEvent, ChangeEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme, type Palette } from '@/lib/theme-context';
+import { confirmDialog } from '@/lib/confirm';
 
 interface AppSettings {
   id: string;
@@ -31,7 +32,7 @@ interface LabelOption {
   sortOrder: number;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'users' | 'roles';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'business' | 'email' | 'users' | 'roles' | 'freeform';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -44,9 +45,11 @@ export default function SettingsPage() {
     { id: 'labels', label: 'Labels' },
     { id: 'uploads', label: 'File Uploads' },
     { id: 'appearance', label: 'Appearance' },
+    { id: 'business', label: 'My Business' },
     { id: 'security', label: 'Security' },
     ...(isAdmin
       ? [
+          { id: 'freeform' as Tab, label: 'Freeform Types' },
           { id: 'users' as Tab, label: 'Users' },
           { id: 'roles' as Tab, label: 'Roles' },
           { id: 'email' as Tab, label: 'Email' },
@@ -80,7 +83,9 @@ export default function SettingsPage() {
       {activeTab === 'labels' && <LabelsSettings />}
       {activeTab === 'uploads' && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
+      {activeTab === 'business' && <BusinessSettings />}
       {activeTab === 'security' && <SecuritySettings />}
+      {activeTab === 'freeform' && isAdmin && <FreeformTypesSettings />}
       {activeTab === 'users' && isAdmin && <UsersSettings />}
       {activeTab === 'roles' && isAdmin && <RolesSettings />}
       {activeTab === 'email' && isAdmin && <EmailSettings />}
@@ -199,7 +204,7 @@ function LanguagesSettings() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this language?')) return;
+    if (!(await confirmDialog('Delete this language?'))) return;
     await api.delete(`/settings/languages/${id}`);
     loadLanguages();
   };
@@ -752,7 +757,7 @@ function SecuritySettings() {
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
   const handleLogoutEverywhere = async () => {
-    if (!confirm('This will log you out of all devices, including this one. Continue?')) return;
+    if (!(await confirmDialog('This will log you out of all devices, including this one. Continue?'))) return;
     setRevoking(true);
     await logoutEverywhere();
     window.location.href = '/login';
@@ -874,7 +879,7 @@ function UsersSettings() {
   };
 
   const remove = async (u: AdminUser) => {
-    if (!confirm(`Delete ${u.email}? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete ${u.email}? This cannot be undone.`))) return;
     try {
       await api.delete(`/users/${u.id}`);
       load();
@@ -1149,7 +1154,7 @@ function RolesSettings() {
   };
 
   const remove = async (r: Role) => {
-    if (!confirm(`Delete role "${r.name}"?`)) return;
+    if (!(await confirmDialog(`Delete role "${r.name}"?`))) return;
     try { await api.delete(`/roles/${r.id}`); load(); }
     catch (err) { setError(err instanceof ApiError ? String(err.message) : 'Failed to delete role.'); }
   };
@@ -1227,6 +1232,297 @@ function RolesSettings() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── My Business (per-user invoice branding) ──
+
+interface UserBranding {
+  businessName?: string | null;
+  businessAddress?: string | null;
+  logo?: string | null;
+}
+
+function BusinessSettings() {
+  const { user } = useAuth();
+  const [businessName, setBusinessName] = useState('');
+  const [businessAddress, setBusinessAddress] = useState('');
+  const [logo, setLogo] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!user) return;
+    api.get<UserBranding>(`/users/${user.id}`)
+      .then((u) => {
+        setBusinessName(u.businessName || '');
+        setBusinessAddress(u.businessAddress || '');
+        setLogo(u.logo || null);
+      })
+      .catch(() => setError('Failed to load your business details'))
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  const saveDetails = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true); setMessage(''); setError('');
+    try {
+      await api.patch('/users/profile/me', { businessName, businessAddress });
+      setMessage('Business details saved');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save');
+    } finally { setSaving(false); }
+  };
+
+  const handleLogoChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!['image/png', 'image/jpeg'].includes(file.type)) { setError('Logo must be a PNG or JPEG image'); return; }
+    if (file.size > 1024 * 1024) { setError('Logo must be under 1MB'); return; }
+    setUploading(true); setError(''); setMessage('');
+    try {
+      const fd = new FormData();
+      fd.append('logo', file);
+      const updated = await api.upload<UserBranding>('/users/profile/me/logo', fd, 'PATCH');
+      setLogo(updated.logo || null);
+      setMessage('Logo updated');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to upload logo');
+    } finally { setUploading(false); }
+  };
+
+  const removeLogo = async () => {
+    setUploading(true); setError(''); setMessage('');
+    try {
+      const updated = await api.delete<UserBranding>('/users/profile/me/logo');
+      setLogo(updated.logo || null);
+      setMessage('Logo removed');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to remove logo');
+    } finally { setUploading(false); }
+  };
+
+  if (loading) return <LoadingSpinner />;
+
+  return (
+    <div className="max-w-4xl space-y-6">
+      <p className="text-sm text-text-secondary">
+        These details appear on the invoices <span className="font-medium text-text">you</span> issue.
+        Each user has their own business identity — leave anything blank to omit it.
+      </p>
+
+      {/* Logo */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-1">Logo</h3>
+        <p className="text-sm text-text-secondary mb-4">PNG or JPEG, up to 1MB. Shown beside your business name on invoices.</p>
+        <div className="flex items-center gap-5">
+          <div className="w-40 h-20 rounded-lg border border-border bg-bg flex items-center justify-center overflow-hidden">
+            {logo
+              ? <img src={logo} alt="Business logo" className="max-w-full max-h-full object-contain" />
+              : <span className="text-xs text-text-muted">No logo</span>}
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors cursor-pointer inline-block text-center">
+              {uploading ? 'Working…' : logo ? 'Replace logo' : 'Upload logo'}
+              <input type="file" accept="image/png,image/jpeg" onChange={handleLogoChange} disabled={uploading} className="hidden" />
+            </label>
+            {logo && (
+              <button type="button" onClick={removeLogo} disabled={uploading}
+                className="px-4 py-2 bg-bg border border-border text-danger rounded-lg text-sm hover:bg-danger-light transition-colors disabled:opacity-50">
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Name + address */}
+      <form onSubmit={saveDetails} className="bg-surface border border-border rounded-xl p-6 space-y-5">
+        <InputField label="Business Name" value={businessName} onChange={setBusinessName} placeholder="Your business name" />
+        <div>
+          <label className="block text-sm font-medium text-text mb-1.5">Business Address</label>
+          <textarea
+            value={businessAddress}
+            onChange={(e) => setBusinessAddress(e.target.value)}
+            rows={3}
+            placeholder="Street, city, country"
+            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <button type="submit" disabled={saving}
+            className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
+          {message && <span className="text-sm text-success">{message}</span>}
+          {error && <span className="text-sm text-danger">{error}</span>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── Freeform Job Types (admin) ──
+
+interface FreeformJobType {
+  id: string;
+  name: string;
+  description: string | null;
+  pricePerPage: number;
+  discountedPricePerPage: number | null;
+  isActive: boolean;
+}
+
+function FreeformTypesSettings() {
+  const [types, setTypes] = useState<FreeformJobType[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
+  const [error, setError] = useState('');
+
+  const load = () => { api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setTypes); };
+  useEffect(() => { load(); }, []);
+
+  const reset = () => {
+    setForm({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
+    setEditingId(null); setShowForm(false); setError('');
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim() || undefined,
+      pricePerPage: form.pricePerPage ? Number(form.pricePerPage) : 0,
+      discountedPricePerPage: form.discountedPricePerPage ? Number(form.discountedPricePerPage) : undefined,
+    };
+    try {
+      if (editingId) await api.patch(`/settings/freeform-job-types/${editingId}`, payload);
+      else await api.post('/settings/freeform-job-types', payload);
+      reset(); load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save');
+    }
+  };
+
+  const edit = (t: FreeformJobType) => {
+    setForm({
+      name: t.name,
+      description: t.description || '',
+      pricePerPage: t.pricePerPage != null ? String(t.pricePerPage) : '',
+      discountedPricePerPage: t.discountedPricePerPage != null ? String(t.discountedPricePerPage) : '',
+    });
+    setEditingId(t.id); setShowForm(true);
+  };
+
+  const remove = async (id: string) => {
+    if (!(await confirmDialog('Delete this freeform job type?'))) return;
+    await api.delete(`/settings/freeform-job-types/${id}`);
+    load();
+  };
+
+  const toggle = async (t: FreeformJobType) => {
+    await api.patch(`/settings/freeform-job-types/${t.id}`, { isActive: !t.isActive });
+    load();
+  };
+
+  return (
+    <div className="max-w-4xl">
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-sm text-text-secondary">
+          Reusable job types with a default price. Selecting one on a freeform job pre-fills a line item (still editable).
+        </p>
+        <button
+          onClick={() => { reset(); setShowForm(true); }}
+          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors flex-shrink-0"
+        >
+          + Add Type
+        </button>
+      </div>
+
+      {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm mb-4">{error}</div>}
+
+      {showForm && (
+        <form onSubmit={submit} className="bg-surface border border-border rounded-xl p-5 mb-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-1">
+              <label className="block text-sm font-medium text-text mb-1.5">Name</label>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Certified Translation"
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1.5">Price / Page</label>
+              <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} placeholder="0.00"
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-text mb-1.5">Discounted / Page (optional)</label>
+              <input type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} placeholder="—"
+                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">Description (optional)</label>
+            <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Short note used as the default line-item description"
+              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors">
+              {editingId ? 'Update' : 'Add Type'}
+            </button>
+            <button type="button" onClick={reset} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 transition-colors">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
+          <thead>
+            <tr className="bg-bg border-b border-border">
+              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Name</th>
+              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Price / Page</th>
+              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Discounted</th>
+              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
+              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {types.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-text-muted">No freeform job types yet.</td></tr>
+            )}
+            {types.map((t) => (
+              <tr key={t.id} className="border-b border-border last:border-0">
+                <td className="px-4 py-3">
+                  <div className="font-medium text-text">{t.name}</div>
+                  {t.description && <div className="text-xs text-text-secondary mt-0.5">{t.description}</div>}
+                </td>
+                <td className="px-4 py-3 text-right text-text">{Number(t.pricePerPage).toFixed(2)}</td>
+                <td className="px-4 py-3 text-right text-text-secondary">{t.discountedPricePerPage != null ? Number(t.discountedPricePerPage).toFixed(2) : '—'}</td>
+                <td className="px-4 py-3">
+                  <button onClick={() => toggle(t)} className={`text-xs px-2 py-1 rounded-full ${t.isActive ? 'bg-success-light text-success' : 'bg-neutral-light text-text-secondary'}`}>
+                    {t.isActive ? 'Active' : 'Inactive'}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <button onClick={() => edit(t)} className="text-xs text-primary hover:underline mr-3">Edit</button>
+                  <button onClick={() => remove(t.id)} className="text-xs text-danger hover:underline">Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

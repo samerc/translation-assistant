@@ -6,7 +6,8 @@ import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { JOB_STATUS_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { confirmDialog } from '@/lib/confirm';
 
 interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
 interface ClientPhone { id: string; phone: string; label: string | null; isPrimary: boolean; }
@@ -53,7 +54,7 @@ export default function ClientDetailPage() {
   ];
 
   const handleDelete = async () => {
-    if (!confirm(`Delete client "${client.name}"? This cannot be undone.`)) return;
+    if (!(await confirmDialog(`Delete client "${client.name}"? This cannot be undone.`))) return;
     await api.delete(`/clients/${id}`);
     router.push('/clients');
   };
@@ -394,7 +395,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
   };
 
   const handleDelete = async (contactId: string) => {
-    if (!confirm('Delete this contact?')) return;
+    if (!(await confirmDialog('Delete this contact?'))) return;
     await api.delete(`/clients/${clientId}/contacts/${contactId}`);
     onUpdate();
   };
@@ -494,7 +495,7 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
   };
 
   const handleDelete = async (copyId: string) => {
-    if (!confirm('Delete this passport copy?')) return;
+    if (!(await confirmDialog('Delete this passport copy?'))) return;
     await api.delete(`/clients/${clientId}/passports/${copyId}`);
     onUpdate();
   };
@@ -538,7 +539,7 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
           <div key={pc.id} className="bg-surface border border-border rounded-xl p-4 flex justify-between items-center">
             <div>
               <div className="font-medium text-text text-sm">{pc.label}</div>
-              <div className="text-xs text-text-muted mt-0.5">{pc.originalName} — {formatSize(pc.fileSize)} — {new Date(pc.uploadedAt).toLocaleDateString()}</div>
+              <div className="text-xs text-text-muted mt-0.5">{pc.originalName} — {formatSize(pc.fileSize)} — {formatDate(pc.uploadedAt)}</div>
             </div>
             <div className="flex gap-3">
               <button
@@ -602,7 +603,7 @@ function JobsTab({ clientId }: { clientId: string }) {
                   <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage?.code?.toUpperCase() ?? '—'} → {j.targetLanguage?.code?.toUpperCase() ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
                   <td className="px-4 py-3 text-text-secondary">{formatCurrency(j.calculatedTotal, baseCurrency)}</td>
-                  <td className="px-4 py-3 text-text-secondary">{new Date(j.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(j.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

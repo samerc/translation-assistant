@@ -7,11 +7,15 @@ import {
   Body,
   Param,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   ParseUUIDPipe,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto.js';
@@ -63,6 +67,30 @@ export class UsersController {
     // Any authenticated user can update their own profile (limited fields)
     const { roleId, isActive, ...safeDto } = dto;
     return this.usersService.update(user.id, safeDto);
+  }
+
+  // ── Invoice logo (self-service) ──
+  // Stored inline as a base64 data URL; PNG/JPEG only (the formats both the PDF
+  // and Word exporters can embed). Capped at 1MB to keep the column light.
+  @Patch('profile/me/logo')
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      limits: { fileSize: 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (['image/png', 'image/jpeg'].includes(file.mimetype)) cb(null, true);
+        else cb(new BadRequestException('Logo must be a PNG or JPEG image'), false);
+      },
+    }),
+  )
+  uploadLogo(@CurrentUser() user: User, @UploadedFile() file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Logo file is required');
+    const dataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    return this.usersService.setLogo(user.id, dataUrl);
+  }
+
+  @Delete('profile/me/logo')
+  removeLogo(@CurrentUser() user: User) {
+    return this.usersService.setLogo(user.id, null);
   }
 
   @Post('change-password')

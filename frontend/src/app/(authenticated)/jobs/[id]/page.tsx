@@ -7,7 +7,8 @@ import { logger } from '@/lib/logger';
 import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { confirmDialog } from '@/lib/confirm';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -72,7 +73,7 @@ export default function JobDetailPage() {
   if (!job) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   const handleDelete = async () => {
-    if (!confirm(`Delete job "${job.title}"?`)) return;
+    if (!(await confirmDialog(`Delete job "${job.title}"?`))) return;
     await api.delete(`/jobs/${id}`);
     router.push('/jobs');
   };
@@ -248,7 +249,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
             <InfoRow label="Client" value={job.client.name} />
             {job.contact && <InfoRow label="Contact" value={`${job.contact.firstName} ${job.contact.lastName}`} />}
             <InfoRow label="Languages" value={job.targetLanguage ? `${job.sourceLanguage.name} → ${job.targetLanguage.name}` : job.sourceLanguage.name} />
-            <InfoRow label="Deadline" value={job.deadline ? new Date(job.deadline).toLocaleDateString() : null} />
+            <InfoRow label="Deadline" value={formatDate(job.deadline)} />
             <InfoRow label="Notes" value={job.notes} />
           </div>
         )}
@@ -465,7 +466,7 @@ function DocumentsTab({ job }: { job: Job }) {
   };
 
   const handleDelete = async (docId: string) => {
-    if (!confirm('Delete this document?')) return;
+    if (!(await confirmDialog('Delete this document?'))) return;
     await api.delete(`/documents/${docId}`);
     loadDocs();
   };
@@ -539,7 +540,7 @@ function DocumentsTab({ job }: { job: Job }) {
                 }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
               </div>
               <div className="text-xs text-text-muted mt-1">
-                {doc.fieldValueCount || 0} field(s) filled — Last updated {new Date(doc.updatedAt).toLocaleDateString()}
+                {doc.fieldValueCount || 0} field(s) filled — Last updated {formatDate(doc.updatedAt)}
               </div>
             </div>
             <div className="flex gap-2">
@@ -590,7 +591,7 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
   };
 
   const handleDelete = async (fileId: string) => {
-    if (!confirm('Delete this file?')) return;
+    if (!(await confirmDialog('Delete this file?'))) return;
     await api.delete(`/jobs/${job.id}/files/${fileId}`);
     onUpdate();
   };
@@ -626,7 +627,7 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
             <div>
               <div className="font-medium text-text text-sm">{f.fileName}</div>
               <div className="text-xs text-text-muted mt-0.5">
-                {formatSize(f.fileSize)} — {new Date(f.uploadedAt).toLocaleDateString()}
+                {formatSize(f.fileSize)} — {formatDate(f.uploadedAt)}
                 {f.linkedFromJobId && <span className="ml-2 text-primary">(linked from job #{f.linkedFromJobId})</span>}
               </div>
             </div>

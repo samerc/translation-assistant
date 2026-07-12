@@ -4,6 +4,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { formatDate } from '@/lib/format';
 
 interface ClientEmail { id: string; email: string; label: string | null; }
 interface ClientPhone { id: string; phone: string; label: string | null; }
@@ -219,7 +220,7 @@ export default function ClientsPage() {
                 <td className="px-4 py-3 text-text-secondary">{client.emails?.[0]?.email || '—'}</td>
                 <td className="px-4 py-3 text-text-secondary">{client.phones?.[0]?.phone || '—'}</td>
                 <td className="px-4 py-3 text-text-secondary">{client.type === 'company' ? (client.contactsCount || 0) : '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{new Date(client.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-text-secondary">{formatDate(client.createdAt)}</td>
               </tr>
             ))}
           </tbody>

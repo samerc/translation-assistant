@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 
 interface Template {
@@ -209,7 +209,7 @@ export default function TemplatesPage() {
                       {t.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-text-secondary">{new Date(t.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(t.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

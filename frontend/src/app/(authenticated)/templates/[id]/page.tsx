@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify';
 import { api } from '@/lib/api';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
+import { confirmDialog, alertDialog } from '@/lib/confirm';
 
 interface Language { id: string; code: string; name: string; direction: string; isActive: boolean; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -47,7 +48,7 @@ export default function TemplateDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete template "${template.name}"?`)) return;
+    if (!(await confirmDialog(`Delete template "${template.name}"?`))) return;
     await api.delete(`/templates/${id}`);
     router.push('/templates');
   };
@@ -192,7 +193,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
 
   // ── Delete ──
   const handleDelete = async (fieldId: string) => {
-    if (!confirm('Delete this field?')) return;
+    if (!(await confirmDialog('Delete this field?'))) return;
     try {
       await api.delete(`/templates/${template.id}/fields/${fieldId}`);
       selected.delete(fieldId);
@@ -200,13 +201,13 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
       onUpdate();
     } catch (err) {
       logger.error('Failed to delete field', err, 'templates');
-      alert('Failed to delete field');
+      await alertDialog('Failed to delete field');
     }
   };
 
   const handleDeleteSelected = async () => {
     if (selected.size === 0) return;
-    if (!confirm(`Delete ${selected.size} selected field(s)?`)) return;
+    if (!(await confirmDialog(`Delete ${selected.size} selected field(s)?`))) return;
     try {
       for (const id of selected) {
         await api.delete(`/templates/${template.id}/fields/${id}`);
@@ -215,7 +216,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
       onUpdate();
     } catch (err) {
       logger.error('Failed to delete selected fields', err, 'templates');
-      alert('Failed to delete some fields');
+      await alertDialog('Failed to delete some fields');
       onUpdate();
     }
   };
@@ -235,7 +236,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
       setShowBulkGroup(false);
     } catch (err) {
       logger.error('Failed to group selected fields', err, 'templates');
-      alert('Failed to update some fields. Please try again.');
+      await alertDialog('Failed to update some fields. Please try again.');
     } finally {
       setSaving(false);
       onUpdate();

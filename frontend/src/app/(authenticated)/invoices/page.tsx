@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { INVOICE_STATUS_BADGE } from '@/lib/status';
+import { formatDate } from '@/lib/format';
 
 interface Invoice {
   id: string;
@@ -164,8 +165,8 @@ export default function InvoicesPage() {
                       {isOverdue ? 'Overdue' : badge.label}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-text-secondary">{new Date(inv.issueDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-text-secondary">{new Date(inv.dueDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(inv.issueDate)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(inv.dueDate)}</td>
                   <td className="px-4 py-3 text-text-secondary">{inv.itemCount || 0}</td>
                   <td className="px-4 py-3 text-text-secondary font-medium">
                     {inv.currency} {Number(inv.total).toFixed(2)}

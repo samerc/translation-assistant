@@ -9,11 +9,13 @@ import { formatCurrency } from '@/lib/format';
 interface Client { id: string; name: string; type: string; contacts: { id: string; firstName: string; lastName: string }[]; }
 interface Language { id: string; code: string; name: string; isActive: boolean; }
 interface Template { id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+interface FreeformJobType { id: string; name: string; description: string | null; pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean; }
 
 interface LineItem {
   key: string;
   description: string;
   templateId?: string;
+  freeformTypeId?: string; // client-only: which freeform type pre-filled this row (not persisted)
   pageCount: number;
   pricePerPage: number;
   discountedPricePerPage: number;
@@ -27,6 +29,7 @@ export default function NewJobPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [freeformTypes, setFreeformTypes] = useState<FreeformJobType[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,6 +57,9 @@ export default function NewJobPage() {
     api.get<{ data: Client[] }>('/clients?limit=1000').then((res) => setClients(res.data));
     api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive)));
     api.get<Template[]>('/templates?isActive=true').then(setTemplates);
+    api.get<FreeformJobType[]>('/settings/freeform-job-types')
+      .then((ts) => setFreeformTypes(ts.filter((t) => t.isActive)))
+      .catch(() => setFreeformTypes([]));
   }, []);
 
   const selectedClient = clients.find((c) => c.id === form.clientId);
@@ -88,6 +94,32 @@ export default function NewJobPage() {
         pricePerPage: tmpl.pricePerPage,
         discountedPricePerPage: tmpl.discountedPricePerPage || 0,
       });
+    }
+  };
+
+  // Freeform line-item source: a managed Freeform Type (ft:) pre-fills description
+  // + price with no templateId; a Simple Template (tpl:) keeps its templateId link.
+  const handleFreeformSelect = (key: string, value: string) => {
+    if (value.startsWith('ft:')) {
+      const ft = freeformTypes.find((t) => `ft:${t.id}` === value);
+      if (ft) updateLineItem(key, {
+        freeformTypeId: ft.id,
+        templateId: undefined,
+        description: ft.description || ft.name,
+        pricePerPage: Number(ft.pricePerPage) || 0,
+        discountedPricePerPage: ft.discountedPricePerPage != null ? Number(ft.discountedPricePerPage) : 0,
+      });
+    } else if (value.startsWith('tpl:')) {
+      const tmpl = templates.find((t) => t.id === value.slice(4));
+      if (tmpl) updateLineItem(key, {
+        templateId: tmpl.id,
+        freeformTypeId: undefined,
+        description: tmpl.name,
+        pricePerPage: Number(tmpl.pricePerPage) || 0,
+        discountedPricePerPage: tmpl.discountedPricePerPage != null ? Number(tmpl.discountedPricePerPage) : 0,
+      });
+    } else {
+      updateLineItem(key, { freeformTypeId: undefined, templateId: undefined });
     }
   };
 
@@ -250,17 +282,45 @@ export default function NewJobPage() {
           <div className="space-y-3">
             {lineItems.map((li) => (
               <div key={li.key} className="border border-border rounded-lg p-4 bg-bg">
+                {/* Free-form rows get an editable description (manual or type-prefilled) */}
+                {form.type === 'freeform' && (
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-text mb-1">Description</label>
+                    <input value={li.description} onChange={(e) => updateLineItem(li.key, { description: e.target.value })}
+                      placeholder="Line item description"
+                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-end">
-                  {/* Template selector */}
+                  {/* Template / freeform-type selector */}
                   <div className="col-span-2 md:col-span-4">
                     <label className="block text-xs font-medium text-text mb-1">
-                      {form.type === 'template' ? 'Template' : 'Document Type'}
+                      {form.type === 'template' ? 'Template' : 'Type'}
                     </label>
-                    <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
-                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                      <option value="">Select...</option>
-                      {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
-                    </select>
+                    {form.type === 'template' ? (
+                      <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
+                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="">Select...</option>
+                        {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
+                      </select>
+                    ) : (
+                      <select
+                        value={li.freeformTypeId ? `ft:${li.freeformTypeId}` : li.templateId ? `tpl:${li.templateId}` : ''}
+                        onChange={(e) => handleFreeformSelect(li.key, e.target.value)}
+                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="">Custom (manual entry)</option>
+                        {freeformTypes.length > 0 && (
+                          <optgroup label="Freeform Types">
+                            {freeformTypes.map((t) => <option key={t.id} value={`ft:${t.id}`}>{t.name} ({formatCurrency(Number(t.pricePerPage), baseCurrency)}/p)</option>)}
+                          </optgroup>
+                        )}
+                        {availableTemplates.length > 0 && (
+                          <optgroup label="Simple Templates">
+                            {availableTemplates.map((t) => <option key={t.id} value={`tpl:${t.id}`}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
+                          </optgroup>
+                        )}
+                      </select>
+                    )}
                   </div>
 
                   {/* Pages */}

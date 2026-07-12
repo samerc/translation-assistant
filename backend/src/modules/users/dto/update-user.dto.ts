@@ -42,6 +42,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   darkMode?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  businessName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  businessAddress?: string;
 }
 
 export class ChangePasswordDto {

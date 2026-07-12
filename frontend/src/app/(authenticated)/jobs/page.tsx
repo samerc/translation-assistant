@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 
 interface Job {
   id: string;
@@ -182,8 +182,8 @@ export default function JobsPage() {
                   </td>
                   <td className="px-4 py-3 text-text-secondary">{job.lineItemCount || 0}</td>
                   <td className="px-4 py-3 text-text-secondary">{getPrice(job)}</td>
-                  <td className="px-4 py-3 text-text-secondary">{job.deadline ? new Date(job.deadline).toLocaleDateString() : '—'}</td>
-                  <td className="px-4 py-3 text-text-secondary">{new Date(job.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(job.deadline)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatDate(job.createdAt)}</td>
                 </tr>
               );
             })}

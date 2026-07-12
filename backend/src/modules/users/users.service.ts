@@ -30,7 +30,12 @@ export class UsersService {
     const users = await this.userRepository.find({
       relations: ['role', 'role.permissions'],
     });
-    return users.map((u) => this.sanitize(u));
+    // Drop the (potentially large) base64 logo from list responses — it's only
+    // needed on the single-user branding form, served by findOne().
+    return users.map((u) => {
+      const { logo, ...rest } = this.sanitize(u);
+      return rest;
+    });
   }
 
   async findOne(id: string): Promise<Partial<User>> {
@@ -63,6 +68,14 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
 
     await this.userRepository.update(id, dto);
+    return this.findOne(id);
+  }
+
+  /** Set (data URL) or clear (null) the user's invoice logo. */
+  async setLogo(id: string, logo: string | null): Promise<Partial<User>> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.userRepository.update(id, { logo: logo as any });
     return this.findOne(id);
   }
 
