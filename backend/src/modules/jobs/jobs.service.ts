@@ -158,7 +158,9 @@ export class JobsService {
 
     if (!client) throw new BadRequestException('Client not found');
     if (!sourceLang) throw new BadRequestException('Source language not found');
+    if (!sourceLang.isActive) throw new BadRequestException('Source language is not active');
     if (dto.targetLanguageId && !targetLang) throw new BadRequestException('Target language not found');
+    if (targetLang && !targetLang.isActive) throw new BadRequestException('Target language is not active');
 
     // Validate all templates exist
     const templateMap = new Map(templates.map((t) => [t.id, t]));

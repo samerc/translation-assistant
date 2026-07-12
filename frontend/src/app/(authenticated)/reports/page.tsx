@@ -146,8 +146,8 @@ export default function ReportsPage() {
                   <Bar dataKey="totalRevenue" fill="var(--color-primary)" radius={[4, 4, 0, 0]} name="Revenue" />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="mt-6">
-                <table className="w-full text-sm">
+              <div className="mt-6 overflow-x-auto">
+                <table className="w-full text-sm min-w-[400px]">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-semibold text-text-secondary">Client</th>
@@ -194,8 +194,8 @@ export default function ReportsPage() {
                 </PieChart>
               </ResponsiveContainer>
               </div>
-              <div className="w-full lg:flex-1">
-                <table className="w-full text-sm">
+              <div className="w-full lg:flex-1 overflow-x-auto">
+                <table className="w-full text-sm min-w-[300px]">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-semibold text-text-secondary">Status</th>
