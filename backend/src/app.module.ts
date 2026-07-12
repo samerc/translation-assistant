@@ -10,6 +10,7 @@ import { HoneypotGuard } from './common/guards/honeypot.guard.js';
 import { AbuseDetectionGuard } from './common/guards/abuse-detection.guard.js';
 import { WriteThrottleGuard } from './common/guards/write-throttle.guard.js';
 // AdminGuard is imported per-controller, not globally
+import { MailModule } from './modules/mail/mail.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
@@ -41,6 +42,7 @@ import { SearchModule } from './modules/search/search.module.js';
       ],
     }),
     ScheduleModule.forRoot(),
+    MailModule,
     AuthModule,
     UsersModule,
     RolesModule,

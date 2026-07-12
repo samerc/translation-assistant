@@ -19,6 +19,7 @@ import { Session } from './entities/session.entity.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { JwtPayload } from './strategies/jwt.strategy.js';
+import { MailService } from '../mail/mail.service.js';
 
 interface LoginAttempt {
   failures: number;
@@ -47,6 +48,7 @@ export class AuthService {
     private readonly sessionRepository: Repository<Session>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {
     setInterval(() => this.cleanupAttempts(), 10 * 60_000);
   }
@@ -254,6 +256,11 @@ export class AuthService {
     await this.inviteTokenRepository.save(
       this.inviteTokenRepository.create({ token, email, roleId, expiresAt }),
     );
+    // Email the invite link (best-effort — the token is also returned so an admin can
+    // copy the link manually if SMTP isn't configured yet).
+    this.mailService.sendInvite(email, token).catch((err) => {
+      this.logger.error(`[INVITE_EMAIL_FAILED] email=${email}: ${err?.message}`);
+    });
     return { token, expiresAt };
   }
 
@@ -274,10 +281,13 @@ export class AuthService {
     );
     this.logger.log(`[PASSWORD_RESET_REQUESTED] userId=${user.id}`);
 
+    // Deliver the reset link by email (best-effort — never block/leak on SMTP failure).
+    this.mailService.sendPasswordReset(user.email, token).catch((err) => {
+      this.logger.error(`[PASSWORD_RESET_EMAIL_FAILED] userId=${user.id}: ${err?.message}`);
+    });
+
     // SECURITY: never return the raw reset token in the response outside development.
-    // In production the token must be delivered out-of-band (email). Exposing it here
-    // would let anyone reset any account by knowing only the email address.
-    // TODO: wire an email service and drop the dev fallback entirely.
+    // In production the token is delivered only via email (above).
     if (process.env.NODE_ENV !== 'production') {
       return { message, token, expiresAt } as any;
     }

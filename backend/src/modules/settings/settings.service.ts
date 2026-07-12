@@ -43,7 +43,12 @@ export class SettingsService {
 
   async updateSettings(dto: UpdateSettingsDto): Promise<AppSettings> {
     const settings = await this.getSettings();
-    Object.assign(settings, dto);
+    // An empty SMTP password means "leave unchanged" (the GET response never returns it).
+    const patch = { ...dto };
+    if (patch.smtpPass === '' || patch.smtpPass === undefined) {
+      delete patch.smtpPass;
+    }
+    Object.assign(settings, patch);
     return this.settingsRepository.save(settings);
   }
 

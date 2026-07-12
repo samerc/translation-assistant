@@ -30,8 +30,11 @@ export class SettingsController {
 
   @Get()
   @RequirePermissions('settings:read')
-  getSettings() {
-    return this.settingsService.getSettings();
+  async getSettings() {
+    const settings = await this.settingsService.getSettings();
+    // Never expose the stored SMTP password; signal only whether one is set.
+    const { smtpPass, ...rest } = settings;
+    return { ...rest, smtpPassSet: Boolean(smtpPass) };
   }
 
   @Patch()
