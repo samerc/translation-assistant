@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface Job {
   id: string;
@@ -36,6 +39,8 @@ const STATUSES = [
 ];
 
 export default function JobsPage() {
+  const { baseCurrency } = useSettings();
+  const { hasPermission } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -85,17 +90,19 @@ export default function JobsPage() {
   const getPrice = (job: Job) => {
     if (job.isFreeOfCharge) return 'Free';
     const price = job.finalPrice ?? job.calculatedTotal;
-    return `$${Number(price).toFixed(2)}`;
+    return formatCurrency(price, baseCurrency);
   };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Jobs</h1>
-        <button onClick={() => router.push('/jobs/new')}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-          + New Job
-        </button>
+        {hasPermission('jobs:create') && (
+          <button onClick={() => router.push('/jobs/new')}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+            + New Job
+          </button>
+        )}
       </div>
 
       {/* Filters */}

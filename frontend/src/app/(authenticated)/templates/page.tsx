@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 
 interface Template {
@@ -20,6 +21,7 @@ interface Template {
 type ViewMode = 'table' | 'cards';
 
 export default function TemplatesPage() {
+  const { hasPermission } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -73,12 +75,14 @@ export default function TemplatesPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Templates</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-        >
-          + New Template
-        </button>
+        {hasPermission('templates:create') && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            + New Template
+          </button>
+        )}
       </div>
 
       {showForm && (

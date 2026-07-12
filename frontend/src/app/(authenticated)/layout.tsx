@@ -1,5 +1,6 @@
 import AppLayout from "@/components/layout/AppLayout";
 import AuthGuard from "@/components/layout/AuthGuard";
+import { SettingsProvider } from "@/lib/settings-context";
 
 export default function AuthenticatedLayout({
   children,
@@ -8,7 +9,9 @@ export default function AuthenticatedLayout({
 }) {
   return (
     <AuthGuard>
-      <AppLayout>{children}</AppLayout>
+      <SettingsProvider>
+        <AppLayout>{children}</AppLayout>
+      </SettingsProvider>
     </AuthGuard>
   );
 }

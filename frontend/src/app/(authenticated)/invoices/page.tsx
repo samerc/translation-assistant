@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { INVOICE_STATUS_BADGE } from '@/lib/status';
 
 interface Invoice {
@@ -34,6 +35,7 @@ const STATUSES = [
 ];
 
 export default function InvoicesPage() {
+  const { hasPermission } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -88,10 +90,12 @@ export default function InvoicesPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Invoices</h1>
-        <button onClick={() => router.push('/invoices/new')}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-          + New Invoice
-        </button>
+        {hasPermission('invoices:create') && (
+          <button onClick={() => router.push('/invoices/new')}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+            + New Invoice
+          </button>
+        )}
       </div>
 
       {/* Filters */}

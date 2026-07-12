@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -176,6 +178,7 @@ export default function JobDetailPage() {
 // ── Details Tab ──
 
 function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUpdate: () => void }) {
+  const { baseCurrency } = useSettings();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     title: job.title, description: job.description || '', notes: job.notes || '',
@@ -267,12 +270,12 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
                         <td className="px-3 py-2 text-text">{li.description}</td>
                         <td className="px-3 py-2 text-text-secondary text-center">{li.pageCount}</td>
                         <td className="px-3 py-2 text-text-secondary text-right">
-                          ${Number(li.useDiscountedPrice && li.discountedPricePerPage ? li.discountedPricePerPage : li.pricePerPage).toFixed(2)}
+                          {formatCurrency(li.useDiscountedPrice && li.discountedPricePerPage ? li.discountedPricePerPage : li.pricePerPage, baseCurrency)}
                           {li.useDiscountedPrice && li.discountedPricePerPage && (
                             <span className="text-xs text-success ml-1">(disc.)</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-text font-medium text-right">${Number(li.lineTotal).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-text font-medium text-right">{formatCurrency(li.lineTotal, baseCurrency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -282,13 +285,13 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
               <p className="text-sm text-text-muted mb-4">No line items.</p>
             )}
             <div className="space-y-2">
-              <InfoRow label="Calculated Total" value={`$${Number(job.calculatedTotal).toFixed(2)}`} />
-              {job.finalPrice && <InfoRow label="Final Price (override)" value={`$${Number(job.finalPrice).toFixed(2)}`} />}
+              <InfoRow label="Calculated Total" value={formatCurrency(job.calculatedTotal, baseCurrency)} />
+              {job.finalPrice && <InfoRow label="Final Price (override)" value={formatCurrency(job.finalPrice, baseCurrency)} />}
               <div className="border-t border-border pt-2">
-                <InfoRow label="Effective Total" value={`$${Number(effectivePrice).toFixed(2)}`} />
+                <InfoRow label="Effective Total" value={formatCurrency(effectivePrice, baseCurrency)} />
               </div>
               {job.paymentCurrency && (
-                <InfoRow label="Paid in" value={`${Number(job.paymentAmount).toFixed(2)} ${job.paymentCurrency}`} />
+                <InfoRow label="Paid in" value={job.paymentAmount != null ? formatCurrency(job.paymentAmount, job.paymentCurrency) : '—'} />
               )}
             </div>
           </>

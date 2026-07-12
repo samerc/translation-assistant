@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar,
@@ -35,6 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const { baseCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState('revenue');
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [clientData, setClientData] = useState<ClientData[]>([]);
@@ -157,7 +160,7 @@ export default function ReportsPage() {
                       <tr key={c.clientId} className="border-b border-border last:border-0">
                         <td className="py-2 text-text">{c.clientName}</td>
                         <td className="py-2 text-text-secondary text-right">{c.invoiceCount}</td>
-                        <td className="py-2 text-text font-medium text-right">${c.totalRevenue.toFixed(2)}</td>
+                        <td className="py-2 text-text font-medium text-right">{formatCurrency(c.totalRevenue, baseCurrency)}</td>
                       </tr>
                     ))}
                   </tbody>

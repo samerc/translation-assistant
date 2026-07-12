@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
+import { formatCurrency } from '@/lib/format';
 
 interface DashboardStats {
   activeJobs: number;
@@ -49,7 +50,7 @@ export default function Dashboard() {
         {canSeeFinancials && (
           <SummaryCard
             title="Revenue (Month)"
-            value={loading ? '' : stats ? `${currency} ${stats.monthlyRevenue.toFixed(2)}` : '$0'}
+            value={loading ? '' : formatCurrency(stats?.monthlyRevenue ?? 0, currency)}
             loading={loading}
             icon={<RevenueIcon />}
           />
