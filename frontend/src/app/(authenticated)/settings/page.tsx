@@ -335,6 +335,8 @@ function LabelsSettings() {
   const [labels, setLabels] = useState<LabelOption[]>([]);
   const [adding, setAdding] = useState<string | null>(null);
   const [newValue, setNewValue] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   const loadLabels = () => {
     Promise.all(
@@ -358,6 +360,13 @@ function LabelsSettings() {
 
   const handleDelete = async (id: string) => {
     await api.delete(`/settings/labels/${id}`);
+    loadLabels();
+  };
+
+  const handleEditSave = async (id: string) => {
+    if (!editValue.trim()) return;
+    await api.patch(`/settings/labels/${id}`, { value: editValue.trim() });
+    setEditingId(null);
     loadLabels();
   };
 
@@ -391,14 +400,28 @@ function LabelsSettings() {
 
               <div className="space-y-2">
                 {catLabels.map((label) => (
-                  <div key={label.id} className="flex justify-between items-center py-2 px-3 bg-bg rounded-lg group">
-                    <span className="text-sm text-text">{label.value}</span>
-                    <button
-                      onClick={() => handleDelete(label.id)}
-                      className="text-xs text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Remove
-                    </button>
+                  <div key={label.id} className="flex justify-between items-center gap-2 py-2 px-3 bg-bg rounded-lg group">
+                    {editingId === label.id ? (
+                      <>
+                        <input
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEditSave(label.id); } if (e.key === 'Escape') setEditingId(null); }}
+                          className="flex-1 px-2 py-1 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                        <button onClick={() => handleEditSave(label.id)} className="text-xs text-primary font-medium">Save</button>
+                        <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm text-text">{label.value}</span>
+                        <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingId(label.id); setEditValue(label.value); }} className="text-xs text-primary">Edit</button>
+                          <button onClick={() => handleDelete(label.id)} className="text-xs text-danger">Remove</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>

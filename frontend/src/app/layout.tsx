@@ -33,11 +33,11 @@ export default function RootLayout({
     >
       <body className="min-h-full">
         <ErrorBoundary>
-          <ThemeProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <ThemeProvider>
               {children}
-            </AuthProvider>
-          </ThemeProvider>
+            </ThemeProvider>
+          </AuthProvider>
         </ErrorBoundary>
       </body>
     </html>
