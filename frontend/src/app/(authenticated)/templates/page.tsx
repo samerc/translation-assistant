@@ -4,6 +4,8 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 
 interface Template {
@@ -22,6 +24,7 @@ type ViewMode = 'table' | 'cards';
 
 export default function TemplatesPage() {
   const { hasPermission } = useAuth();
+  const { baseCurrency } = useSettings();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
@@ -195,9 +198,9 @@ export default function TemplatesPage() {
                   </td>
                   <td className="px-4 py-3 text-text-secondary max-w-xs truncate">{t.description || '—'}</td>
                   <td className="px-4 py-3 text-text-secondary">{t.type === 'simple' ? '—' : t.fields.length}</td>
-                  <td className="px-4 py-3 text-text-secondary">${Number(t.pricePerPage).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatCurrency(t.pricePerPage, baseCurrency)}</td>
                   <td className="px-4 py-3 text-text-secondary">
-                    {t.discountedPricePerPage ? `$${Number(t.discountedPricePerPage).toFixed(2)}` : '—'}
+                    {t.discountedPricePerPage ? formatCurrency(t.discountedPricePerPage, baseCurrency) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -240,9 +243,9 @@ export default function TemplatesPage() {
               <div className="flex justify-between text-xs text-text-muted">
                 <span>{t.type === 'simple' ? 'Simple' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
                 <div className="flex gap-2">
-                  <span>${Number(t.pricePerPage).toFixed(2)} / page</span>
+                  <span>{formatCurrency(t.pricePerPage, baseCurrency)} / page</span>
                   {t.discountedPricePerPage && (
-                    <span className="text-success">(${Number(t.discountedPricePerPage).toFixed(2)})</span>
+                    <span className="text-success">({formatCurrency(t.discountedPricePerPage, baseCurrency)})</span>
                   )}
                 </div>
               </div>

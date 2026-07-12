@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { JOB_STATUS_BADGE } from '@/lib/status';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
 interface ClientPhone { id: string; phone: string; label: string | null; isPrimary: boolean; }
@@ -563,7 +565,8 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
 // ── Jobs Tab (placeholder) ──
 
 function JobsTab({ clientId }: { clientId: string }) {
-  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string }; targetLanguage: { code: string }; calculatedTotal: number; createdAt: string }[]>([]);
+  const { baseCurrency } = useSettings();
+  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string } | null; targetLanguage: { code: string } | null; calculatedTotal: number; createdAt: string }[]>([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -598,7 +601,7 @@ function JobsTab({ clientId }: { clientId: string }) {
                   <td className="px-4 py-3 font-medium text-text">{j.title}</td>
                   <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage?.code?.toUpperCase() ?? '—'} → {j.targetLanguage?.code?.toUpperCase() ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
-                  <td className="px-4 py-3 text-text-secondary">${Number(j.calculatedTotal).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatCurrency(j.calculatedTotal, baseCurrency)}</td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(j.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
