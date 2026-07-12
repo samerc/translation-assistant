@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme, type Palette } from '@/lib/theme-context';
 
 interface AppSettings {
   id: string;
@@ -607,10 +608,9 @@ function InputField({
 // ── Appearance Settings ──
 
 function AppearanceSettings() {
-  // Import theme context inline to avoid adding to file-level imports
-  const { palette, setPalette, darkMode, toggleDarkMode } = require('@/lib/theme-context').useTheme();
+  const { palette, setPalette, darkMode, toggleDarkMode } = useTheme();
 
-  const palettes: { id: string; name: string; color: string }[] = [
+  const palettes: { id: Palette; name: string; color: string }[] = [
     { id: 'indigo', name: 'Indigo Minimal', color: '#4F46E5' },
     { id: 'ocean', name: 'Ocean Blue', color: '#1E40AF' },
     { id: 'teal', name: 'Teal Focus', color: '#0D9488' },

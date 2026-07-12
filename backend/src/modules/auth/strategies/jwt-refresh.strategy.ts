@@ -40,6 +40,10 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
   }
 
   async validate(req: Request, payload: JwtPayload) {
+    // Only genuine refresh tokens may be used here (not access tokens).
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
     const refreshToken = extractRefreshToken(req);
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token missing');

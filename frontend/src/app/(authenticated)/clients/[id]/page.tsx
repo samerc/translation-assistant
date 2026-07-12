@@ -600,7 +600,7 @@ function JobsTab({ clientId }: { clientId: string }) {
               {jobs.map((j) => (
                 <tr key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
                   <td className="px-4 py-3 font-medium text-text">{j.title}</td>
-                  <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage.code.toUpperCase()} → {j.targetLanguage.code.toUpperCase()}</td>
+                  <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage?.code?.toUpperCase() ?? '—'} → {j.targetLanguage?.code?.toUpperCase() ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
                   <td className="px-4 py-3 text-text-secondary">${Number(j.calculatedTotal).toFixed(2)}</td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(j.createdAt).toLocaleDateString()}</td>
