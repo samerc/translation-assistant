@@ -24,7 +24,7 @@ export default function DocumentFillPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string } | null>(null);
+  const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string; page: number; entry?: number } | null>(null);
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
   const [dirty, setDirty] = useState(false);
 
@@ -93,7 +93,8 @@ export default function DocumentFillPage() {
     values[getValueKey(fieldId, page, entry)] || '';
 
   const setValue = (fieldId: string, page: number, value: string, entry?: number) => {
-    setValues({ ...values, [getValueKey(fieldId, page, entry)]: value });
+    const key = getValueKey(fieldId, page, entry);
+    setValues((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
   };
 
@@ -189,7 +190,7 @@ export default function DocumentFillPage() {
           </div>
           <button
             type="button"
-            onClick={() => setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id })}
+            onClick={() => setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id, page: pageNum, entry: entryIdx })}
             className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium hover:bg-primary/20"
           >
             GT
@@ -308,11 +309,8 @@ export default function DocumentFillPage() {
           sourceLanguage={sourceLang}
           targetLanguage={targetLang}
           onCopy={(text) => {
-            // Find the field and set its value
-            const field = fields.find((f) => f.id === gtOpen.fieldId);
-            if (field) {
-              setValue(gtOpen.fieldId, 1, text);
-            }
+            // Write back to the exact field/page/entry the GT popup was opened from.
+            setValue(gtOpen.fieldId, gtOpen.page, text, gtOpen.entry);
             setGtOpen(null);
           }}
           onClose={() => setGtOpen(null)}

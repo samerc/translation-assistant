@@ -22,6 +22,13 @@
   --color-danger-light: #FFF1F2;
   --color-neutral: #6B7280;
 
+  /* Status/badge palette (shared across all palettes; light tints derived so they
+     adapt to the active palette and can be flipped for dark mode below). */
+  --color-info: #0284C7;
+  --color-info-light: #E0F2FE;
+  --color-accent-light: color-mix(in srgb, var(--color-accent) 16%, white);
+  --color-neutral-light: color-mix(in srgb, var(--color-neutral) 14%, white);
+
   --color-bg: #F8FAFC;
   --color-surface: #FFFFFF;
   --color-border: #E2E8F0;
@@ -106,6 +113,16 @@
   --color-text: #F1F5F9;
   --color-text-secondary: #94A3B8;
   --color-text-muted: #64748B;
+
+  /* Badge/tint backgrounds: translucent tints of the base hue so they read on a
+     dark surface instead of the near-white light-mode swatches. */
+  --color-primary-light: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  --color-success-light: color-mix(in srgb, var(--color-success) 26%, transparent);
+  --color-warning-light: color-mix(in srgb, var(--color-warning) 26%, transparent);
+  --color-danger-light: color-mix(in srgb, var(--color-danger) 26%, transparent);
+  --color-info-light: color-mix(in srgb, var(--color-info) 28%, transparent);
+  --color-accent-light: color-mix(in srgb, var(--color-accent) 28%, transparent);
+  --color-neutral-light: color-mix(in srgb, var(--color-neutral) 30%, transparent);
 }
 
 /* ==========================================
@@ -123,6 +140,10 @@
   --color-danger: var(--color-danger);
   --color-danger-light: var(--color-danger-light);
   --color-neutral: var(--color-neutral);
+  --color-neutral-light: var(--color-neutral-light);
+  --color-info: var(--color-info);
+  --color-info-light: var(--color-info-light);
+  --color-accent-light: var(--color-accent-light);
 
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);

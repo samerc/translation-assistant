@@ -4,6 +4,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -42,13 +43,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 };
 
 const statusColor = (s: string) => {
-  const map: Record<string, string> = {
-    quote: 'bg-sky-100 text-sky-700', accepted: 'bg-teal-100 text-teal-700',
-    in_progress: 'bg-primary-light text-primary', delivered: 'bg-green-100 text-green-700',
-    invoiced: 'bg-warning-light text-warning', paid: 'bg-emerald-100 text-emerald-800',
-    lost: 'bg-gray-100 text-gray-500', cancelled: 'bg-danger-light text-danger',
-  };
-  return map[s] || 'bg-bg text-text-secondary';
+  return badgeClass(JOB_STATUS_BADGE, s);
 };
 
 type Tab = 'details' | 'documents' | 'source-files' | 'translated-files';

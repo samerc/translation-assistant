@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 
 interface Template {
   id: string;
@@ -245,9 +246,9 @@ export default function TemplatesPage() {
 
 function TemplatTypeBadge({ type }: { type: string }) {
   const config: Record<string, { bg: string; label: string }> = {
-    designer: { bg: 'bg-primary-light text-primary', label: 'Designer' },
-    word: { bg: 'bg-blue-100 text-blue-700', label: 'Word' },
-    simple: { bg: 'bg-orange-100 text-orange-700', label: 'Simple' },
+    designer: { bg: TEMPLATE_TYPE_BADGE.designer, label: 'Designer' },
+    word: { bg: TEMPLATE_TYPE_BADGE.word, label: 'Word' },
+    simple: { bg: TEMPLATE_TYPE_BADGE.simple, label: 'Simple' },
   };
   const c = config[type] || config.designer;
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.bg}`}>{c.label}</span>;

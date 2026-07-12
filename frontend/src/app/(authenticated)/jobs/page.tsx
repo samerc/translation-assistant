@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
 
 interface Job {
   id: string;
@@ -24,14 +25,14 @@ interface Job {
 interface JobsResponse { data: Job[]; total: number; page: number; limit: number; totalPages: number; }
 
 const STATUSES = [
-  { value: 'quote', label: 'Quote', color: 'bg-sky-100 text-sky-700' },
-  { value: 'accepted', label: 'Accepted', color: 'bg-teal-100 text-teal-700' },
-  { value: 'in_progress', label: 'In Progress', color: 'bg-primary-light text-primary' },
-  { value: 'delivered', label: 'Delivered', color: 'bg-green-100 text-green-700' },
-  { value: 'invoiced', label: 'Invoiced', color: 'bg-warning-light text-warning' },
-  { value: 'paid', label: 'Paid', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'lost', label: 'Lost', color: 'bg-gray-100 text-gray-500' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-danger-light text-danger' },
+  { value: 'quote', label: 'Quote', color: JOB_STATUS_BADGE.quote },
+  { value: 'accepted', label: 'Accepted', color: JOB_STATUS_BADGE.accepted },
+  { value: 'in_progress', label: 'In Progress', color: JOB_STATUS_BADGE.in_progress },
+  { value: 'delivered', label: 'Delivered', color: JOB_STATUS_BADGE.delivered },
+  { value: 'invoiced', label: 'Invoiced', color: JOB_STATUS_BADGE.invoiced },
+  { value: 'paid', label: 'Paid', color: JOB_STATUS_BADGE.paid },
+  { value: 'lost', label: 'Lost', color: JOB_STATUS_BADGE.lost },
+  { value: 'cancelled', label: 'Cancelled', color: JOB_STATUS_BADGE.cancelled },
 ];
 
 export default function JobsPage() {
@@ -152,7 +153,7 @@ export default function JobsPage() {
                     <div className="font-medium text-text">{job.title}</div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? 'bg-orange-100 text-orange-700' : 'bg-violet-100 text-violet-700'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
                         {job.type === 'freeform' ? 'Free-form' : 'Template'}
                       </span>
                     </div>

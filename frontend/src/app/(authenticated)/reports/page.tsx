@@ -47,15 +47,20 @@ export default function ReportsPage() {
       const from = new Date(now.getFullYear(), now.getMonth() - 6, 1);
       const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`;
       api.get<RevenueData[]>(`/reports/revenue?period=${period}&from=${fromStr}`)
-        .then(setRevenueData)
+        // Aggregates come back as strings from the DB — coerce for recharts + toFixed.
+        .then((rows) => setRevenueData(rows.map((r) => ({ ...r, revenue: Number(r.revenue) }))))
         .catch(() => setRevenueData([]));
     } else if (activeTab === 'client') {
       api.get<ClientData[]>('/reports/by-client')
-        .then(setClientData)
+        .then((rows) => setClientData(rows.map((c) => ({
+          ...c,
+          totalRevenue: Number(c.totalRevenue),
+          invoiceCount: Number(c.invoiceCount),
+        }))))
         .catch(() => setClientData([]));
     } else if (activeTab === 'status') {
       api.get<StatusData[]>('/reports/job-status')
-        .then(setStatusData)
+        .then((rows) => setStatusData(rows.map((s) => ({ ...s, count: Number(s.count) }))))
         .catch(() => setStatusData([]));
     }
   }, [activeTab, period]);
