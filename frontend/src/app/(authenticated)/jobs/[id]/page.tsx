@@ -407,11 +407,23 @@ interface DocSummary {
   updatedAt: string;
 }
 
+interface CloneResult {
+  id: string;
+  status: string;
+  updatedAt: string;
+  template: { name: string };
+  job: { jobNumber: string; title: string; client?: { name: string } };
+}
+
 function DocumentsTab({ job }: { job: Job }) {
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [showClone, setShowClone] = useState(false);
+  const [cloneSearch, setCloneSearch] = useState('');
+  const [cloneResults, setCloneResults] = useState<CloneResult[]>([]);
+  const [cloning, setCloning] = useState(false);
   const router = useRouter();
 
   const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs); };
@@ -420,6 +432,26 @@ function DocumentsTab({ job }: { job: Job }) {
     loadDocs();
     api.get<{ id: string; name: string }[]>('/templates?isActive=true').then(setTemplates);
   }, [job.id]);
+
+  useEffect(() => {
+    if (!showClone) return;
+    const t = setTimeout(() => {
+      const q = cloneSearch ? `?search=${encodeURIComponent(cloneSearch)}` : '';
+      api.get<CloneResult[]>(`/documents/search-clone${q}`).then(setCloneResults).catch(() => setCloneResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [showClone, cloneSearch]);
+
+  const handleClone = async (sourceId: string) => {
+    setCloning(true);
+    try {
+      const doc = await api.post<{ id: string }>(`/documents/${sourceId}/clone`, { jobId: job.id });
+      setShowClone(false);
+      router.push(`/documents/${doc.id}`);
+    } catch {
+      setCloning(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!selectedTemplateId) return;
@@ -440,10 +472,37 @@ function DocumentsTab({ job }: { job: Job }) {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex justify-end mb-4">
-        <button onClick={() => setShowAdd(true)}
+      <div className="flex justify-end gap-2 mb-4">
+        <button onClick={() => { setShowClone(true); setShowAdd(false); }}
+          className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm font-medium hover:bg-border/40">Clone existing</button>
+        <button onClick={() => { setShowAdd(true); setShowClone(false); }}
           className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Document</button>
       </div>
+
+      {showClone && (
+        <div className="bg-surface border border-border rounded-xl p-5 mb-4">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="font-semibold text-text">Clone from an existing document</h4>
+            <button onClick={() => setShowClone(false)} className="text-xs text-text-secondary">Cancel</button>
+          </div>
+          <input value={cloneSearch} onChange={(e) => setCloneSearch(e.target.value)} placeholder="Search by template or client…" aria-label="Search documents to clone"
+            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-3" />
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {cloneResults.length === 0 ? (
+              <p className="text-sm text-text-muted py-2">No completed documents found to clone.</p>
+            ) : cloneResults.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 py-2 px-3 bg-bg rounded-lg">
+                <div className="min-w-0">
+                  <div className="text-sm text-text truncate">{r.template.name}</div>
+                  <div className="text-xs text-text-muted truncate">{r.job.jobNumber} · {r.job.client?.name || r.job.title}</div>
+                </div>
+                <button onClick={() => handleClone(r.id)} disabled={cloning}
+                  className="text-xs text-primary hover:underline flex-shrink-0 disabled:opacity-50">Clone</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showAdd && (
         <div className="bg-surface border border-border rounded-xl p-5 mb-4">
