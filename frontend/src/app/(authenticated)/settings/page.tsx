@@ -31,7 +31,7 @@ interface LabelOption {
   sortOrder: number;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'users';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'users' | 'roles';
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -48,6 +48,7 @@ export default function SettingsPage() {
     ...(isAdmin
       ? [
           { id: 'users' as Tab, label: 'Users' },
+          { id: 'roles' as Tab, label: 'Roles' },
           { id: 'email' as Tab, label: 'Email' },
         ]
       : []),
@@ -81,6 +82,7 @@ export default function SettingsPage() {
       {activeTab === 'appearance' && <AppearanceSettings />}
       {activeTab === 'security' && <SecuritySettings />}
       {activeTab === 'users' && isAdmin && <UsersSettings />}
+      {activeTab === 'roles' && isAdmin && <RolesSettings />}
       {activeTab === 'email' && isAdmin && <EmailSettings />}
     </div>
   );
@@ -1087,6 +1089,144 @@ function EmailSettings() {
             {testing ? 'Sending...' : 'Send test'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Roles & Permissions (admin) ──
+
+interface Permission { id: string; resource: string; action: string; description?: string }
+interface Role { id: string; name: string; description?: string; permissions: Permission[] }
+
+function RolesSettings() {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [editing, setEditing] = useState<Role | 'new' | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    api.get<Role[]>('/roles').then(setRoles).catch(() => setError('Couldn’t load roles.'));
+    api.get<Permission[]>('/roles/permissions').then(setPermissions).catch(() => {});
+  };
+  useEffect(load, []);
+
+  const byResource = permissions.reduce<Record<string, Permission[]>>((acc, p) => {
+    (acc[p.resource] = acc[p.resource] || []).push(p);
+    return acc;
+  }, {});
+
+  const startNew = () => { setEditing('new'); setName(''); setDescription(''); setPicked(new Set()); setError(null); };
+  const startEdit = (r: Role) => {
+    setEditing(r); setName(r.name); setDescription(r.description || '');
+    setPicked(new Set(r.permissions.map((p) => p.id))); setError(null);
+  };
+  const toggle = (id: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleResource = (res: string) => setPicked((prev) => {
+    const n = new Set(prev);
+    const ids = byResource[res].map((p) => p.id);
+    const allOn = ids.every((id) => n.has(id));
+    ids.forEach((id) => (allOn ? n.delete(id) : n.add(id)));
+    return n;
+  });
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    const body = { name, description: description || undefined, permissionIds: Array.from(picked) };
+    try {
+      if (editing === 'new') await api.post('/roles', body);
+      else if (editing) await api.patch(`/roles/${editing.id}`, body);
+      setEditing(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to save role.');
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (r: Role) => {
+    if (!confirm(`Delete role "${r.name}"?`)) return;
+    try { await api.delete(`/roles/${r.id}`); load(); }
+    catch (err) { setError(err instanceof ApiError ? String(err.message) : 'Failed to delete role.'); }
+  };
+
+  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+
+  if (editing) {
+    return (
+      <div className="max-w-3xl bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-4">{editing === 'new' ? 'New role' : `Edit role: ${editing.name}`}</h3>
+        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        <form onSubmit={save} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="roleName" className="block text-sm font-medium text-text mb-1.5">Name</label>
+              <input id="roleName" value={name} onChange={(e) => setName(e.target.value)} required className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="roleDesc" className="block text-sm font-medium text-text mb-1.5">Description</label>
+              <input id="roleDesc" value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+          <div>
+            <span className="block text-sm font-medium text-text mb-2">Permissions</span>
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+              {Object.keys(byResource).sort().map((res) => {
+                const ids = byResource[res].map((p) => p.id);
+                const allOn = ids.every((id) => picked.has(id));
+                return (
+                  <div key={res} className="border border-border rounded-lg p-3">
+                    <label className="flex items-center gap-2 font-medium text-sm text-text mb-2 capitalize">
+                      <input type="checkbox" checked={allOn} onChange={() => toggleResource(res)} />
+                      {res}
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pl-6">
+                      {byResource[res].map((p) => (
+                        <label key={p.id} className="flex items-center gap-2 text-sm text-text-secondary">
+                          <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
+                          {p.action}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{busy ? 'Saving...' : 'Save role'}</button>
+            <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-text-secondary">Roles control what each user can do. Assign a role when inviting a user.</p>
+        <button onClick={startNew} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ New role</button>
+      </div>
+      {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      <div className="space-y-3">
+        {roles.map((r) => (
+          <div key={r.id} className="bg-surface border border-border rounded-xl p-4 flex items-start justify-between gap-4">
+            <div>
+              <div className="font-medium text-text">{r.name}</div>
+              {r.description && <div className="text-sm text-text-secondary mt-0.5">{r.description}</div>}
+              <div className="text-xs text-text-muted mt-1">{r.permissions.length} permission{r.permissions.length !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="flex gap-3 flex-shrink-0">
+              <button onClick={() => startEdit(r)} className="text-xs text-primary hover:underline">Edit</button>
+              {r.name !== 'Admin' && <button onClick={() => remove(r)} className="text-xs text-danger hover:underline">Delete</button>}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
