@@ -37,6 +37,7 @@ const STATUSES = [
 export default function InvoicesPage() {
   const { hasPermission } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -62,11 +63,12 @@ export default function InvoicesPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
+    setLoadError(false);
     api.get<InvoicesResponse>(`/invoices?${params}`).then((res) => {
       setInvoices(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    });
+    }).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadInvoices(); }, [search, statusFilter, clientFilter, sortBy, sortOrder, page]);
@@ -98,9 +100,15 @@ export default function InvoicesPage() {
         )}
       </div>
 
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load invoices. Please refresh or try again.
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input placeholder="Search invoices..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        <input placeholder="Search invoices..." aria-label="Search invoices" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">

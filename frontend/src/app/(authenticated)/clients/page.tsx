@@ -30,6 +30,7 @@ interface ClientsResponse {
 export default function ClientsPage() {
   const { hasPermission } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -50,11 +51,12 @@ export default function ClientsPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
+    setLoadError(false);
     api.get<ClientsResponse>(`/clients?${params}`).then((res) => {
       setClients(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    });
+    }).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadClients(); }, [search, typeFilter, sortBy, sortOrder, page]);
@@ -144,9 +146,16 @@ export default function ClientsPage() {
         </form>
       )}
 
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load clients. Please refresh or try again.
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
         <input
+          aria-label="Search clients"
           placeholder="Search clients..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}

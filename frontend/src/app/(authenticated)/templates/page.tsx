@@ -23,6 +23,7 @@ type ViewMode = 'table' | 'cards';
 export default function TemplatesPage() {
   const { hasPermission } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -38,7 +39,8 @@ export default function TemplatesPage() {
     if (statusFilter) params.set('isActive', statusFilter);
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
-    api.get<Template[]>(`/templates?${params}`).then(setTemplates);
+    setLoadError(false);
+    api.get<Template[]>(`/templates?${params}`).then(setTemplates).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadTemplates(); }, [search, statusFilter, sortBy, sortOrder]);
@@ -127,9 +129,15 @@ export default function TemplatesPage() {
         </form>
       )}
 
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load templates. Please refresh or try again.
+        </div>
+      )}
+
       {/* Filters + view toggle */}
       <div className="flex gap-3 mb-4 items-center flex-wrap">
-        <input placeholder="Search templates..." value={search} onChange={(e) => setSearch(e.target.value)}
+        <input placeholder="Search templates..." aria-label="Search templates" value={search} onChange={(e) => setSearch(e.target.value)}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">

@@ -49,6 +49,7 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [loadError, setLoadError] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -63,11 +64,12 @@ export default function JobsPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
+    setLoadError(false);
     api.get<JobsResponse>(`/jobs?${params}`).then((res) => {
       setJobs(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    });
+    }).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadJobs(); }, [search, statusFilter, sortBy, sortOrder, page, searchParams]);
@@ -105,9 +107,15 @@ export default function JobsPage() {
         )}
       </div>
 
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load jobs. Please refresh or try again.
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input placeholder="Search jobs..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        <input placeholder="Search jobs..." aria-label="Search jobs" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">

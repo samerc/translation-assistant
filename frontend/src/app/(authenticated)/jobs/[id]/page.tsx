@@ -2,7 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
@@ -187,10 +187,12 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
     paymentCurrency: job.paymentCurrency || '', paymentAmount: job.paymentAmount ? String(job.paymentAmount) : '',
   });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
     const body: Record<string, unknown> = {
       title: form.title, description: form.description || null, notes: form.notes || null,
       isFreeOfCharge: form.isFreeOfCharge, deadline: form.deadline || null,
@@ -200,10 +202,16 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
     if (form.paymentCurrency) body.paymentCurrency = form.paymentCurrency;
     if (form.paymentAmount) body.paymentAmount = parseFloat(form.paymentAmount);
 
-    await api.patch(`/jobs/${job.id}`, body);
-    setSaving(false);
-    setEditing(false);
-    onUpdate();
+    try {
+      await api.patch(`/jobs/${job.id}`, body);
+      setEditing(false);
+      onUpdate();
+    } catch (err) {
+      const raw = err instanceof ApiError ? err.message : 'Failed to save. Please try again.';
+      setSaveError(Array.isArray(raw) ? raw.join(' ') : String(raw));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const effectivePrice = job.finalPrice ?? job.calculatedTotal;
@@ -226,6 +234,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
               <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" /></div>
+            {saveError && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{saveError}</div>}
             <div className="flex gap-2 pt-2">
               <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
               <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>

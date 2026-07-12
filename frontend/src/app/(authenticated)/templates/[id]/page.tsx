@@ -224,16 +224,22 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   const handleBulkGroup = async () => {
     if (selected.size === 0) return;
     setSaving(true);
-    for (const id of selected) {
-      await api.patch(`/templates/${template.id}/fields/${id}`, {
-        groupKey: bulkGroup || null,
-      });
+    try {
+      for (const id of selected) {
+        await api.patch(`/templates/${template.id}/fields/${id}`, {
+          groupKey: bulkGroup || null,
+        });
+      }
+      setSelected(new Set());
+      setBulkGroup('');
+      setShowBulkGroup(false);
+    } catch (err) {
+      logger.error('Failed to group selected fields', err, 'templates');
+      alert('Failed to update some fields. Please try again.');
+    } finally {
+      setSaving(false);
+      onUpdate();
     }
-    setSelected(new Set());
-    setBulkGroup('');
-    setShowBulkGroup(false);
-    setSaving(false);
-    onUpdate();
   };
 
   // ── Warn about missing labels ──
