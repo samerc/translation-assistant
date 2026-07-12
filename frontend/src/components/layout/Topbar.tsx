@@ -172,6 +172,7 @@ export default function Topbar() {
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
         <input
           type="text"
+          aria-label="Search clients, jobs, templates and invoices"
           placeholder="Search clients, jobs, templates..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}

@@ -3,6 +3,10 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
+import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 
 interface Template {
   id: string;
@@ -19,7 +23,10 @@ interface Template {
 type ViewMode = 'table' | 'cards';
 
 export default function TemplatesPage() {
+  const { hasPermission } = useAuth();
+  const { baseCurrency } = useSettings();
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -35,7 +42,8 @@ export default function TemplatesPage() {
     if (statusFilter) params.set('isActive', statusFilter);
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
-    api.get<Template[]>(`/templates?${params}`).then(setTemplates);
+    setLoadError(false);
+    api.get<Template[]>(`/templates?${params}`).then(setTemplates).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadTemplates(); }, [search, statusFilter, sortBy, sortOrder]);
@@ -72,12 +80,14 @@ export default function TemplatesPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Templates</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-        >
-          + New Template
-        </button>
+        {hasPermission('templates:create') && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            + New Template
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -122,9 +132,15 @@ export default function TemplatesPage() {
         </form>
       )}
 
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load templates. Please refresh or try again.
+        </div>
+      )}
+
       {/* Filters + view toggle */}
       <div className="flex gap-3 mb-4 items-center flex-wrap">
-        <input placeholder="Search templates..." value={search} onChange={(e) => setSearch(e.target.value)}
+        <input placeholder="Search templates..." aria-label="Search templates" value={search} onChange={(e) => setSearch(e.target.value)}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
@@ -182,9 +198,9 @@ export default function TemplatesPage() {
                   </td>
                   <td className="px-4 py-3 text-text-secondary max-w-xs truncate">{t.description || '—'}</td>
                   <td className="px-4 py-3 text-text-secondary">{t.type === 'simple' ? '—' : t.fields.length}</td>
-                  <td className="px-4 py-3 text-text-secondary">${Number(t.pricePerPage).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatCurrency(t.pricePerPage, baseCurrency)}</td>
                   <td className="px-4 py-3 text-text-secondary">
-                    {t.discountedPricePerPage ? `$${Number(t.discountedPricePerPage).toFixed(2)}` : '—'}
+                    {t.discountedPricePerPage ? formatCurrency(t.discountedPricePerPage, baseCurrency) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -227,9 +243,9 @@ export default function TemplatesPage() {
               <div className="flex justify-between text-xs text-text-muted">
                 <span>{t.type === 'simple' ? 'Simple' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
                 <div className="flex gap-2">
-                  <span>${Number(t.pricePerPage).toFixed(2)} / page</span>
+                  <span>{formatCurrency(t.pricePerPage, baseCurrency)} / page</span>
                   {t.discountedPricePerPage && (
-                    <span className="text-success">(${Number(t.discountedPricePerPage).toFixed(2)})</span>
+                    <span className="text-success">({formatCurrency(t.discountedPricePerPage, baseCurrency)})</span>
                   )}
                 </div>
               </div>
@@ -245,9 +261,9 @@ export default function TemplatesPage() {
 
 function TemplatTypeBadge({ type }: { type: string }) {
   const config: Record<string, { bg: string; label: string }> = {
-    designer: { bg: 'bg-primary-light text-primary', label: 'Designer' },
-    word: { bg: 'bg-blue-100 text-blue-700', label: 'Word' },
-    simple: { bg: 'bg-orange-100 text-orange-700', label: 'Simple' },
+    designer: { bg: TEMPLATE_TYPE_BADGE.designer, label: 'Designer' },
+    word: { bg: TEMPLATE_TYPE_BADGE.word, label: 'Word' },
+    simple: { bg: TEMPLATE_TYPE_BADGE.simple, label: 'Simple' },
   };
   const c = config[type] || config.designer;
   return <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.bg}`}>{c.label}</span>;

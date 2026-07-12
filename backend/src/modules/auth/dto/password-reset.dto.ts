@@ -1,5 +1,5 @@
-import { IsEmail, IsString, MinLength, MaxLength } from 'class-validator';
-import { IsNotCommonPassword } from '../../../common/validators/is-not-common-password.js';
+import { IsEmail, IsString, MaxLength } from 'class-validator';
+import { IsStrongPassword } from '../../../common/validators/is-strong-password.js';
 
 export class ForgotPasswordDto {
   @IsEmail()
@@ -11,10 +11,7 @@ export class ResetPasswordDto {
   @MaxLength(128)
   token: string;
 
-  @IsString()
-  @MinLength(8)
-  @MaxLength(100)
-  @IsNotCommonPassword()
+  @IsStrongPassword()
   newPassword: string;
 }
 

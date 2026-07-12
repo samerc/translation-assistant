@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, FormEvent } from 'react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useTheme, type Palette } from '@/lib/theme-context';
 
 interface AppSettings {
   id: string;
@@ -30,9 +31,11 @@ interface LabelOption {
   sortOrder: number;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'users' | 'roles';
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role?.name === 'Admin';
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
   const tabs: { id: Tab; label: string }[] = [
@@ -42,6 +45,13 @@ export default function SettingsPage() {
     { id: 'uploads', label: 'File Uploads' },
     { id: 'appearance', label: 'Appearance' },
     { id: 'security', label: 'Security' },
+    ...(isAdmin
+      ? [
+          { id: 'users' as Tab, label: 'Users' },
+          { id: 'roles' as Tab, label: 'Roles' },
+          { id: 'email' as Tab, label: 'Email' },
+        ]
+      : []),
   ];
 
   return (
@@ -71,6 +81,9 @@ export default function SettingsPage() {
       {activeTab === 'uploads' && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
       {activeTab === 'security' && <SecuritySettings />}
+      {activeTab === 'users' && isAdmin && <UsersSettings />}
+      {activeTab === 'roles' && isAdmin && <RolesSettings />}
+      {activeTab === 'email' && isAdmin && <EmailSettings />}
     </div>
   );
 }
@@ -259,8 +272,8 @@ function LanguagesSettings() {
       )}
 
       {/* Languages table */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
           <thead>
             <tr className="bg-bg border-b border-border">
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Code</th>
@@ -324,6 +337,8 @@ function LabelsSettings() {
   const [labels, setLabels] = useState<LabelOption[]>([]);
   const [adding, setAdding] = useState<string | null>(null);
   const [newValue, setNewValue] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   const loadLabels = () => {
     Promise.all(
@@ -347,6 +362,13 @@ function LabelsSettings() {
 
   const handleDelete = async (id: string) => {
     await api.delete(`/settings/labels/${id}`);
+    loadLabels();
+  };
+
+  const handleEditSave = async (id: string) => {
+    if (!editValue.trim()) return;
+    await api.patch(`/settings/labels/${id}`, { value: editValue.trim() });
+    setEditingId(null);
     loadLabels();
   };
 
@@ -380,14 +402,28 @@ function LabelsSettings() {
 
               <div className="space-y-2">
                 {catLabels.map((label) => (
-                  <div key={label.id} className="flex justify-between items-center py-2 px-3 bg-bg rounded-lg group">
-                    <span className="text-sm text-text">{label.value}</span>
-                    <button
-                      onClick={() => handleDelete(label.id)}
-                      className="text-xs text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      Remove
-                    </button>
+                  <div key={label.id} className="flex justify-between items-center gap-2 py-2 px-3 bg-bg rounded-lg group">
+                    {editingId === label.id ? (
+                      <>
+                        <input
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEditSave(label.id); } if (e.key === 'Escape') setEditingId(null); }}
+                          className="flex-1 px-2 py-1 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                        <button onClick={() => handleEditSave(label.id)} className="text-xs text-primary font-medium">Save</button>
+                        <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary">Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm text-text">{label.value}</span>
+                        <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => { setEditingId(label.id); setEditValue(label.value); }} className="text-xs text-primary">Edit</button>
+                          <button onClick={() => handleDelete(label.id)} className="text-xs text-danger">Remove</button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -607,10 +643,9 @@ function InputField({
 // ── Appearance Settings ──
 
 function AppearanceSettings() {
-  // Import theme context inline to avoid adding to file-level imports
-  const { palette, setPalette, darkMode, toggleDarkMode } = require('@/lib/theme-context').useTheme();
+  const { palette, setPalette, darkMode, toggleDarkMode } = useTheme();
 
-  const palettes: { id: string; name: string; color: string }[] = [
+  const palettes: { id: Palette; name: string; color: string }[] = [
     { id: 'indigo', name: 'Indigo Minimal', color: '#4F46E5' },
     { id: 'ocean', name: 'Ocean Blue', color: '#1E40AF' },
     { id: 'teal', name: 'Teal Focus', color: '#0D9488' },
@@ -775,6 +810,423 @@ function SecuritySettings() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Users & Invites (admin) ──
+
+interface AdminUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isActive: boolean;
+  role?: { id: string; name: string };
+}
+interface RoleOption { id: string; name: string }
+
+function UsersSettings() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRoleId, setInviteRoleId] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ link: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    setLoadError(false);
+    api.get<AdminUser[]>('/users').then(setUsers).catch(() => setLoadError(true));
+    api.get<RoleOption[]>('/roles').then(setRoles).catch(() => {});
+  };
+  useEffect(load, []);
+
+  const invite = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setInviteResult(null);
+    setInviteBusy(true);
+    try {
+      const res = await api.post<{ token: string }>('/auth/invite', {
+        email: inviteEmail,
+        ...(inviteRoleId ? { roleId: inviteRoleId } : {}),
+      });
+      const link = `${window.location.origin}/register?token=${res.token}`;
+      setInviteResult({ link });
+      setInviteEmail('');
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to create invite.');
+    } finally {
+      setInviteBusy(false);
+    }
+  };
+
+  const toggleActive = async (u: AdminUser) => {
+    try {
+      await api.patch(`/users/${u.id}/${u.isActive ? 'deactivate' : 'activate'}`);
+      load();
+    } catch {
+      setError('Failed to update user.');
+    }
+  };
+
+  const remove = async (u: AdminUser) => {
+    if (!confirm(`Delete ${u.email}? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/users/${u.id}`);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to delete user.');
+    }
+  };
+
+  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+
+  return (
+    <div className="max-w-4xl space-y-6">
+      {/* Invite */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-1">Invite a user</h3>
+        <p className="text-sm text-text-secondary mb-4">Generates an invite link (also emailed if SMTP is configured).</p>
+        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        <form onSubmit={invite} className="flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div className="flex-1">
+            <label htmlFor="inviteEmail" className="block text-sm font-medium text-text mb-1.5">Email</label>
+            <input id="inviteEmail" type="email" required value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className={inputClass} />
+          </div>
+          <div className="sm:w-48">
+            <label htmlFor="inviteRole" className="block text-sm font-medium text-text mb-1.5">Role</label>
+            <select id="inviteRole" value={inviteRoleId} onChange={(e) => setInviteRoleId(e.target.value)} className={inputClass}>
+              <option value="">Default</option>
+              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <button type="submit" disabled={inviteBusy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            {inviteBusy ? 'Creating...' : 'Create invite'}
+          </button>
+        </form>
+        {inviteResult && (
+          <div className="mt-4 p-3 bg-success-light text-success rounded-lg text-sm break-all">
+            Invite link: <a href={inviteResult.link} className="underline font-medium">{inviteResult.link}</a>
+          </div>
+        )}
+      </div>
+
+      {/* User list */}
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-4">Users</h3>
+        {loadError && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">Couldn&apos;t load users.</div>}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[520px]">
+            <thead>
+              <tr className="border-b border-border text-left text-text-secondary">
+                <th className="py-2 font-semibold">Name</th>
+                <th className="py-2 font-semibold">Email</th>
+                <th className="py-2 font-semibold">Role</th>
+                <th className="py-2 font-semibold">Status</th>
+                <th className="py-2 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-b border-border last:border-0">
+                  <td className="py-2 text-text">{u.firstName} {u.lastName}</td>
+                  <td className="py-2 text-text-secondary">{u.email}</td>
+                  <td className="py-2 text-text-secondary">{u.role?.name || '—'}</td>
+                  <td className="py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.isActive ? 'bg-success-light text-success' : 'bg-neutral-light text-neutral'}`}>
+                      {u.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="py-2 text-right whitespace-nowrap">
+                    <button onClick={() => toggleActive(u)} className="text-xs text-primary hover:underline mr-3">
+                      {u.isActive ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button onClick={() => remove(u)} className="text-xs text-danger hover:underline">Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && !loadError && (
+                <tr><td colSpan={5} className="py-6 text-center text-text-muted">No users.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Email / SMTP (admin) ──
+
+function EmailSettings() {
+  const [form, setForm] = useState({
+    smtpHost: '', smtpPort: '', smtpSecure: false, smtpUser: '', smtpPass: '', smtpFrom: '', appBaseUrl: '',
+  });
+  const [passSet, setPassSet] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [testEmail, setTestEmail] = useState('');
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    api.get<Record<string, unknown>>('/settings').then((s) => {
+      setForm({
+        smtpHost: (s.smtpHost as string) || '',
+        smtpPort: s.smtpPort != null ? String(s.smtpPort) : '',
+        smtpSecure: Boolean(s.smtpSecure),
+        smtpUser: (s.smtpUser as string) || '',
+        smtpPass: '',
+        smtpFrom: (s.smtpFrom as string) || '',
+        appBaseUrl: (s.appBaseUrl as string) || '',
+      });
+      setPassSet(Boolean(s.smtpPassSet));
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, []);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      const body: Record<string, unknown> = {
+        smtpHost: form.smtpHost || null,
+        smtpPort: form.smtpPort ? parseInt(form.smtpPort, 10) : null,
+        smtpSecure: form.smtpSecure,
+        smtpUser: form.smtpUser || null,
+        smtpFrom: form.smtpFrom || null,
+        appBaseUrl: form.appBaseUrl || null,
+      };
+      if (form.smtpPass) body.smtpPass = form.smtpPass; // only change when typed
+      await api.patch('/settings', body);
+      if (form.smtpPass) setPassSet(true);
+      setForm((f) => ({ ...f, smtpPass: '' }));
+      setMessage({ type: 'ok', text: 'Email settings saved.' });
+    } catch (err) {
+      setMessage({ type: 'err', text: err instanceof ApiError ? String(err.message) : 'Failed to save.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    setMessage(null);
+    try {
+      await api.post('/mail/test', { to: testEmail });
+      setMessage({ type: 'ok', text: `Test email sent to ${testEmail}.` });
+    } catch (err) {
+      setMessage({ type: 'err', text: err instanceof ApiError ? String(err.message) : 'Failed to send test email.' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  if (!loaded) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-1">SMTP / Email</h3>
+        <p className="text-sm text-text-secondary mb-4">Used to send invite and password-reset links. For local testing, point this at smtp4dev (host <code>localhost</code>, port <code>25</code>).</p>
+        {message && (
+          <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'ok' ? 'bg-success-light text-success' : 'bg-danger-light text-danger'}`}>{message.text}</div>
+        )}
+        <form onSubmit={save} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="sm:col-span-2">
+              <label htmlFor="smtpHost" className="block text-sm font-medium text-text mb-1.5">Host</label>
+              <input id="smtpHost" value={form.smtpHost} onChange={(e) => setForm({ ...form, smtpHost: e.target.value })} placeholder="localhost" className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="smtpPort" className="block text-sm font-medium text-text mb-1.5">Port</label>
+              <input id="smtpPort" type="number" value={form.smtpPort} onChange={(e) => setForm({ ...form, smtpPort: e.target.value })} placeholder="25" className={inputClass} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-text">
+            <input type="checkbox" checked={form.smtpSecure} onChange={(e) => setForm({ ...form, smtpSecure: e.target.checked })} />
+            Use TLS/SSL (secure)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="smtpUser" className="block text-sm font-medium text-text mb-1.5">Username</label>
+              <input id="smtpUser" value={form.smtpUser} onChange={(e) => setForm({ ...form, smtpUser: e.target.value })} autoComplete="off" className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="smtpPass" className="block text-sm font-medium text-text mb-1.5">Password {passSet && <span className="text-xs text-text-muted">(set — leave blank to keep)</span>}</label>
+              <input id="smtpPass" type="password" value={form.smtpPass} onChange={(e) => setForm({ ...form, smtpPass: e.target.value })} autoComplete="new-password" className={inputClass} />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="smtpFrom" className="block text-sm font-medium text-text mb-1.5">From address</label>
+            <input id="smtpFrom" value={form.smtpFrom} onChange={(e) => setForm({ ...form, smtpFrom: e.target.value })} placeholder="Translation Assistant <no-reply@example.com>" className={inputClass} />
+          </div>
+          <div>
+            <label htmlFor="appBaseUrl" className="block text-sm font-medium text-text mb-1.5">App base URL (for links in emails)</label>
+            <input id="appBaseUrl" value={form.appBaseUrl} onChange={(e) => setForm({ ...form, appBaseUrl: e.target.value })} placeholder="https://translate.fancyshark.com" className={inputClass} />
+          </div>
+          <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save email settings'}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-1">Send a test email</h3>
+        <p className="text-sm text-text-secondary mb-4">Verify your SMTP configuration by sending a test message.</p>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div className="flex-1">
+            <label htmlFor="testEmail" className="block text-sm font-medium text-text mb-1.5">Recipient</label>
+            <input id="testEmail" type="email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className={inputClass} />
+          </div>
+          <button onClick={sendTest} disabled={testing || !testEmail} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            {testing ? 'Sending...' : 'Send test'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Roles & Permissions (admin) ──
+
+interface Permission { id: string; resource: string; action: string; description?: string }
+interface Role { id: string; name: string; description?: string; permissions: Permission[] }
+
+function RolesSettings() {
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [editing, setEditing] = useState<Role | 'new' | null>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    api.get<Role[]>('/roles').then(setRoles).catch(() => setError('Couldn’t load roles.'));
+    api.get<Permission[]>('/roles/permissions').then(setPermissions).catch(() => {});
+  };
+  useEffect(load, []);
+
+  const byResource = permissions.reduce<Record<string, Permission[]>>((acc, p) => {
+    (acc[p.resource] = acc[p.resource] || []).push(p);
+    return acc;
+  }, {});
+
+  const startNew = () => { setEditing('new'); setName(''); setDescription(''); setPicked(new Set()); setError(null); };
+  const startEdit = (r: Role) => {
+    setEditing(r); setName(r.name); setDescription(r.description || '');
+    setPicked(new Set(r.permissions.map((p) => p.id))); setError(null);
+  };
+  const toggle = (id: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const toggleResource = (res: string) => setPicked((prev) => {
+    const n = new Set(prev);
+    const ids = byResource[res].map((p) => p.id);
+    const allOn = ids.every((id) => n.has(id));
+    ids.forEach((id) => (allOn ? n.delete(id) : n.add(id)));
+    return n;
+  });
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    const body = { name, description: description || undefined, permissionIds: Array.from(picked) };
+    try {
+      if (editing === 'new') await api.post('/roles', body);
+      else if (editing) await api.patch(`/roles/${editing.id}`, body);
+      setEditing(null);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to save role.');
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (r: Role) => {
+    if (!confirm(`Delete role "${r.name}"?`)) return;
+    try { await api.delete(`/roles/${r.id}`); load(); }
+    catch (err) { setError(err instanceof ApiError ? String(err.message) : 'Failed to delete role.'); }
+  };
+
+  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+
+  if (editing) {
+    return (
+      <div className="max-w-3xl bg-surface border border-border rounded-xl p-6">
+        <h3 className="font-semibold text-text mb-4">{editing === 'new' ? 'New role' : `Edit role: ${editing.name}`}</h3>
+        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        <form onSubmit={save} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="roleName" className="block text-sm font-medium text-text mb-1.5">Name</label>
+              <input id="roleName" value={name} onChange={(e) => setName(e.target.value)} required className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="roleDesc" className="block text-sm font-medium text-text mb-1.5">Description</label>
+              <input id="roleDesc" value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
+            </div>
+          </div>
+          <div>
+            <span className="block text-sm font-medium text-text mb-2">Permissions</span>
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+              {Object.keys(byResource).sort().map((res) => {
+                const ids = byResource[res].map((p) => p.id);
+                const allOn = ids.every((id) => picked.has(id));
+                return (
+                  <div key={res} className="border border-border rounded-lg p-3">
+                    <label className="flex items-center gap-2 font-medium text-sm text-text mb-2 capitalize">
+                      <input type="checkbox" checked={allOn} onChange={() => toggleResource(res)} />
+                      {res}
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pl-6">
+                      {byResource[res].map((p) => (
+                        <label key={p.id} className="flex items-center gap-2 text-sm text-text-secondary">
+                          <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
+                          {p.action}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{busy ? 'Saving...' : 'Save role'}</button>
+            <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl space-y-4">
+      <div className="flex justify-between items-center">
+        <p className="text-sm text-text-secondary">Roles control what each user can do. Assign a role when inviting a user.</p>
+        <button onClick={startNew} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ New role</button>
+      </div>
+      {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      <div className="space-y-3">
+        {roles.map((r) => (
+          <div key={r.id} className="bg-surface border border-border rounded-xl p-4 flex items-start justify-between gap-4">
+            <div>
+              <div className="font-medium text-text">{r.name}</div>
+              {r.description && <div className="text-sm text-text-secondary mt-0.5">{r.description}</div>}
+              <div className="text-xs text-text-muted mt-1">{r.permissions.length} permission{r.permissions.length !== 1 ? 's' : ''}</div>
+            </div>
+            <div className="flex gap-3 flex-shrink-0">
+              <button onClick={() => startEdit(r)} className="text-xs text-primary hover:underline">Edit</button>
+              {r.name !== 'Admin' && <button onClick={() => remove(r)} className="text-xs text-danger hover:underline">Delete</button>}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

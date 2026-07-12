@@ -3,6 +3,8 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface Client { id: string; name: string; type: string; contacts: { id: string; firstName: string; lastName: string }[]; }
 interface Language { id: string; code: string; name: string; isActive: boolean; }
@@ -19,6 +21,7 @@ interface LineItem {
 }
 
 export default function NewJobPage() {
+  const { baseCurrency } = useSettings();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
@@ -256,7 +259,7 @@ export default function NewJobPage() {
                     <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
                       className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                       <option value="">Select...</option>
-                      {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} (${Number(t.pricePerPage).toFixed(2)}/p)</option>)}
+                      {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
                     </select>
                   </div>
 
@@ -298,7 +301,7 @@ export default function NewJobPage() {
 
                   {/* Line total + delete */}
                   <div className="col-span-2 flex items-center justify-between pb-1">
-                    <span className="text-sm font-semibold text-text">${getLineTotal(li).toFixed(2)}</span>
+                    <span className="text-sm font-semibold text-text">{formatCurrency(getLineTotal(li), baseCurrency)}</span>
                     <button type="button" onClick={() => removeLineItem(li.key)} className="text-xs text-danger hover:text-danger/80">Remove</button>
                   </div>
                 </div>
@@ -311,7 +314,7 @@ export default function NewJobPage() {
             <div className="flex justify-end mt-4 pt-4 border-t border-border">
               <div className="text-right">
                 <span className="text-sm text-text-secondary mr-4">Total:</span>
-                <span className="text-lg font-bold text-text">${grandTotal.toFixed(2)}</span>
+                <span className="text-lg font-bold text-text">{formatCurrency(grandTotal, baseCurrency)}</span>
               </div>
             </div>
           )}

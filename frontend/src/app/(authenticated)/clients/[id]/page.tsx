@@ -4,6 +4,9 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { JOB_STATUS_BADGE } from '@/lib/status';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
 interface ClientPhone { id: string; phone: string; label: string | null; isPrimary: boolean; }
@@ -562,19 +565,15 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
 // ── Jobs Tab (placeholder) ──
 
 function JobsTab({ clientId }: { clientId: string }) {
-  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string }; targetLanguage: { code: string }; calculatedTotal: number; createdAt: string }[]>([]);
+  const { baseCurrency } = useSettings();
+  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string } | null; targetLanguage: { code: string } | null; calculatedTotal: number; createdAt: string }[]>([]);
   const router = useRouter();
 
   useEffect(() => {
     api.get<{ data: typeof jobs }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => setJobs(res.data));
   }, [clientId]);
 
-  const statusColor: Record<string, string> = {
-    quote: 'bg-sky-100 text-sky-700', accepted: 'bg-teal-100 text-teal-700',
-    in_progress: 'bg-primary-light text-primary', delivered: 'bg-green-100 text-green-700',
-    invoiced: 'bg-warning-light text-warning', paid: 'bg-emerald-100 text-emerald-800',
-    lost: 'bg-gray-100 text-gray-500', cancelled: 'bg-danger-light text-danger',
-  };
+  const statusColor = JOB_STATUS_BADGE;
 
   return (
     <div className="max-w-3xl">
@@ -600,9 +599,9 @@ function JobsTab({ clientId }: { clientId: string }) {
               {jobs.map((j) => (
                 <tr key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
                   <td className="px-4 py-3 font-medium text-text">{j.title}</td>
-                  <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage.code.toUpperCase()} → {j.targetLanguage.code.toUpperCase()}</td>
+                  <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage?.code?.toUpperCase() ?? '—'} → {j.targetLanguage?.code?.toUpperCase() ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
-                  <td className="px-4 py-3 text-text-secondary">${Number(j.calculatedTotal).toFixed(2)}</td>
+                  <td className="px-4 py-3 text-text-secondary">{formatCurrency(j.calculatedTotal, baseCurrency)}</td>
                   <td className="px-4 py-3 text-text-secondary">{new Date(j.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}

@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { INVOICE_STATUS_BADGE } from '@/lib/status';
 
 interface Invoice {
   id: string;
@@ -25,15 +27,17 @@ interface InvoicesResponse { data: Invoice[]; total: number; page: number; limit
 interface ClientOption { id: string; name: string; }
 
 const STATUSES = [
-  { value: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-600' },
-  { value: 'sent', label: 'Sent', color: 'bg-sky-100 text-sky-700' },
-  { value: 'paid', label: 'Paid', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'overdue', label: 'Overdue', color: 'bg-danger-light text-danger' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-gray-100 text-gray-500' },
+  { value: 'draft', label: 'Draft', color: INVOICE_STATUS_BADGE.draft },
+  { value: 'sent', label: 'Sent', color: INVOICE_STATUS_BADGE.sent },
+  { value: 'paid', label: 'Paid', color: INVOICE_STATUS_BADGE.paid },
+  { value: 'overdue', label: 'Overdue', color: INVOICE_STATUS_BADGE.overdue },
+  { value: 'cancelled', label: 'Cancelled', color: INVOICE_STATUS_BADGE.cancelled },
 ];
 
 export default function InvoicesPage() {
+  const { hasPermission } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -59,11 +63,12 @@ export default function InvoicesPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
+    setLoadError(false);
     api.get<InvoicesResponse>(`/invoices?${params}`).then((res) => {
       setInvoices(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    });
+    }).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadInvoices(); }, [search, statusFilter, clientFilter, sortBy, sortOrder, page]);
@@ -87,15 +92,23 @@ export default function InvoicesPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Invoices</h1>
-        <button onClick={() => router.push('/invoices/new')}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-          + New Invoice
-        </button>
+        {hasPermission('invoices:create') && (
+          <button onClick={() => router.push('/invoices/new')}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+            + New Invoice
+          </button>
+        )}
       </div>
+
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load invoices. Please refresh or try again.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input placeholder="Search invoices..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        <input placeholder="Search invoices..." aria-label="Search invoices" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">

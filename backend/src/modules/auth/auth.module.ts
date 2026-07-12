@@ -11,11 +11,13 @@ import { User } from '../users/entities/user.entity.js';
 import { InviteToken } from './entities/invite-token.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { Session } from './entities/session.entity.js';
+import { MailModule } from '../mail/mail.module.js';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, InviteToken, PasswordResetToken, Session]),
     PassportModule,
+    MailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

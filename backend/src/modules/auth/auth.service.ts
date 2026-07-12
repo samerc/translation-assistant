@@ -19,6 +19,7 @@ import { Session } from './entities/session.entity.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { JwtPayload } from './strategies/jwt.strategy.js';
+import { MailService } from '../mail/mail.service.js';
 
 interface LoginAttempt {
   failures: number;
@@ -47,6 +48,7 @@ export class AuthService {
     private readonly sessionRepository: Repository<Session>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {
     setInterval(() => this.cleanupAttempts(), 10 * 60_000);
   }
@@ -144,19 +146,15 @@ export class AuthService {
 
     if (!user) throw new ForbiddenException('Access denied');
 
-    // Find the active session for this refresh token
-    const sessions = await this.sessionRepository.find({
-      where: { userId: user.id, revoked: false, expiresAt: MoreThan(new Date()) },
+    // Find the active session for this refresh token (SHA-256 is deterministic → direct lookup)
+    const matchedSession = await this.sessionRepository.findOne({
+      where: {
+        userId: user.id,
+        refreshTokenHash: this.hashRefreshToken(refreshToken),
+        revoked: false,
+        expiresAt: MoreThan(new Date()),
+      },
     });
-
-    let matchedSession: Session | null = null;
-    for (const session of sessions) {
-      const tokenMatches = await bcrypt.compare(refreshToken, session.refreshTokenHash);
-      if (tokenMatches) {
-        matchedSession = session;
-        break;
-      }
-    }
 
     if (!matchedSession) {
       throw new ForbiddenException('Access denied');
@@ -178,8 +176,8 @@ export class AuthService {
 
     // Rotate: generate new tokens, update session
     const newAccessToken = await this.generateAccessToken(user);
-    const newRefreshToken = randomBytes(48).toString('base64url');
-    const newHash = await bcrypt.hash(newRefreshToken, 12);
+    const newRefreshToken = await this.generateRefreshToken(user);
+    const newHash = this.hashRefreshToken(newRefreshToken);
 
     matchedSession.refreshTokenHash = newHash;
     matchedSession.lastUsedAt = new Date();
@@ -192,18 +190,11 @@ export class AuthService {
 
   async logout(userId: string, refreshToken?: string) {
     if (refreshToken) {
-      // Revoke the specific session
-      const sessions = await this.sessionRepository.find({
-        where: { userId, revoked: false },
-      });
-      for (const session of sessions) {
-        const matches = await bcrypt.compare(refreshToken, session.refreshTokenHash);
-        if (matches) {
-          session.revoked = true;
-          await this.sessionRepository.save(session);
-          break;
-        }
-      }
+      // Revoke the specific session for this token
+      await this.sessionRepository.update(
+        { userId, refreshTokenHash: this.hashRefreshToken(refreshToken), revoked: false },
+        { revoked: true },
+      );
     }
     // Also clear legacy refreshToken on user entity for backward compat
     await this.userRepository.update(userId, { refreshToken: '' });
@@ -265,6 +256,11 @@ export class AuthService {
     await this.inviteTokenRepository.save(
       this.inviteTokenRepository.create({ token, email, roleId, expiresAt }),
     );
+    // Email the invite link (best-effort — the token is also returned so an admin can
+    // copy the link manually if SMTP isn't configured yet).
+    this.mailService.sendInvite(email, token).catch((err) => {
+      this.logger.error(`[INVITE_EMAIL_FAILED] email=${email}: ${err?.message}`);
+    });
     return { token, expiresAt };
   }
 
@@ -285,10 +281,13 @@ export class AuthService {
     );
     this.logger.log(`[PASSWORD_RESET_REQUESTED] userId=${user.id}`);
 
+    // Deliver the reset link by email (best-effort — never block/leak on SMTP failure).
+    this.mailService.sendPasswordReset(user.email, token).catch((err) => {
+      this.logger.error(`[PASSWORD_RESET_EMAIL_FAILED] userId=${user.id}: ${err?.message}`);
+    });
+
     // SECURITY: never return the raw reset token in the response outside development.
-    // In production the token must be delivered out-of-band (email). Exposing it here
-    // would let anyone reset any account by knowing only the email address.
-    // TODO: wire an email service and drop the dev fallback entirely.
+    // In production the token is delivered only via email (above).
     if (process.env.NODE_ENV !== 'production') {
       return { message, token, expiresAt } as any;
     }
@@ -347,8 +346,8 @@ export class AuthService {
   // ── Session helpers ──
 
   private async createSession(user: User, ip: string, userAgent: string) {
-    const refreshToken = randomBytes(48).toString('base64url');
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 12);
+    const refreshToken = await this.generateRefreshToken(user);
+    const refreshTokenHash = this.hashRefreshToken(refreshToken);
     const uaHash = this.hashUserAgent(userAgent);
 
     const expiresAt = new Date();
@@ -373,10 +372,23 @@ export class AuthService {
     return createHash('sha256').update(ua || '').digest('hex').slice(0, 64);
   }
 
+  // Refresh tokens are high-entropy signed JWTs — store a fast SHA-256 digest
+  // (not bcrypt, which truncates inputs at 72 bytes and would collide on JWTs).
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
   private async generateAccessToken(user: User): Promise<string> {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const payload: JwtPayload = { sub: user.id, email: user.email, type: 'access' };
     return this.jwtService.signAsync(payload, {
       expiresIn: this.configService.get<number>('jwt.accessTokenTtl'),
+    });
+  }
+
+  private async generateRefreshToken(user: User): Promise<string> {
+    const payload: JwtPayload = { sub: user.id, type: 'refresh' };
+    return this.jwtService.signAsync(payload, {
+      expiresIn: `${REFRESH_TOKEN_DAYS}d`,
     });
   }
 

@@ -24,7 +24,7 @@ export default function DocumentFillPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string } | null>(null);
+  const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string; page: number; entry?: number } | null>(null);
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
   const [dirty, setDirty] = useState(false);
 
@@ -93,7 +93,8 @@ export default function DocumentFillPage() {
     values[getValueKey(fieldId, page, entry)] || '';
 
   const setValue = (fieldId: string, page: number, value: string, entry?: number) => {
-    setValues({ ...values, [getValueKey(fieldId, page, entry)]: value });
+    const key = getValueKey(fieldId, page, entry);
+    setValues((prev) => ({ ...prev, [key]: value }));
     setDirty(true);
   };
 
@@ -189,7 +190,7 @@ export default function DocumentFillPage() {
           </div>
           <button
             type="button"
-            onClick={() => setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id })}
+            onClick={() => setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id, page: pageNum, entry: entryIdx })}
             className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium hover:bg-primary/20"
           >
             GT
@@ -200,6 +201,7 @@ export default function DocumentFillPage() {
             value={val}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             rows={3}
+            dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
             className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
           />
         ) : field.fieldType === 'date' ? (
@@ -221,6 +223,7 @@ export default function DocumentFillPage() {
             type="text"
             value={val}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
+            dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
             className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         )}
@@ -308,11 +311,8 @@ export default function DocumentFillPage() {
           sourceLanguage={sourceLang}
           targetLanguage={targetLang}
           onCopy={(text) => {
-            // Find the field and set its value
-            const field = fields.find((f) => f.id === gtOpen.fieldId);
-            if (field) {
-              setValue(gtOpen.fieldId, 1, text);
-            }
+            // Write back to the exact field/page/entry the GT popup was opened from.
+            setValue(gtOpen.fieldId, gtOpen.page, text, gtOpen.entry);
             setGtOpen(null);
           }}
           onClose={() => setGtOpen(null)}
@@ -325,8 +325,8 @@ export default function DocumentFillPage() {
 // ── Google Translate Popup ──
 
 function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
-  sourceLanguage: { code: string; name: string };
-  targetLanguage: { code: string; name: string } | null;
+  sourceLanguage: { code: string; name: string; direction?: string };
+  targetLanguage: { code: string; name: string; direction?: string } | null;
   onCopy: (text: string) => void;
   onClose: () => void;
 }) {
@@ -351,7 +351,7 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
       <div className="bg-surface border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-5">
           <h3 className="font-semibold text-text">Google Translate Helper</h3>
-          <button onClick={onClose} className="text-text-muted hover:text-text text-lg">&times;</button>
+          <button onClick={onClose} aria-label="Close" className="text-text-muted hover:text-text text-lg">&times;</button>
         </div>
 
         <div className="mb-4">
@@ -365,7 +365,7 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
             autoFocus
             placeholder={`Type in ${sourceLanguage.name}...`}
             className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-            dir={sourceLanguage.code === 'ar' || sourceLanguage.code === 'he' ? 'rtl' : 'ltr'}
+            dir={sourceLanguage.direction === 'rtl' ? 'rtl' : 'ltr'}
           />
         </div>
 

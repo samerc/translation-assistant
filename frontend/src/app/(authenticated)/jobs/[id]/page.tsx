@@ -2,8 +2,12 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { useAuth } from '@/lib/auth-context';
+import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -42,13 +46,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 };
 
 const statusColor = (s: string) => {
-  const map: Record<string, string> = {
-    quote: 'bg-sky-100 text-sky-700', accepted: 'bg-teal-100 text-teal-700',
-    in_progress: 'bg-primary-light text-primary', delivered: 'bg-green-100 text-green-700',
-    invoiced: 'bg-warning-light text-warning', paid: 'bg-emerald-100 text-emerald-800',
-    lost: 'bg-gray-100 text-gray-500', cancelled: 'bg-danger-light text-danger',
-  };
-  return map[s] || 'bg-bg text-text-secondary';
+  return badgeClass(JOB_STATUS_BADGE, s);
 };
 
 type Tab = 'details' | 'documents' | 'source-files' | 'translated-files';
@@ -181,6 +179,7 @@ export default function JobDetailPage() {
 // ── Details Tab ──
 
 function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUpdate: () => void }) {
+  const { baseCurrency } = useSettings();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     title: job.title, description: job.description || '', notes: job.notes || '',
@@ -189,10 +188,12 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
     paymentCurrency: job.paymentCurrency || '', paymentAmount: job.paymentAmount ? String(job.paymentAmount) : '',
   });
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
     const body: Record<string, unknown> = {
       title: form.title, description: form.description || null, notes: form.notes || null,
       isFreeOfCharge: form.isFreeOfCharge, deadline: form.deadline || null,
@@ -202,15 +203,22 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
     if (form.paymentCurrency) body.paymentCurrency = form.paymentCurrency;
     if (form.paymentAmount) body.paymentAmount = parseFloat(form.paymentAmount);
 
-    await api.patch(`/jobs/${job.id}`, body);
-    setSaving(false);
-    setEditing(false);
-    onUpdate();
+    try {
+      await api.patch(`/jobs/${job.id}`, body);
+      setEditing(false);
+      onUpdate();
+    } catch (err) {
+      const raw = err instanceof ApiError ? err.message : 'Failed to save. Please try again.';
+      setSaveError(Array.isArray(raw) ? raw.join(' ') : String(raw));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const effectivePrice = job.finalPrice ?? job.calculatedTotal;
 
   return (
+    <div className="space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Job Info */}
       <div className="bg-surface border border-border rounded-xl p-6">
@@ -228,6 +236,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
               <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" /></div>
+            {saveError && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{saveError}</div>}
             <div className="flex gap-2 pt-2">
               <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
               <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
@@ -272,12 +281,12 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
                         <td className="px-3 py-2 text-text">{li.description}</td>
                         <td className="px-3 py-2 text-text-secondary text-center">{li.pageCount}</td>
                         <td className="px-3 py-2 text-text-secondary text-right">
-                          ${Number(li.useDiscountedPrice && li.discountedPricePerPage ? li.discountedPricePerPage : li.pricePerPage).toFixed(2)}
+                          {formatCurrency(li.useDiscountedPrice && li.discountedPricePerPage ? li.discountedPricePerPage : li.pricePerPage, baseCurrency)}
                           {li.useDiscountedPrice && li.discountedPricePerPage && (
                             <span className="text-xs text-success ml-1">(disc.)</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-text font-medium text-right">${Number(li.lineTotal).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-text font-medium text-right">{formatCurrency(li.lineTotal, baseCurrency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -287,18 +296,102 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
               <p className="text-sm text-text-muted mb-4">No line items.</p>
             )}
             <div className="space-y-2">
-              <InfoRow label="Calculated Total" value={`$${Number(job.calculatedTotal).toFixed(2)}`} />
-              {job.finalPrice && <InfoRow label="Final Price (override)" value={`$${Number(job.finalPrice).toFixed(2)}`} />}
+              <InfoRow label="Calculated Total" value={formatCurrency(job.calculatedTotal, baseCurrency)} />
+              {job.finalPrice && <InfoRow label="Final Price (override)" value={formatCurrency(job.finalPrice, baseCurrency)} />}
               <div className="border-t border-border pt-2">
-                <InfoRow label="Effective Total" value={`$${Number(effectivePrice).toFixed(2)}`} />
+                <InfoRow label="Effective Total" value={formatCurrency(effectivePrice, baseCurrency)} />
               </div>
               {job.paymentCurrency && (
-                <InfoRow label="Paid in" value={`${Number(job.paymentAmount).toFixed(2)} ${job.paymentCurrency}`} />
+                <InfoRow label="Paid in" value={job.paymentAmount != null ? formatCurrency(job.paymentAmount, job.paymentCurrency) : '—'} />
               )}
             </div>
           </>
         )}
       </div>
+    </div>
+    <AssignedUsersCard job={job} onUpdate={onUpdate} />
+    </div>
+  );
+}
+
+// ── Assigned Users ──
+
+function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role?.name === 'Admin';
+  const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string }[]>([]);
+  const [pickUser, setPickUser] = useState('');
+  const [pickLevel, setPickLevel] = useState<'view' | 'edit'>('edit');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAdmin) api.get<{ id: string; firstName: string; lastName: string; email: string }[]>('/users').then(setAllUsers).catch(() => {});
+  }, [isAdmin]);
+
+  const assigned = job.assignedUsers || [];
+  const assignedIds = new Set(assigned.map((a) => a.userId));
+  const available = allUsers.filter((u) => !assignedIds.has(u.id));
+
+  const add = async () => {
+    if (!pickUser) return;
+    setBusy(true); setError(null);
+    try {
+      await api.post(`/jobs/${job.id}/users`, { userId: pickUser, permissionLevel: pickLevel });
+      setPickUser('');
+      onUpdate();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to assign user.');
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (userId: string) => {
+    setBusy(true); setError(null);
+    try {
+      await api.delete(`/jobs/${job.id}/users/${userId}`);
+      onUpdate();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to remove user.');
+    } finally { setBusy(false); }
+  };
+
+  const inputClass = 'px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <h3 className="font-semibold text-text mb-4">Assigned Users</h3>
+      {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {assigned.length === 0 ? (
+        <p className="text-sm text-text-muted mb-4">No users assigned{isAdmin ? ' — add someone below.' : '.'}</p>
+      ) : (
+        <ul className="mb-4 divide-y divide-border">
+          {assigned.map((a) => (
+            <li key={a.id} className="flex items-center justify-between py-2">
+              <div>
+                <span className="text-sm text-text">{a.user.firstName} {a.user.lastName}</span>
+                <span className="text-xs text-text-muted ml-2">{a.user.email}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-neutral-light text-neutral ml-2">{a.permissionLevel}</span>
+              </div>
+              {isAdmin && (
+                <button onClick={() => remove(a.userId)} disabled={busy} className="text-xs text-danger hover:underline">Remove</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isAdmin && (
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <select value={pickUser} onChange={(e) => setPickUser(e.target.value)} className={`${inputClass} flex-1`} aria-label="Select user to assign">
+            <option value="">Select a user…</option>
+            {available.map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>)}
+          </select>
+          <select value={pickLevel} onChange={(e) => setPickLevel(e.target.value as 'view' | 'edit')} className={inputClass} aria-label="Permission level">
+            <option value="edit">Edit</option>
+            <option value="view">View</option>
+          </select>
+          <button onClick={add} disabled={busy || !pickUser} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">Assign</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -314,11 +407,23 @@ interface DocSummary {
   updatedAt: string;
 }
 
+interface CloneResult {
+  id: string;
+  status: string;
+  updatedAt: string;
+  template: { name: string };
+  job: { jobNumber: string; title: string; client?: { name: string } };
+}
+
 function DocumentsTab({ job }: { job: Job }) {
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [showClone, setShowClone] = useState(false);
+  const [cloneSearch, setCloneSearch] = useState('');
+  const [cloneResults, setCloneResults] = useState<CloneResult[]>([]);
+  const [cloning, setCloning] = useState(false);
   const router = useRouter();
 
   const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs); };
@@ -327,6 +432,26 @@ function DocumentsTab({ job }: { job: Job }) {
     loadDocs();
     api.get<{ id: string; name: string }[]>('/templates?isActive=true').then(setTemplates);
   }, [job.id]);
+
+  useEffect(() => {
+    if (!showClone) return;
+    const t = setTimeout(() => {
+      const q = cloneSearch ? `?search=${encodeURIComponent(cloneSearch)}` : '';
+      api.get<CloneResult[]>(`/documents/search-clone${q}`).then(setCloneResults).catch(() => setCloneResults([]));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [showClone, cloneSearch]);
+
+  const handleClone = async (sourceId: string) => {
+    setCloning(true);
+    try {
+      const doc = await api.post<{ id: string }>(`/documents/${sourceId}/clone`, { jobId: job.id });
+      setShowClone(false);
+      router.push(`/documents/${doc.id}`);
+    } catch {
+      setCloning(false);
+    }
+  };
 
   const handleCreate = async () => {
     if (!selectedTemplateId) return;
@@ -347,10 +472,37 @@ function DocumentsTab({ job }: { job: Job }) {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex justify-end mb-4">
-        <button onClick={() => setShowAdd(true)}
+      <div className="flex justify-end gap-2 mb-4">
+        <button onClick={() => { setShowClone(true); setShowAdd(false); }}
+          className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm font-medium hover:bg-border/40">Clone existing</button>
+        <button onClick={() => { setShowAdd(true); setShowClone(false); }}
           className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Document</button>
       </div>
+
+      {showClone && (
+        <div className="bg-surface border border-border rounded-xl p-5 mb-4">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="font-semibold text-text">Clone from an existing document</h4>
+            <button onClick={() => setShowClone(false)} className="text-xs text-text-secondary">Cancel</button>
+          </div>
+          <input value={cloneSearch} onChange={(e) => setCloneSearch(e.target.value)} placeholder="Search by template or client…" aria-label="Search documents to clone"
+            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-3" />
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {cloneResults.length === 0 ? (
+              <p className="text-sm text-text-muted py-2">No completed documents found to clone.</p>
+            ) : cloneResults.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 py-2 px-3 bg-bg rounded-lg">
+                <div className="min-w-0">
+                  <div className="text-sm text-text truncate">{r.template.name}</div>
+                  <div className="text-xs text-text-muted truncate">{r.job.jobNumber} · {r.job.client?.name || r.job.title}</div>
+                </div>
+                <button onClick={() => handleClone(r.id)} disabled={cloning}
+                  className="text-xs text-primary hover:underline flex-shrink-0 disabled:opacity-50">Clone</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showAdd && (
         <div className="bg-surface border border-border rounded-xl p-5 mb-4">

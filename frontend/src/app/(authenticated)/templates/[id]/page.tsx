@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DOMPurify from 'dompurify';
 import { api } from '@/lib/api';
+import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 
 interface Language { id: string; code: string; name: string; direction: string; isActive: boolean; }
@@ -66,7 +67,7 @@ export default function TemplateDetailPage() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-text">{template.name}</h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-              template.type === 'word' ? 'bg-blue-100 text-blue-700' : template.type === 'simple' ? 'bg-orange-100 text-orange-700' : 'bg-primary-light text-primary'
+              template.type === 'word' ? TEMPLATE_TYPE_BADGE.word : template.type === 'simple' ? TEMPLATE_TYPE_BADGE.simple : TEMPLATE_TYPE_BADGE.designer
             }`}>
               {template.type === 'word' ? 'Word' : template.type === 'simple' ? 'Simple' : 'Designer'}
             </span>
@@ -223,16 +224,22 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   const handleBulkGroup = async () => {
     if (selected.size === 0) return;
     setSaving(true);
-    for (const id of selected) {
-      await api.patch(`/templates/${template.id}/fields/${id}`, {
-        groupKey: bulkGroup || null,
-      });
+    try {
+      for (const id of selected) {
+        await api.patch(`/templates/${template.id}/fields/${id}`, {
+          groupKey: bulkGroup || null,
+        });
+      }
+      setSelected(new Set());
+      setBulkGroup('');
+      setShowBulkGroup(false);
+    } catch (err) {
+      logger.error('Failed to group selected fields', err, 'templates');
+      alert('Failed to update some fields. Please try again.');
+    } finally {
+      setSaving(false);
+      onUpdate();
     }
-    setSelected(new Set());
-    setBulkGroup('');
-    setShowBulkGroup(false);
-    setSaving(false);
-    onUpdate();
   };
 
   // ── Warn about missing labels ──

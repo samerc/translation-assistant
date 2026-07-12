@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 
 interface Job {
   id: string;
@@ -24,17 +28,19 @@ interface Job {
 interface JobsResponse { data: Job[]; total: number; page: number; limit: number; totalPages: number; }
 
 const STATUSES = [
-  { value: 'quote', label: 'Quote', color: 'bg-sky-100 text-sky-700' },
-  { value: 'accepted', label: 'Accepted', color: 'bg-teal-100 text-teal-700' },
-  { value: 'in_progress', label: 'In Progress', color: 'bg-primary-light text-primary' },
-  { value: 'delivered', label: 'Delivered', color: 'bg-green-100 text-green-700' },
-  { value: 'invoiced', label: 'Invoiced', color: 'bg-warning-light text-warning' },
-  { value: 'paid', label: 'Paid', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'lost', label: 'Lost', color: 'bg-gray-100 text-gray-500' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-danger-light text-danger' },
+  { value: 'quote', label: 'Quote', color: JOB_STATUS_BADGE.quote },
+  { value: 'accepted', label: 'Accepted', color: JOB_STATUS_BADGE.accepted },
+  { value: 'in_progress', label: 'In Progress', color: JOB_STATUS_BADGE.in_progress },
+  { value: 'delivered', label: 'Delivered', color: JOB_STATUS_BADGE.delivered },
+  { value: 'invoiced', label: 'Invoiced', color: JOB_STATUS_BADGE.invoiced },
+  { value: 'paid', label: 'Paid', color: JOB_STATUS_BADGE.paid },
+  { value: 'lost', label: 'Lost', color: JOB_STATUS_BADGE.lost },
+  { value: 'cancelled', label: 'Cancelled', color: JOB_STATUS_BADGE.cancelled },
 ];
 
 export default function JobsPage() {
+  const { baseCurrency } = useSettings();
+  const { hasPermission } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -43,6 +49,7 @@ export default function JobsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [loadError, setLoadError] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -57,11 +64,12 @@ export default function JobsPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
+    setLoadError(false);
     api.get<JobsResponse>(`/jobs?${params}`).then((res) => {
       setJobs(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    });
+    }).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadJobs(); }, [search, statusFilter, sortBy, sortOrder, page, searchParams]);
@@ -84,22 +92,30 @@ export default function JobsPage() {
   const getPrice = (job: Job) => {
     if (job.isFreeOfCharge) return 'Free';
     const price = job.finalPrice ?? job.calculatedTotal;
-    return `$${Number(price).toFixed(2)}`;
+    return formatCurrency(price, baseCurrency);
   };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Jobs</h1>
-        <button onClick={() => router.push('/jobs/new')}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-          + New Job
-        </button>
+        {hasPermission('jobs:create') && (
+          <button onClick={() => router.push('/jobs/new')}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+            + New Job
+          </button>
+        )}
       </div>
+
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load jobs. Please refresh or try again.
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input placeholder="Search jobs..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        <input placeholder="Search jobs..." aria-label="Search jobs" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
         <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
           className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
@@ -152,7 +168,7 @@ export default function JobsPage() {
                     <div className="font-medium text-text">{job.title}</div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? 'bg-orange-100 text-orange-700' : 'bg-violet-100 text-violet-700'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
                         {job.type === 'freeform' ? 'Free-form' : 'Template'}
                       </span>
                     </div>

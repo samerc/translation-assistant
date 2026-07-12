@@ -86,6 +86,8 @@ export class ExportService {
       paragraphLoop: true,
       linebreaks: true,
       delimiters: { start: '{', end: '}' },
+      // Any placeholder without a saved value renders as empty instead of throwing.
+      nullGetter: () => '',
     });
 
     // Build replacement data from field values
@@ -96,7 +98,18 @@ export class ExportService {
       }
     }
 
-    docx.render(data);
+    try {
+      docx.render(data);
+    } catch (err) {
+      // docxtemplater throws on malformed/mismatched braces in the template.
+      const detail =
+        (err as { properties?: { errors?: { properties?: { explanation?: string } }[] } })
+          ?.properties?.errors?.map((e) => e.properties?.explanation).filter(Boolean).join('; ') ||
+        (err as Error).message;
+      throw new BadRequestException(
+        `Failed to generate the document. The Word template has invalid placeholders: ${detail}`,
+      );
+    }
 
     const outputBuffer = docx.getZip().generate({ type: 'nodebuffer' });
     const outputDir = join(process.cwd(), 'uploads', 'exports');

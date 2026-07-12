@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 interface ClientEmail { id: string; email: string; label: string | null; }
 interface ClientPhone { id: string; phone: string; label: string | null; }
@@ -27,7 +28,9 @@ interface ClientsResponse {
 }
 
 export default function ClientsPage() {
+  const { hasPermission } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -48,11 +51,12 @@ export default function ClientsPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
+    setLoadError(false);
     api.get<ClientsResponse>(`/clients?${params}`).then((res) => {
       setClients(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    });
+    }).catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadClients(); }, [search, typeFilter, sortBy, sortOrder, page]);
@@ -86,12 +90,14 @@ export default function ClientsPage() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Clients</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-        >
-          + New Client
-        </button>
+        {hasPermission('clients:create') && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
+          >
+            + New Client
+          </button>
+        )}
       </div>
 
       {/* Create form */}
@@ -140,9 +146,16 @@ export default function ClientsPage() {
         </form>
       )}
 
+      {loadError && (
+        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          Couldn&apos;t load clients. Please refresh or try again.
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap">
         <input
+          aria-label="Search clients"
           placeholder="Search clients..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}

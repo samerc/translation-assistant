@@ -57,6 +57,10 @@ export class DocumentsController {
   @RequirePermissions('documents:create')
   async create(@Body() dto: CreateDocumentDto, @CurrentUser() user: User) {
     await this.documentsService.verifyJobAccess(dto.jobId, user.id, this.isAdmin(user));
+    // Cloning copies field values from the source — require access to it too (IDOR guard).
+    if (dto.clonedFromId) {
+      await this.documentsService.verifyDocumentAccess(dto.clonedFromId, user.id, this.isAdmin(user));
+    }
     return this.documentsService.create(dto);
   }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 
 interface InvoiceItem {
@@ -35,11 +36,11 @@ interface Invoice {
 }
 
 const STATUSES = [
-  { value: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-600' },
-  { value: 'sent', label: 'Sent', color: 'bg-sky-100 text-sky-700' },
-  { value: 'paid', label: 'Paid', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'overdue', label: 'Overdue', color: 'bg-danger-light text-danger' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-gray-100 text-gray-500' },
+  { value: 'draft', label: 'Draft', color: INVOICE_STATUS_BADGE.draft },
+  { value: 'sent', label: 'Sent', color: INVOICE_STATUS_BADGE.sent },
+  { value: 'paid', label: 'Paid', color: INVOICE_STATUS_BADGE.paid },
+  { value: 'overdue', label: 'Overdue', color: INVOICE_STATUS_BADGE.overdue },
+  { value: 'cancelled', label: 'Cancelled', color: INVOICE_STATUS_BADGE.cancelled },
 ];
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
