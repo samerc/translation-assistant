@@ -79,10 +79,18 @@ export class InvoicesService {
     return `${prefix}${String(nextNum).padStart(4, '0')}`;
   }
 
+  private round2(n: number): number {
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
   private calculateTotals(items: { quantity: number; unitPrice: number }[], taxRate: number) {
-    const subtotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice), 0);
-    const taxAmount = Math.round(subtotal * taxRate) / 100;
-    const total = subtotal + taxAmount;
+    // Round each line, then derive totals from rounded values so the stored
+    // decimal(10,2) columns match what's displayed (no truncation drift).
+    const subtotal = this.round2(
+      items.reduce((sum, item) => sum + this.round2(Number(item.quantity) * Number(item.unitPrice)), 0),
+    );
+    const taxAmount = this.round2(subtotal * (Number(taxRate) / 100));
+    const total = this.round2(subtotal + taxAmount);
     return { subtotal, taxAmount, total };
   }
 
