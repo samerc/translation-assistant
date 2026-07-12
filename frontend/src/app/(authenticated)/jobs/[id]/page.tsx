@@ -4,6 +4,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency } from '@/lib/format';
@@ -217,6 +218,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
   const effectivePrice = job.finalPrice ?? job.calculatedTotal;
 
   return (
+    <div className="space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Job Info */}
       <div className="bg-surface border border-border rounded-xl p-6">
@@ -306,6 +308,90 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
           </>
         )}
       </div>
+    </div>
+    <AssignedUsersCard job={job} onUpdate={onUpdate} />
+    </div>
+  );
+}
+
+// ── Assigned Users ──
+
+function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role?.name === 'Admin';
+  const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string }[]>([]);
+  const [pickUser, setPickUser] = useState('');
+  const [pickLevel, setPickLevel] = useState<'view' | 'edit'>('edit');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAdmin) api.get<{ id: string; firstName: string; lastName: string; email: string }[]>('/users').then(setAllUsers).catch(() => {});
+  }, [isAdmin]);
+
+  const assigned = job.assignedUsers || [];
+  const assignedIds = new Set(assigned.map((a) => a.userId));
+  const available = allUsers.filter((u) => !assignedIds.has(u.id));
+
+  const add = async () => {
+    if (!pickUser) return;
+    setBusy(true); setError(null);
+    try {
+      await api.post(`/jobs/${job.id}/users`, { userId: pickUser, permissionLevel: pickLevel });
+      setPickUser('');
+      onUpdate();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to assign user.');
+    } finally { setBusy(false); }
+  };
+
+  const remove = async (userId: string) => {
+    setBusy(true); setError(null);
+    try {
+      await api.delete(`/jobs/${job.id}/users/${userId}`);
+      onUpdate();
+    } catch (err) {
+      setError(err instanceof ApiError ? String(err.message) : 'Failed to remove user.');
+    } finally { setBusy(false); }
+  };
+
+  const inputClass = 'px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-6">
+      <h3 className="font-semibold text-text mb-4">Assigned Users</h3>
+      {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {assigned.length === 0 ? (
+        <p className="text-sm text-text-muted mb-4">No users assigned{isAdmin ? ' — add someone below.' : '.'}</p>
+      ) : (
+        <ul className="mb-4 divide-y divide-border">
+          {assigned.map((a) => (
+            <li key={a.id} className="flex items-center justify-between py-2">
+              <div>
+                <span className="text-sm text-text">{a.user.firstName} {a.user.lastName}</span>
+                <span className="text-xs text-text-muted ml-2">{a.user.email}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-neutral-light text-neutral ml-2">{a.permissionLevel}</span>
+              </div>
+              {isAdmin && (
+                <button onClick={() => remove(a.userId)} disabled={busy} className="text-xs text-danger hover:underline">Remove</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isAdmin && (
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <select value={pickUser} onChange={(e) => setPickUser(e.target.value)} className={`${inputClass} flex-1`} aria-label="Select user to assign">
+            <option value="">Select a user…</option>
+            {available.map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>)}
+          </select>
+          <select value={pickLevel} onChange={(e) => setPickLevel(e.target.value as 'view' | 'edit')} className={inputClass} aria-label="Permission level">
+            <option value="edit">Edit</option>
+            <option value="view">View</option>
+          </select>
+          <button onClick={add} disabled={busy || !pickUser} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">Assign</button>
+        </div>
+      )}
     </div>
   );
 }
