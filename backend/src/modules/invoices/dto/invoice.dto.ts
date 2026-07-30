@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsNumber, IsUUID, IsArray, ValidateNested,
-  IsDateString, MinLength, MaxLength, Min, Max, IsIn, ArrayMinSize, ArrayMaxSize, Matches,
+  IsDateString, MinLength, MaxLength, Min, Max, IsIn, ArrayMinSize, ArrayMaxSize, Matches, IsEmail,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -109,4 +109,15 @@ export class RecordPaymentDto {
   @IsOptional()
   @IsDateString()
   paidAt?: string;
+}
+
+export class SendInvoiceEmailDto {
+  @IsOptional()
+  @IsEmail()
+  email?: string; // defaults to the client's primary email when omitted
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  message?: string;
 }

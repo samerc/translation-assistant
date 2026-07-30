@@ -2,6 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 import { SettingsService } from '../settings/settings.service.js';
 
+/** Escape user-provided text before embedding it in an HTML email body. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 interface ResolvedMailConfig {
   host: string;
   port: number;
@@ -88,6 +98,29 @@ export class MailService {
       `<p>You've been invited to join Translation Assistant.</p>
        <p><a href="${url}">Click here to create your account</a>. This invite expires in 7 days.</p>`,
     );
+  }
+
+  async sendInvoiceEmail(
+    to: string,
+    invoiceNumber: string,
+    pdfPath: string,
+    note?: string,
+  ): Promise<void> {
+    const cfg = await this.resolveConfig();
+    const transporter = this.buildTransport(cfg);
+    const intro = note?.trim()
+      ? `<p>${escapeHtml(note.trim())}</p>`
+      : `<p>Please find attached invoice <strong>${escapeHtml(invoiceNumber)}</strong>.</p>`;
+    await transporter.sendMail({
+      from: cfg.from,
+      to,
+      subject: `Invoice ${invoiceNumber}`,
+      html: `${intro}<p>Thank you.</p>`,
+      attachments: [
+        { filename: `${invoiceNumber}.pdf`, path: pdfPath, contentType: 'application/pdf' },
+      ],
+    });
+    this.logger.log(`[INVOICE_EMAIL_SENT] to=${to} invoice=${invoiceNumber} via ${cfg.host}:${cfg.port}`);
   }
 
   async sendTestEmail(to: string): Promise<void> {
