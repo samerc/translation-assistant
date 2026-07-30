@@ -56,8 +56,12 @@ export class AuthService {
   // ── Login ──
 
   async login(dto: LoginDto, ip: string, userAgent: string) {
+    // Lockout is keyed by (client IP + email) so an attacker cannot lock a victim
+    // out from arbitrary IPs (targeted-lockout DoS); the per-IP throttle bounds
+    // distributed guessing. Requires a trustworthy req.ip (see main.ts trust proxy).
     const emailKey = dto.email.toLowerCase();
-    this.checkLockout(emailKey);
+    const attemptKey = `${ip}:${emailKey}`;
+    this.checkLockout(attemptKey);
 
     const user = await this.userRepository.findOne({
       where: { email: dto.email },
@@ -65,21 +69,23 @@ export class AuthService {
     });
 
     if (!user) {
-      this.recordFailure(emailKey);
+      this.recordFailure(attemptKey);
       throw new UnauthorizedException('Invalid credentials');
-    }
-
-    if (!user.isActive) {
-      throw new ForbiddenException('Account is deactivated');
     }
 
     const passwordValid = await bcrypt.compare(dto.password, user.password);
     if (!passwordValid) {
-      this.recordFailure(emailKey);
+      this.recordFailure(attemptKey);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    this.loginAttempts.delete(emailKey);
+    // Only reveal account state AFTER credentials verify — otherwise "Account is
+    // deactivated" vs "Invalid credentials" is an account-existence oracle.
+    if (!user.isActive) {
+      throw new ForbiddenException('Account is deactivated');
+    }
+
+    this.loginAttempts.delete(attemptKey);
 
     // Generate new tokens and create a fresh session (session fixation prevention)
     const accessToken = await this.generateAccessToken(user);

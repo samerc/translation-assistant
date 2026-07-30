@@ -20,6 +20,8 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { User } from '../users/entities/user.entity.js';
 
 @Controller('settings')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
@@ -30,11 +32,16 @@ export class SettingsController {
 
   @Get()
   @RequirePermissions('settings:read')
-  async getSettings() {
+  async getSettings(@CurrentUser() user: User) {
     const settings = await this.settingsService.getSettings();
     // Never expose the stored SMTP password; signal only whether one is set.
-    const { smtpPass, ...rest } = settings;
-    return { ...rest, smtpPassSet: Boolean(smtpPass) };
+    const { smtpPass, smtpHost, smtpPort, smtpUser, smtpFrom, smtpSecure, appBaseUrl, ...safe } = settings;
+    // SMTP / infrastructure details are admin-only. Non-admins (e.g. Viewer, who
+    // holds settings:read) still get branding + currency + upload limits.
+    if (user?.role?.name === 'Admin') {
+      return { ...safe, smtpHost, smtpPort, smtpUser, smtpFrom, smtpSecure, appBaseUrl, smtpPassSet: Boolean(smtpPass) };
+    }
+    return safe;
   }
 
   @Patch()

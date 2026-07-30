@@ -6,40 +6,29 @@ import {
   Logger,
 } from '@nestjs/common';
 
+// NOTE: This guard is a low-signal *tripwire*, NOT the app's SQLi/XSS defense.
+// SQL injection is prevented by TypeORM parameterized queries; XSS by React output
+// encoding + DOMPurify. These patterns are deliberately narrow — only strings that
+// essentially never appear in legitimate translator content (names, notes,
+// translated text with entities/prose) — to avoid false-positive rejections.
 const SQL_PATTERNS = [
   /(\b|')union\s+(all\s+)?select\b/i,
-  /\b(drop|alter|truncate)\s+table\b/i,
-  /\b(insert\s+into|delete\s+from|update\s+\w+\s+set)\b/i,
-  /;\s*--(.*)/,
-  /\/\*[\s\S]*?\*\//,
-  /\b(exec|execute)\s*\(/i,
   /\bxp_cmdshell\b/i,
-  /\b(char|nchar|varchar)\s*\(\s*\d+\s*\)/i,
   /\bwaitfor\s+delay\b/i,
-  /\bbenchmark\s*\(/i,
-  /\bsleep\s*\(\s*\d/i,
-  /\b(load_file|into\s+outfile|into\s+dumpfile)\b/i,
+  /\b(load_file\s*\(|into\s+(out|dump)file)\b/i,
 ];
 
 const XSS_PATTERNS = [
   /<script[\s>]/i,
   /<\/script>/i,
-  /\bon\w+\s*=/i,
   /javascript\s*:/i,
   /<iframe[\s>]/i,
-  /<object[\s>]/i,
-  /<embed[\s>]/i,
-  /<form[\s>]/i,
-  /<meta[\s>]/i,
-  /\beval\s*\(/i,
-  /\bdocument\s*\.\s*(cookie|write|location)/i,
-  /\bwindow\s*\.\s*location/i,
-  /\balert\s*\(/i,
-  /&#x?[0-9a-f]+;/i,
-  /\bString\.fromCharCode\s*\(/i,
 ];
 
 const MAX_FIELD_LENGTH = 50000;
+const MAX_DEPTH = 20;        // reject pathologically nested bodies
+const MAX_NODES = 1000;      // total values inspected per request (CPU bound)
+const MAX_KEYS = 200;        // per-object key fan-out cap
 
 @Injectable()
 export class AbuseDetectionGuard implements CanActivate {
@@ -59,12 +48,15 @@ export class AbuseDetectionGuard implements CanActivate {
       return true;
     }
 
-    this.inspectObject(body, '', request);
+    this.inspectObject(body, '', request, 0, { count: 0 });
     return true;
   }
 
-  private inspectObject(obj: any, path: string, request: any): void {
+  private inspectObject(obj: any, path: string, request: any, depth: number, budget: { count: number }): void {
     if (obj === null || obj === undefined) return;
+    // Bound total work per request (CPU DoS) and nesting depth (stack safety).
+    if (depth > MAX_DEPTH || budget.count >= MAX_NODES) return;
+    budget.count++;
 
     if (typeof obj === 'string') {
       this.inspectString(obj, path, request);
@@ -72,17 +64,18 @@ export class AbuseDetectionGuard implements CanActivate {
     }
 
     if (Array.isArray(obj)) {
-      // Limit array traversal depth
-      const limit = Math.min(obj.length, 200);
-      for (let i = 0; i < limit; i++) {
-        this.inspectObject(obj[i], `${path}[${i}]`, request);
+      const limit = Math.min(obj.length, MAX_KEYS);
+      for (let i = 0; i < limit && budget.count < MAX_NODES; i++) {
+        this.inspectObject(obj[i], `${path}[${i}]`, request, depth + 1, budget);
       }
       return;
     }
 
     if (typeof obj === 'object') {
-      for (const key of Object.keys(obj)) {
-        this.inspectObject(obj[key], path ? `${path}.${key}` : key, request);
+      const keys = Object.keys(obj).slice(0, MAX_KEYS);
+      for (const key of keys) {
+        if (budget.count >= MAX_NODES) break;
+        this.inspectObject(obj[key], path ? `${path}.${key}` : key, request, depth + 1, budget);
       }
     }
   }

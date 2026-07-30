@@ -6,22 +6,12 @@ import { Request } from 'express';
 import { JwtPayload } from './jwt.strategy.js';
 
 /**
- * Extracts the refresh token from:
- * 1. httpOnly cookie 'refresh_token' (preferred, secure)
- * 2. Authorization Bearer header (fallback for backward compat during migration)
+ * Extracts the refresh token exclusively from the httpOnly 'refresh_token' cookie.
+ * (The legacy Authorization: Bearer fallback was removed — a refresh token that
+ * leaked into a Bearer-bearing context must not be replayable.)
  */
 function extractRefreshToken(req: Request): string | null {
-  // Try cookie first
-  const cookieToken = req.cookies?.refresh_token;
-  if (cookieToken) return cookieToken;
-
-  // Fallback to Bearer header
-  const authHeader = req.get('Authorization');
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.slice(7).trim();
-  }
-
-  return null;
+  return req.cookies?.refresh_token || null;
 }
 
 @Injectable()

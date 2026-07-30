@@ -8,6 +8,7 @@ import {
   Max,
   MaxLength,
   ArrayMaxSize,
+  Matches,
 } from 'class-validator';
 
 export class UpdateSettingsDto {
@@ -27,8 +28,7 @@ export class UpdateSettingsDto {
   companyLogo?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(10)
+  @Matches(/^[A-Z]{3}$/, { message: 'baseCurrency must be a 3-letter ISO code (e.g. USD)' })
   baseCurrency?: string;
 
   @IsOptional()

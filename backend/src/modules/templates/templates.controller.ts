@@ -11,6 +11,7 @@ import {
   UseInterceptors,
   UploadedFile,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -85,7 +86,16 @@ export class TemplatesController {
 
   @Post(':id/upload-word')
   @RequirePermissions('templates:update')
-  @UseInterceptors(FileInterceptor('file', { storage: templateStorage }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: templateStorage,
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB cap before parse
+      fileFilter: (_req, file, cb) => {
+        if (extname(file.originalname).toLowerCase() === '.docx') cb(null, true);
+        else cb(new BadRequestException('Only .docx files are accepted'), false);
+      },
+    }),
+  )
   uploadWord(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,

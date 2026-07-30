@@ -67,14 +67,14 @@ export class InvoicesController {
   @Post()
   @RequirePermissions('invoices:create')
   create(@Body() dto: CreateInvoiceDto, @CurrentUser() user: User) {
-    return this.invoicesService.create(dto, user.id);
+    return this.invoicesService.create(dto, user.id, this.isAdmin(user));
   }
 
   @Patch(':id')
   @RequirePermissions('invoices:update')
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateInvoiceDto, @CurrentUser() user: User) {
     await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
-    return this.invoicesService.update(id, dto);
+    return this.invoicesService.update(id, dto, user.id, this.isAdmin(user));
   }
 
   @Patch(':id/status')

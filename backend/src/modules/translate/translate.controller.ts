@@ -1,7 +1,12 @@
-import { Controller, Post, Body, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Controller, Post, Body, UseGuards, BadRequestException,
+  HttpException, HttpStatus,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { IsString, MaxLength, MinLength } from 'class-validator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { User } from '../users/entities/user.entity.js';
 
 class TranslateDto {
   @IsString()
@@ -20,16 +25,38 @@ class TranslateDto {
   to: string;
 }
 
+// Per-user daily character budget — caps billed Google Translate usage on top of
+// the 30/min throttle. In-memory (per-process; resets on restart) — matches the
+// app's other in-memory limiters; move to a shared store if running clustered.
+const DAILY_CHAR_LIMIT = 200_000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const usage = new Map<string, { chars: number; resetAt: number }>();
+
 @Controller('translate')
 @UseGuards(AuthGuard('jwt'))
 export class TranslateController {
   @Post()
   @Throttle({ default: { ttl: 60000, limit: 30 } })
-  async translate(@Body() body: TranslateDto) {
+  async translate(@Body() body: TranslateDto, @CurrentUser() user: User) {
     // Validate language codes (ISO 639-1 pattern)
     const langPattern = /^[a-z]{2,3}(-[A-Z]{2})?$/;
     if (!langPattern.test(body.from) || !langPattern.test(body.to)) {
       throw new BadRequestException('Invalid language code format');
+    }
+
+    // Enforce the per-user daily character budget.
+    const now = Date.now();
+    const entry = usage.get(user.id);
+    if (!entry || now >= entry.resetAt) {
+      usage.set(user.id, { chars: body.text.length, resetAt: now + DAY_MS });
+    } else {
+      if (entry.chars + body.text.length > DAILY_CHAR_LIMIT) {
+        throw new HttpException(
+          'Daily translation limit reached. Please try again tomorrow.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      entry.chars += body.text.length;
     }
 
     const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY;

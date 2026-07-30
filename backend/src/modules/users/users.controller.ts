@@ -16,6 +16,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { sniffImageMime } from '../../common/utils/file-signature.js';
 import { UsersService } from './users.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto.js';
@@ -84,7 +85,11 @@ export class UsersController {
   )
   uploadLogo(@CurrentUser() user: User, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Logo file is required');
-    const dataUrl = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+    // Verify actual content (magic bytes) — never trust the client-declared mimetype
+    // for building the stored data URL (guards against spoofed/SVG payloads).
+    const mime = sniffImageMime(file.buffer);
+    if (!mime) throw new BadRequestException('Logo must be a valid PNG or JPEG image');
+    const dataUrl = `data:${mime};base64,${file.buffer.toString('base64')}`;
     return this.usersService.setLogo(user.id, dataUrl);
   }
 

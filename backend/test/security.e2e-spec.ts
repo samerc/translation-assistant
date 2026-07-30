@@ -1,5 +1,5 @@
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
+import { UnauthorizedException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { FindOperator } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/modules/auth/auth.service.js';
@@ -7,6 +7,9 @@ import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy.js';
 import { JwtRefreshStrategy } from '../src/modules/auth/strategies/jwt-refresh.strategy.js';
 import { DocumentsController } from '../src/modules/documents/documents.controller.js';
 import { ClientsController } from '../src/modules/clients/clients.controller.js';
+import { AbuseDetectionGuard } from '../src/common/guards/abuse-detection.guard.js';
+import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
+import { sniffType, sniffImageMime } from '../src/common/utils/file-signature.js';
 
 /**
  * Security-layer integration tests for the audit-fixes remediation.
@@ -381,5 +384,160 @@ describe('IDOR guards (controllers)', () => {
       // Never reached file lookup / disk.
       expect(clientsService.getPassportCopy).not.toHaveBeenCalled();
     });
+  });
+});
+
+// ── Audit round 2: lockout / oracle / abuse guard / file signatures / invoice IDOR ──
+
+describe('Login lockout & account-state oracle (AuthService)', () => {
+  let authService: AuthService;
+  const activeUser: any = {
+    id: 'u-active', email: 'active@example.com', isActive: true,
+    firstName: 'A', lastName: 'A', role: { id: 'r', name: 'Translator', permissions: [] },
+  };
+  const inactiveUser: any = {
+    id: 'u-inactive', email: 'inactive@example.com', isActive: false,
+    firstName: 'I', lastName: 'I', role: { id: 'r', name: 'Translator', permissions: [] },
+  };
+
+  beforeAll(async () => {
+    jest.spyOn(global, 'setInterval').mockReturnValue(0 as any);
+    // Real time here (no Date.now mock) so lockout-window timing behaves normally.
+    activeUser.password = await bcrypt.hash('Right!Pass1', 10);
+    inactiveUser.password = await bcrypt.hash('Right!Pass1', 10);
+
+    const userRepo = {
+      findOne: ({ where }: any) =>
+        Promise.resolve(
+          where.email === activeUser.email ? activeUser
+            : where.email === inactiveUser.email ? inactiveUser
+            : null,
+        ),
+      update: () => Promise.resolve({ affected: 1 }),
+    } as any;
+
+    authService = new AuthService(
+      userRepo, noopRepo, noopRepo, makeSessionRepo() as any, jwtService, configService, mailService,
+    );
+  });
+
+  afterAll(() => jest.restoreAllMocks());
+
+  it('does not leak account state to an attacker without the password (no oracle)', async () => {
+    // Wrong password on a deactivated account → generic "Invalid credentials".
+    await expect(
+      authService.login({ email: 'inactive@example.com', password: 'wrong' }, '9.9.9.9', 'ua'),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('only reveals "deactivated" after the correct password', async () => {
+    await expect(
+      authService.login({ email: 'inactive@example.com', password: 'Right!Pass1' }, '9.9.9.8', 'ua'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('locks a source IP after repeated failures but NOT the victim from another IP', async () => {
+    const attackerIp = '203.0.113.7';
+    for (let i = 0; i < 5; i++) {
+      await expect(
+        authService.login({ email: 'active@example.com', password: 'nope' }, attackerIp, 'ua'),
+      ).rejects.toThrow(UnauthorizedException);
+    }
+    // 6th attempt from the attacker's IP is now locked out.
+    await expect(
+      authService.login({ email: 'active@example.com', password: 'nope' }, attackerIp, 'ua'),
+    ).rejects.toThrow(ForbiddenException);
+
+    // The real user, from a DIFFERENT IP, is unaffected (no targeted-lockout DoS).
+    const ok = await authService.login(
+      { email: 'active@example.com', password: 'Right!Pass1' }, '198.51.100.2', 'ua',
+    );
+    expect(ok.accessToken).toBeDefined();
+  });
+});
+
+describe('AbuseDetectionGuard (narrowed patterns + caps)', () => {
+  const guard = new AbuseDetectionGuard();
+  const ctx = (body: any, method = 'POST') =>
+    ({ switchToHttp: () => ({ getRequest: () => ({ method, body, ip: '1.1.1.1', url: '/x' }) }) }) as any;
+
+  it('allows legitimate translator text that the old patterns falsely blocked', () => {
+    const body = {
+      notes: 'Please delete from the list; total &amp; tax updated. Café coûte 5€ (&#233;).',
+      name: 'one=2 online store',
+      description: 'char(255) column note; alert (see below)',
+    };
+    expect(guard.canActivate(ctx(body))).toBe(true);
+  });
+
+  it('still blocks a clear SQL injection payload', () => {
+    expect(() => guard.canActivate(ctx({ q: "x' UNION SELECT password FROM users --" }))).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('still blocks a clear script-injection payload', () => {
+    expect(() => guard.canActivate(ctx({ notes: '<script>steal()</script>' }))).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('does not choke on deeply nested / large bodies (depth + node caps)', () => {
+    let deep: any = 'leaf';
+    for (let i = 0; i < 5000; i++) deep = { a: deep };
+    expect(guard.canActivate(ctx(deep))).toBe(true);
+  });
+});
+
+describe('File signature detection (magic bytes)', () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const pdf = Buffer.from('%PDF-1.7 rest', 'latin1');
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const exe = Buffer.from([0x4d, 0x5a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+
+  it('identifies real types by content', () => {
+    expect(sniffType(png)).toBe('png');
+    expect(sniffType(jpeg)).toBe('jpeg');
+    expect(sniffType(pdf)).toBe('pdf');
+    expect(sniffType(zip)).toBe('zip'); // docx/xlsx/pptx
+    expect(sniffType(exe)).toBeNull();
+  });
+
+  it('sniffImageMime accepts only PNG/JPEG and rejects spoofs', () => {
+    expect(sniffImageMime(png)).toBe('image/png');
+    expect(sniffImageMime(jpeg)).toBe('image/jpeg');
+    expect(sniffImageMime(pdf)).toBeNull();
+    // An SVG/HTML payload mislabeled image/png has no PNG signature → rejected.
+    expect(sniffImageMime(Buffer.from('<svg onload=alert(1)>', 'latin1'))).toBeNull();
+  });
+});
+
+describe('Invoice create — IDOR guard on linked jobs', () => {
+  it('rejects creating an invoice that links a job the caller cannot access', async () => {
+    const clientRepo = { findOne: jest.fn().mockResolvedValue({ id: 'C' }) };
+    const jobRepo = { find: jest.fn().mockResolvedValue([{ id: 'J', clientId: 'C' }]) };
+    const settingsRepo = { find: jest.fn().mockResolvedValue([]) };
+    const jobUserRepo = { findOne: jest.fn().mockResolvedValue(null) }; // no assignment → no access
+    const dataSource = { transaction: jest.fn() };
+
+    const svc = new InvoicesService(
+      {} as any, {} as any, jobRepo as any, jobUserRepo as any,
+      clientRepo as any, settingsRepo as any, dataSource as any,
+    );
+
+    await expect(
+      svc.create(
+        {
+          clientId: 'C', issueDate: '2026-07-30', dueDate: '2026-08-30',
+          items: [{ jobId: 'J', description: 'x', quantity: 1, unitPrice: 1 }],
+        } as any,
+        'user-1',
+        false,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    // Blocked before any persistence.
+    expect(dataSource.transaction).not.toHaveBeenCalled();
   });
 });
