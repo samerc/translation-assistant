@@ -4,6 +4,8 @@
  * In production, can be connected to an external service (Sentry, LogRocket, etc.)
  */
 
+import { captureError } from './sentry';
+
 interface LogEntry {
   message: string;
   context?: string;
@@ -42,8 +44,8 @@ export const logger = {
     if (process.env.NODE_ENV !== 'production') {
       console.error(entry.message, error ? formatError(error) : '');
     }
-    // TODO: Send to external logging service in production
-    // e.g., Sentry.captureException(error);
+    // Forward to Sentry (no-op unless NEXT_PUBLIC_SENTRY_DSN is set). Fire-and-forget.
+    void captureError(error ?? new Error(message), context, { message });
   },
 
   warn(message: string, data?: Record<string, unknown>, context?: string) {
