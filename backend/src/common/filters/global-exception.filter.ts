@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { QueryFailedError, EntityNotFoundError } from 'typeorm';
+import { Sentry } from '../../instrument.js';
 
 /**
  * Global exception filter that:
@@ -134,6 +135,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       `${method} ${url} → ${status} | user=${userId} ip=${ip}`,
       stack,
     );
+
+    // Report server errors to Sentry (no-op unless SENTRY_DSN is configured).
+    Sentry.captureException(exception, {
+      extra: { method, url, userId, ip, status },
+    });
   }
 
   private getExceptionMessage(exception: unknown): string {
