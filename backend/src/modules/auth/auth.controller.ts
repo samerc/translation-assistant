@@ -28,7 +28,9 @@ import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  // Strict: the refresh endpoint is only invoked by same-site XHR from the SPA,
+  // so no cross-site request ever needs to send this cookie.
+  sameSite: 'strict' as const,
   path: '/api/auth',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
 };
@@ -38,10 +40,9 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   private getIp(req: Request): string {
-    return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
-      || req.ip
-      || req.socket?.remoteAddress
-      || 'unknown';
+    // With `trust proxy` configured (see main.ts), Express resolves req.ip to the
+    // real client via X-Forwarded-For. Never parse XFF by hand — that's spoofable.
+    return req.ip || req.socket?.remoteAddress || 'unknown';
   }
 
   private getUA(req: Request): string {

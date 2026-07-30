@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsNumber, IsUUID, IsArray, ValidateNested,
-  IsDateString, MinLength, MaxLength, Min, Max, IsIn, ArrayMinSize, ArrayMaxSize,
+  IsDateString, MinLength, MaxLength, Min, Max, IsIn, ArrayMinSize, ArrayMaxSize, Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -50,8 +50,7 @@ export class CreateInvoiceDto {
   notes?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(10)
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be a 3-letter ISO code (e.g. USD)' })
   currency?: string;
 
   @IsArray()
@@ -84,8 +83,7 @@ export class UpdateInvoiceDto {
   notes?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(10)
+  @Matches(/^[A-Z]{3}$/, { message: 'currency must be a 3-letter ISO code (e.g. USD)' })
   currency?: string;
 
   @IsOptional()

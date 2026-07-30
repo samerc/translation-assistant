@@ -86,7 +86,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
                 autoComplete="new-password"
                 className={inputClass}
               />
-              <p className="text-xs text-text-muted mt-1">At least 8 characters, and not a commonly used password.</p>
+              <p className="text-xs text-text-muted mt-1">At least 8 characters with an uppercase letter, lowercase letter, number, and special character — and not a commonly used password.</p>
             </div>
 
             <div className="mb-5">

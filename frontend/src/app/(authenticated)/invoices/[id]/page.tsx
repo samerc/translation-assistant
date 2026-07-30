@@ -3,7 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
+import { confirmDialog } from '@/lib/confirm';
+import { formatDate } from '@/lib/format';
 
 interface InvoiceItem {
   id: string;
@@ -35,11 +38,11 @@ interface Invoice {
 }
 
 const STATUSES = [
-  { value: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-600' },
-  { value: 'sent', label: 'Sent', color: 'bg-sky-100 text-sky-700' },
-  { value: 'paid', label: 'Paid', color: 'bg-emerald-100 text-emerald-800' },
-  { value: 'overdue', label: 'Overdue', color: 'bg-danger-light text-danger' },
-  { value: 'cancelled', label: 'Cancelled', color: 'bg-gray-100 text-gray-500' },
+  { value: 'draft', label: 'Draft', color: INVOICE_STATUS_BADGE.draft },
+  { value: 'sent', label: 'Sent', color: INVOICE_STATUS_BADGE.sent },
+  { value: 'paid', label: 'Paid', color: INVOICE_STATUS_BADGE.paid },
+  { value: 'overdue', label: 'Overdue', color: INVOICE_STATUS_BADGE.overdue },
+  { value: 'cancelled', label: 'Cancelled', color: INVOICE_STATUS_BADGE.cancelled },
 ];
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -111,7 +114,7 @@ export default function InvoiceDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this draft invoice?')) return;
+    if (!(await confirmDialog('Delete this draft invoice?'))) return;
     try {
       await api.delete(`/invoices/${id}`);
       router.push('/invoices');
@@ -281,8 +284,8 @@ export default function InvoiceDetailPage() {
             </div>
           ) : (
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-text-muted">Issue Date</span><span className="text-text">{new Date(invoice.issueDate).toLocaleDateString()}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Due Date</span><span className="text-text">{new Date(invoice.dueDate).toLocaleDateString()}</span></div>
+              <div className="flex justify-between"><span className="text-text-muted">Issue Date</span><span className="text-text">{formatDate(invoice.issueDate)}</span></div>
+              <div className="flex justify-between"><span className="text-text-muted">Due Date</span><span className="text-text">{formatDate(invoice.dueDate)}</span></div>
               <div className="flex justify-between"><span className="text-text-muted">Currency</span><span className="text-text">{invoice.currency}</span></div>
               {invoice.client.taxId && (
                 <div className="flex justify-between"><span className="text-text-muted">Client Tax ID</span><span className="text-text">{invoice.client.taxId}</span></div>
@@ -303,7 +306,7 @@ export default function InvoiceDetailPage() {
               <>
                 <div className="flex justify-between text-success"><span>Paid</span><span>{invoice.currency} {Number(invoice.paidAmount).toFixed(2)}</span></div>
                 {invoice.paidAt && (
-                  <div className="flex justify-between"><span className="text-text-muted">Paid on</span><span className="text-text">{new Date(invoice.paidAt).toLocaleDateString()}</span></div>
+                  <div className="flex justify-between"><span className="text-text-muted">Paid on</span><span className="text-text">{formatDate(invoice.paidAt)}</span></div>
                 )}
               </>
             )}

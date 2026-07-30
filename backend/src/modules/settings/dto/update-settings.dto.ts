@@ -3,10 +3,12 @@ import {
   IsOptional,
   IsInt,
   IsArray,
+  IsBoolean,
   Min,
   Max,
   MaxLength,
   ArrayMaxSize,
+  Matches,
 } from 'class-validator';
 
 export class UpdateSettingsDto {
@@ -26,8 +28,7 @@ export class UpdateSettingsDto {
   companyLogo?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(10)
+  @Matches(/^[A-Z]{3}$/, { message: 'baseCurrency must be a 3-letter ISO code (e.g. USD)' })
   baseCurrency?: string;
 
   @IsOptional()
@@ -47,4 +48,40 @@ export class UpdateSettingsDto {
   @IsString({ each: true })
   @MaxLength(20, { each: true })
   allowedFileTypes?: string[];
+
+  // ── Email / SMTP ──
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  smtpHost?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  smtpPort?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  smtpSecure?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  smtpUser?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  smtpPass?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  smtpFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  appBaseUrl?: string;
 }

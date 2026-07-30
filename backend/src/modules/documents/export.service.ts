@@ -86,6 +86,8 @@ export class ExportService {
       paragraphLoop: true,
       linebreaks: true,
       delimiters: { start: '{', end: '}' },
+      // Any placeholder without a saved value renders as empty instead of throwing.
+      nullGetter: () => '',
     });
 
     // Build replacement data from field values
@@ -96,7 +98,18 @@ export class ExportService {
       }
     }
 
-    docx.render(data);
+    try {
+      docx.render(data);
+    } catch (err) {
+      // docxtemplater throws on malformed/mismatched braces in the template.
+      const detail =
+        (err as { properties?: { errors?: { properties?: { explanation?: string } }[] } })
+          ?.properties?.errors?.map((e) => e.properties?.explanation).filter(Boolean).join('; ') ||
+        (err as Error).message;
+      throw new BadRequestException(
+        `Failed to generate the document. The Word template has invalid placeholders: ${detail}`,
+      );
+    }
 
     const outputBuffer = docx.getZip().generate({ type: 'nodebuffer' });
     const outputDir = join(process.cwd(), 'uploads', 'exports');
@@ -113,6 +126,8 @@ export class ExportService {
 
   private async exportDesignerTemplate(doc: Document): Promise<{ filePath: string; fileName: string }> {
     const blocks = (doc.template.layoutJson as LayoutBlock[]) || [];
+    // Render right-to-left when the job's target language is RTL (e.g. Arabic).
+    const isRtl = doc.job?.targetLanguage?.direction === 'rtl';
     const valueMap = new Map<string, string>();
 
     for (const fv of doc.fieldValues) {
@@ -124,12 +139,13 @@ export class ExportService {
     const paragraphs: Paragraph[] = [];
 
     for (const block of blocks) {
-      const alignment = this.getAlignment(block.alignment);
+      const alignment = this.getAlignment(block.alignment, isRtl);
       const fontSize = (block.fontSize || 12) * 2; // docx uses half-points
       const color = block.color?.replace('#', '') || '000000';
 
       if (block.type === 'divider') {
         paragraphs.push(new Paragraph({
+          bidirectional: isRtl,
           border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '999999' } },
           spacing: { before: 100, after: 100 },
         }));
@@ -139,6 +155,7 @@ export class ExportService {
       if (block.type === 'header') {
         paragraphs.push(new Paragraph({
           alignment,
+          bidirectional: isRtl,
           heading: HeadingLevel.HEADING_1,
           children: [new TextRun({
             text: block.content || '',
@@ -158,6 +175,7 @@ export class ExportService {
         }
         paragraphs.push(new Paragraph({
           alignment,
+          bidirectional: isRtl,
           children: [new TextRun({
             text,
             size: fontSize,
@@ -186,7 +204,7 @@ export class ExportService {
           if (block.labelPosition !== 'top') {
             runs.push(new TextRun({ text: '\t', size: fontSize }));
           } else {
-            paragraphs.push(new Paragraph({ alignment, children: [...runs] }));
+            paragraphs.push(new Paragraph({ alignment, bidirectional: isRtl, children: [...runs] }));
             runs.length = 0;
           }
         }
@@ -202,7 +220,8 @@ export class ExportService {
         paragraphs.push(new Paragraph({
           alignment: block.showLabel !== false && block.labelPosition !== 'top'
             ? alignment
-            : this.getAlignment(block.valueAlignment || block.alignment),
+            : this.getAlignment(block.valueAlignment || block.alignment, isRtl),
+          bidirectional: isRtl,
           tabStops: [{ type: 'right' as any, position: 9000 }],
           children: runs,
         }));
@@ -240,7 +259,7 @@ export class ExportService {
           }
         }
 
-        paragraphs.push(new Paragraph({ alignment, children: runs }));
+        paragraphs.push(new Paragraph({ alignment, bidirectional: isRtl, children: runs }));
         continue;
       }
     }
@@ -250,6 +269,8 @@ export class ExportService {
       for (const fv of doc.fieldValues) {
         if (fv.templateField) {
           paragraphs.push(new Paragraph({
+            alignment: isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
+            bidirectional: isRtl,
             children: [
               new TextRun({ text: `${fv.templateField.fieldKey}: `, bold: true, size: 24 }),
               new TextRun({ text: fv.value, size: 24 }),
@@ -274,11 +295,13 @@ export class ExportService {
     return { filePath, fileName };
   }
 
-  private getAlignment(alignment?: string): typeof AlignmentType[keyof typeof AlignmentType] {
+  private getAlignment(alignment?: string, isRtl = false): typeof AlignmentType[keyof typeof AlignmentType] {
     switch (alignment) {
       case 'center': return AlignmentType.CENTER;
       case 'right': return AlignmentType.RIGHT;
-      default: return AlignmentType.LEFT;
+      case 'left': return AlignmentType.LEFT;
+      // No explicit alignment → follow the script direction (RTL reads right-aligned).
+      default: return isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT;
     }
   }
 }

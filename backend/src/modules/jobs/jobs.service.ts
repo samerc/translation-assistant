@@ -42,16 +42,32 @@ export class JobsService {
 
   private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
 
+  // Allowed manual status transitions (PATCH /:id/status). Invoice automation moves
+  // jobs via direct batch updates and is intentionally not constrained here.
+  // Backward moves out of a locked state go through reopenJob() instead.
+  private static readonly STATUS_TRANSITIONS: Record<string, string[]> = {
+    quote: ['accepted', 'in_progress', 'lost', 'cancelled'],
+    accepted: ['in_progress', 'lost', 'cancelled'],
+    in_progress: ['delivered', 'lost', 'cancelled'],
+    delivered: ['invoiced', 'cancelled'],
+    invoiced: ['paid', 'cancelled'],
+    paid: [],
+    lost: ['quote', 'in_progress'],
+    cancelled: ['quote', 'in_progress'],
+  };
+
   private isLocked(job: Job): boolean {
     return JobsService.LOCKED_STATUSES.includes(job.status);
   }
 
   private async generateJobNumber(): Promise<string> {
+    // MAX(existing) + 1, not COUNT(*), so numbers aren't reused after deletion.
+    // Concurrent creates are still caught by the unique constraint on jobNumber.
     const result = await this.jobRepository
       .createQueryBuilder('job')
-      .select('COUNT(*)', 'count')
+      .select('MAX(CAST(SUBSTRING(job.jobNumber, 5) AS UNSIGNED))', 'maxNum')
       .getRawOne();
-    const nextNum = (parseInt(result?.count || '0', 10)) + 1;
+    const nextNum = (parseInt(result?.maxNum || '0', 10)) + 1;
     return `JOB-${String(nextNum).padStart(4, '0')}`;
   }
 
@@ -142,7 +158,9 @@ export class JobsService {
 
     if (!client) throw new BadRequestException('Client not found');
     if (!sourceLang) throw new BadRequestException('Source language not found');
+    if (!sourceLang.isActive) throw new BadRequestException('Source language is not active');
     if (dto.targetLanguageId && !targetLang) throw new BadRequestException('Target language not found');
+    if (targetLang && !targetLang.isActive) throw new BadRequestException('Target language is not active');
 
     // Validate all templates exist
     const templateMap = new Map(templates.map((t) => [t.id, t]));
@@ -221,12 +239,17 @@ export class JobsService {
   async update(id: string, dto: UpdateJobDto): Promise<Job> {
     const job = await this.findOneBasic(id);
 
-    if (this.isLocked(job) && !('status' in dto && Object.keys(dto).length === 1)) {
+    if (this.isLocked(job)) {
       throw new BadRequestException('Cannot edit a locked job. Reopen it first.');
     }
 
-    Object.assign(job, dto);
+    // Route status changes through updateStatus() so transition rules + notifications apply.
+    const { status, ...rest } = dto as UpdateJobDto & { status?: string };
+    Object.assign(job, rest);
     await this.jobRepository.save(job);
+    if (status && status !== job.status) {
+      return this.updateStatus(id, status);
+    }
     return this.findOne(id);
   }
 
@@ -310,6 +333,16 @@ export class JobsService {
   async updateStatus(id: string, status: string, changedByUserId?: string): Promise<Job> {
     const job = await this.findOne(id);
     const oldStatus = job.status;
+
+    if (status !== oldStatus) {
+      const allowed = JobsService.STATUS_TRANSITIONS[oldStatus] ?? [];
+      if (!allowed.includes(status)) {
+        throw new BadRequestException(
+          `Invalid status change from '${oldStatus}' to '${status}'.`,
+        );
+      }
+    }
+
     job.status = status;
     await this.jobRepository.save(job);
 

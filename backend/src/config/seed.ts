@@ -81,9 +81,13 @@ export async function seed(dataSource: DataSource) {
   if (existingUsers === 0) {
     const adminRole = await roleRepo.findOne({ where: { name: 'Admin' } });
     if (adminRole) {
-      const hashedPassword = await bcrypt.hash('admin123!', 12);
+      const adminEmail = process.env.ADMIN_INITIAL_EMAIL || 'admin@translation-assistant.com';
+      // Prefer an env-provided initial password; fall back to the documented default.
+      const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || 'admin123!';
+      const usingDefault = !process.env.ADMIN_INITIAL_PASSWORD;
+      const hashedPassword = await bcrypt.hash(initialPassword, 12);
       const admin = userRepo.create({
-        email: 'admin@translation-assistant.com',
+        email: adminEmail,
         password: hashedPassword,
         firstName: 'Admin',
         lastName: 'User',
@@ -91,7 +95,14 @@ export async function seed(dataSource: DataSource) {
         isActive: true,
       });
       await userRepo.save(admin);
-      console.log('Seeded admin user: admin@translation-assistant.com / admin123!');
+      if (usingDefault) {
+        console.warn(
+          `[SECURITY] Seeded admin ${adminEmail} with the DEFAULT password "admin123!". ` +
+          `Change it immediately, or set ADMIN_INITIAL_PASSWORD before first boot.`,
+        );
+      } else {
+        console.log(`Seeded admin user: ${adminEmail} (password from ADMIN_INITIAL_PASSWORD)`);
+      }
     }
   }
 

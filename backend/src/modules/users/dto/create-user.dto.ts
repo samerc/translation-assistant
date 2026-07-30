@@ -6,16 +6,13 @@ import {
   MaxLength,
   IsOptional,
 } from 'class-validator';
-import { IsNotCommonPassword } from '../../../common/validators/is-not-common-password.js';
+import { IsStrongPassword } from '../../../common/validators/is-strong-password.js';
 
 export class CreateUserDto {
   @IsEmail()
   email: string;
 
-  @IsString()
-  @MinLength(8)
-  @MaxLength(100)
-  @IsNotCommonPassword()
+  @IsStrongPassword()
   password: string;
 
   @IsString()

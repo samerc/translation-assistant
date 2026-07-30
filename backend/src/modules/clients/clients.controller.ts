@@ -281,10 +281,22 @@ export class ClientsController {
       return;
     }
 
+    let tokenUserId: string;
     try {
-      this.authService.verifyFileToken(token);
+      tokenUserId = this.authService.verifyFileToken(token);
     } catch {
       res.status(401).json({ message: 'Invalid or expired file token' });
+      return;
+    }
+
+    // The file token proves identity but is not resource-bound — enforce that the
+    // token's owner actually has access to this client before serving the PII image.
+    try {
+      const profile = await this.authService.getProfile(tokenUserId);
+      const isAdmin = profile.role?.name === 'Admin';
+      await this.clientsService.verifyClientAccess(id, tokenUserId, isAdmin);
+    } catch {
+      res.status(403).json({ message: 'You do not have access to this file' });
       return;
     }
 

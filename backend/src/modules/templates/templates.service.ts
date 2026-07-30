@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
+import { sniffType } from '../../common/utils/file-signature.js';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
@@ -102,6 +103,13 @@ export class TemplatesService {
 
     // Scan for placeholders before accepting
     const buffer = readFileSync(file.path);
+    // A real .docx is a ZIP (PK signature) — reject spoofed/renamed content
+    // before handing it to the parser.
+    if (sniffType(buffer.subarray(0, 16)) !== 'zip') {
+      const { unlinkSync } = await import('fs');
+      unlinkSync(file.path);
+      throw new BadRequestException('The uploaded file is not a valid .docx document');
+    }
     const result = await mammoth.convertToHtml({ buffer });
     const rawText = result.value.replace(/<[^>]*>/g, '');
 

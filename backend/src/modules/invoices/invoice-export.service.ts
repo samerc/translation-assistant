@@ -15,11 +15,20 @@ import {
   WidthType,
   AlignmentType,
   BorderStyle,
+  VerticalAlign,
+  ImageRun,
   HeadingLevel,
 } from 'docx';
 import PDFDocument from 'pdfkit';
 import { Invoice } from './entities/invoice.entity.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { User } from '../users/entities/user.entity.js';
+
+interface InvoiceBranding {
+  businessName: string;
+  businessAddress: string;
+  logo: { buffer: Buffer; docxType: 'png' | 'jpg' } | null;
+}
 
 @Injectable()
 export class InvoiceExportService {
@@ -28,7 +37,64 @@ export class InvoiceExportService {
     private readonly invoiceRepository: Repository<Invoice>,
     @InjectRepository(AppSettings)
     private readonly settingsRepository: Repository<AppSettings>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
+
+  // ── Per-user invoice branding (name/address/logo of the invoice's creator) ──
+
+  private async getBranding(invoice: Invoice): Promise<InvoiceBranding> {
+    const creator = invoice.createdByUserId
+      ? await this.userRepository.findOne({ where: { id: invoice.createdByUserId } })
+      : null;
+    return {
+      businessName: creator?.businessName?.trim() || '',
+      businessAddress: creator?.businessAddress?.trim() || '',
+      logo: this.parseLogo(creator?.logo),
+    };
+  }
+
+  private parseLogo(dataUrl?: string | null): InvoiceBranding['logo'] {
+    if (!dataUrl) return null;
+    const m = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(dataUrl);
+    if (!m) return null;
+    return {
+      buffer: Buffer.from(m[2], 'base64'),
+      docxType: m[1].toLowerCase() === 'png' ? 'png' : 'jpg',
+    };
+  }
+
+  /** Read intrinsic pixel dimensions from a PNG/JPEG buffer (no external dep). */
+  private imageSize(buffer: Buffer, isPng: boolean): { width: number; height: number } | null {
+    try {
+      if (isPng) {
+        if (buffer.length < 24) return null;
+        return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+      }
+      // JPEG: walk segment markers to the Start-Of-Frame that carries the size.
+      let off = 2;
+      while (off + 9 < buffer.length) {
+        if (buffer[off] !== 0xff) {
+          off++;
+          continue;
+        }
+        const marker = buffer[off + 1];
+        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+          return { height: buffer.readUInt16BE(off + 5), width: buffer.readUInt16BE(off + 7) };
+        }
+        off += 2 + buffer.readUInt16BE(off + 2);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Scale intrinsic dimensions into a bounding box, preserving aspect ratio. */
+  private fitBox(w: number, h: number, maxW: number, maxH: number) {
+    const ratio = Math.min(maxW / w, maxH / h, 1);
+    return { width: Math.round(w * ratio), height: Math.round(h * ratio) };
+  }
 
   private async getInvoice(id: string): Promise<Invoice> {
     const invoice = await this.invoiceRepository.findOne({
@@ -54,29 +120,69 @@ export class InvoiceExportService {
 
   async exportWord(id: string): Promise<{ filePath: string; fileName: string }> {
     const invoice = await this.getInvoice(id);
-    const settings = await this.getSettings();
+    const branding = await this.getBranding(invoice);
 
-    const companyName = settings?.companyName || 'Company';
-    const companyAddress = settings?.companyAddress || '';
-
+    // Header block may contain a table (logo beside name) alongside paragraphs.
+    const header: (Paragraph | Table)[] = [];
     const children: Paragraph[] = [];
 
-    // Header - Company info
-    children.push(new Paragraph({
-      children: [new TextRun({ text: companyName, bold: true, size: 32, font: 'Arial' })],
-      alignment: AlignmentType.LEFT,
-      spacing: { after: 100 },
-    }));
-
-    if (companyAddress) {
-      children.push(new Paragraph({
-        children: [new TextRun({ text: companyAddress, size: 18, color: '666666', font: 'Arial' })],
-        spacing: { after: 200 },
+    // Business name + address paragraphs (shown as text when there's no logo,
+    // or in the right-hand cell of the logo table when there is).
+    const nameParas: Paragraph[] = [];
+    if (branding.businessName) {
+      nameParas.push(new Paragraph({
+        children: [new TextRun({ text: branding.businessName, bold: true, size: 32, font: 'Arial' })],
+        spacing: { after: branding.businessAddress ? 40 : 100 },
+      }));
+    }
+    if (branding.businessAddress) {
+      nameParas.push(new Paragraph({
+        children: [new TextRun({ text: branding.businessAddress, size: 18, color: '666666', font: 'Arial' })],
+        spacing: { after: 100 },
       }));
     }
 
+    if (branding.logo) {
+      const dims = this.imageSize(branding.logo.buffer, branding.logo.docxType === 'png');
+      const box = dims ? this.fitBox(dims.width, dims.height, 130, 52) : { width: 104, height: 52 };
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+      const cellBorders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
+      header.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: {
+          top: noBorder, bottom: noBorder, left: noBorder, right: noBorder,
+          insideHorizontal: noBorder, insideVertical: noBorder,
+        },
+        rows: [new TableRow({
+          children: [
+            new TableCell({
+              borders: cellBorders,
+              verticalAlign: VerticalAlign.CENTER,
+              width: { size: 25, type: WidthType.PERCENTAGE },
+              children: [new Paragraph({
+                children: [new ImageRun({
+                  type: branding.logo.docxType,
+                  data: branding.logo.buffer,
+                  transformation: { width: box.width, height: box.height },
+                })],
+              })],
+            }),
+            new TableCell({
+              borders: cellBorders,
+              verticalAlign: VerticalAlign.CENTER,
+              width: { size: 75, type: WidthType.PERCENTAGE },
+              children: nameParas.length ? nameParas : [new Paragraph({})],
+            }),
+          ],
+        })],
+      }));
+      header.push(new Paragraph({ spacing: { after: 100 } }));
+    } else {
+      header.push(...nameParas);
+    }
+
     // Invoice title
-    children.push(new Paragraph({
+    header.push(new Paragraph({
       children: [new TextRun({ text: 'INVOICE', bold: true, size: 40, font: 'Arial' })],
       alignment: AlignmentType.RIGHT,
       spacing: { after: 200 },
@@ -206,7 +312,7 @@ export class InvoiceExportService {
 
     const doc = new DocxDocument({
       sections: [{
-        children: [...children, table, ...totalsChildren, ...notesChildren],
+        children: [...header, ...children, table, ...totalsChildren, ...notesChildren],
       }],
     });
 
@@ -223,10 +329,7 @@ export class InvoiceExportService {
 
   async exportPdf(id: string): Promise<{ filePath: string; fileName: string }> {
     const invoice = await this.getInvoice(id);
-    const settings = await this.getSettings();
-
-    const companyName = settings?.companyName || 'Company';
-    const companyAddress = settings?.companyAddress || '';
+    const branding = await this.getBranding(invoice);
 
     const dir = this.ensureExportDir();
     const fileName = `${invoice.invoiceNumber}.pdf`;
@@ -245,11 +348,27 @@ export class InvoiceExportService {
 
       const pageWidth = doc.page.width - 100; // margins
 
-      // Company header
-      doc.fontSize(18).font('Helvetica-Bold').text(companyName, 50, 50);
-      if (companyAddress) {
-        doc.fontSize(9).font('Helvetica').fillColor('#666666').text(companyAddress, 50, 72);
+      // Company header — per-user branding, logo beside the business name.
+      let textX = 50;
+      if (branding.logo) {
+        try {
+          doc.image(branding.logo.buffer, 50, 45, { fit: [110, 46] });
+          textX = 50 + 110 + 14;
+        } catch {
+          textX = 50; // corrupt image → fall back to text-only header
+        }
       }
+      let headerY = 50;
+      if (branding.businessName) {
+        doc.fontSize(16).font('Helvetica-Bold').fillColor('#000000')
+          .text(branding.businessName, textX, headerY, { width: 300 });
+        headerY += 20;
+      }
+      if (branding.businessAddress) {
+        doc.fontSize(9).font('Helvetica').fillColor('#666666')
+          .text(branding.businessAddress, textX, branding.businessName ? headerY : 52, { width: 260 });
+      }
+      doc.fillColor('#000000');
 
       // INVOICE title
       doc.fontSize(28).font('Helvetica-Bold').fillColor('#000000').text('INVOICE', 50, 50, { align: 'right' });

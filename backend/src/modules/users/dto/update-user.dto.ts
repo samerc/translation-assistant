@@ -7,7 +7,7 @@ import {
   IsBoolean,
   IsIn,
 } from 'class-validator';
-import { IsNotCommonPassword } from '../../../common/validators/is-not-common-password.js';
+import { IsStrongPassword } from '../../../common/validators/is-strong-password.js';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -42,6 +42,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   darkMode?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  businessName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  businessAddress?: string;
 }
 
 export class ChangePasswordDto {
@@ -50,9 +60,6 @@ export class ChangePasswordDto {
   @MaxLength(500)
   currentPassword: string;
 
-  @IsString()
-  @MinLength(8)
-  @MaxLength(100)
-  @IsNotCommonPassword()
+  @IsStrongPassword()
   newPassword: string;
 }

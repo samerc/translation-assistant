@@ -7,6 +7,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { extname } from 'path';
 import { AppSettings } from '../../modules/settings/entities/app-settings.entity.js';
+import {
+  readHeaderBytes,
+  sniffType,
+  VERIFIABLE_TYPES,
+  ALWAYS_BLOCKED_EXTENSIONS,
+} from '../utils/file-signature.js';
 
 @Injectable()
 export class FileValidationPipe implements PipeTransform {
@@ -31,13 +37,30 @@ export class FileValidationPipe implements PipeTransform {
       );
     }
 
-    // Check allowed file types
+    const fileExt = extname(file.originalname).toLowerCase();
+
+    // Executable/script/markup types are never accepted — even if the admin left
+    // the allow-list empty (which otherwise means "any type").
+    if (ALWAYS_BLOCKED_EXTENSIONS.includes(fileExt)) {
+      throw new BadRequestException(`File type "${fileExt}" is not allowed`);
+    }
+
+    // Check the configurable allow-list (when set).
     const allowedTypes = settings?.allowedFileTypes;
-    if (allowedTypes && allowedTypes.length > 0) {
-      const fileExt = extname(file.originalname).toLowerCase();
-      if (!allowedTypes.includes(fileExt)) {
+    if (allowedTypes && allowedTypes.length > 0 && !allowedTypes.includes(fileExt)) {
+      throw new BadRequestException(
+        `File type "${fileExt}" is not allowed. Allowed types: ${allowedTypes.join(', ')}`,
+      );
+    }
+
+    // For content-verifiable types, confirm the bytes match the claimed extension
+    // (defeats polyglots / renamed files like shell.php.jpg).
+    const expected = VERIFIABLE_TYPES[fileExt];
+    if (expected) {
+      const header = readHeaderBytes({ buffer: file.buffer, path: file.path });
+      if (!header || sniffType(header) !== expected) {
         throw new BadRequestException(
-          `File type "${fileExt}" is not allowed. Allowed types: ${allowedTypes.join(', ')}`,
+          `File content does not match its "${fileExt}" extension`,
         );
       }
     }

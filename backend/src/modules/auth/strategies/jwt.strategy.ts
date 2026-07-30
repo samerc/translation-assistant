@@ -8,7 +8,8 @@ import { User } from '../../users/entities/user.entity.js';
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  email?: string;
+  type?: 'access' | 'refresh';
 }
 
 @Injectable()
@@ -30,6 +31,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload): Promise<User> {
+    // Refresh tokens must never be accepted as access tokens (same signing secret).
+    if (payload.type === 'refresh') {
+      throw new UnauthorizedException();
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
       relations: ['role', 'role.permissions'],

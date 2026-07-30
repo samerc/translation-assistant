@@ -9,9 +9,10 @@ import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { User } from '../users/entities/user.entity.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Invoice, InvoiceItem, Job, JobUser, Client, AppSettings])],
+  imports: [TypeOrmModule.forFeature([Invoice, InvoiceItem, Job, JobUser, Client, AppSettings, User])],
   controllers: [InvoicesController],
   providers: [InvoicesService, InvoiceExportService],
   exports: [InvoicesService],

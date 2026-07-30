@@ -103,6 +103,27 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
+// Multipart upload (e.g. logo/avatar). Lets the browser set the multipart
+// Content-Type boundary; reuses the same auth header + 401→refresh→retry flow.
+async function upload<T>(endpoint: string, formData: FormData, method = 'PATCH'): Promise<T> {
+  const doFetch = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(`${API_URL}${endpoint}`, { method, headers, credentials: 'include', body: formData });
+  };
+
+  let res = await doFetch();
+  if (res.status === 401 && (await tryRefresh())) {
+    res = await doFetch();
+  }
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: 'Upload failed' }));
+    throw new ApiError(res.status, error.message);
+  }
+  return res.json();
+}
+
 export const api = {
   get: <T>(endpoint: string) => request<T>(endpoint),
   post: <T>(endpoint: string, body?: unknown) =>
@@ -110,6 +131,7 @@ export const api = {
   patch: <T>(endpoint: string, body?: unknown) =>
     request<T>(endpoint, { method: 'PATCH', body }),
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
+  upload,
 };
 
 export { ApiError };

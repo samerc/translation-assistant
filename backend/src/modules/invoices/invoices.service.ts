@@ -79,10 +79,18 @@ export class InvoicesService {
     return `${prefix}${String(nextNum).padStart(4, '0')}`;
   }
 
+  private round2(n: number): number {
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+  }
+
   private calculateTotals(items: { quantity: number; unitPrice: number }[], taxRate: number) {
-    const subtotal = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice), 0);
-    const taxAmount = Math.round(subtotal * taxRate) / 100;
-    const total = subtotal + taxAmount;
+    // Round each line, then derive totals from rounded values so the stored
+    // decimal(10,2) columns match what's displayed (no truncation drift).
+    const subtotal = this.round2(
+      items.reduce((sum, item) => sum + this.round2(Number(item.quantity) * Number(item.unitPrice)), 0),
+    );
+    const taxAmount = this.round2(subtotal * (Number(taxRate) / 100));
+    const total = this.round2(subtotal + taxAmount);
     return { subtotal, taxAmount, total };
   }
 
@@ -167,7 +175,7 @@ export class InvoicesService {
     return invoice;
   }
 
-  async create(dto: CreateInvoiceDto, userId: string): Promise<Invoice> {
+  async create(dto: CreateInvoiceDto, userId: string, isAdmin = false): Promise<Invoice> {
     // Validate all entities in parallel
     const jobIds = dto.items.filter((i) => i.jobId).map((i) => i.jobId!);
     const [client, jobs, settings] = await Promise.all([
@@ -187,6 +195,10 @@ export class InvoicesService {
           throw new BadRequestException('One of the linked jobs does not belong to this client');
         }
       }
+    }
+    // IDOR guard: the caller must be able to access every job they link.
+    for (const jobId of new Set(jobIds)) {
+      await this.verifyJobAccess(jobId, userId, isAdmin);
     }
     const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
@@ -232,7 +244,7 @@ export class InvoicesService {
     return this.findOne(savedId);
   }
 
-  async update(id: string, dto: UpdateInvoiceDto): Promise<Invoice> {
+  async update(id: string, dto: UpdateInvoiceDto, userId?: string, isAdmin = false): Promise<Invoice> {
     const invoice = await this.findOne(id);
     if (invoice.status !== 'draft') {
       throw new BadRequestException('Only draft invoices can be edited');
@@ -246,6 +258,13 @@ export class InvoicesService {
 
     // Replace items if provided
     if (dto.items) {
+      // IDOR guard: verify access to every job linked by the new item set.
+      if (userId) {
+        const jobIds = new Set(dto.items.filter((i) => i.jobId).map((i) => i.jobId!));
+        for (const jobId of jobIds) {
+          await this.verifyJobAccess(jobId, userId, isAdmin);
+        }
+      }
       await this.itemRepository.delete({ invoiceId: id });
       const items = dto.items.map((item, i) =>
         this.itemRepository.create({

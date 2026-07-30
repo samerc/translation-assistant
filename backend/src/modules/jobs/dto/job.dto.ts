@@ -1,7 +1,7 @@
 import {
   IsString, IsOptional, IsInt, IsNumber, IsBoolean, IsIn, IsUUID,
   IsDateString, IsArray, ValidateNested, MinLength, MaxLength, Min, Max,
-  ArrayMaxSize,
+  ArrayMaxSize, Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -146,8 +146,7 @@ export class UpdateJobDto {
   freeOfChargeReason?: string;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(10)
+  @Matches(/^[A-Z]{3}$/, { message: 'paymentCurrency must be a 3-letter ISO code (e.g. USD)' })
   paymentCurrency?: string;
 
   @IsOptional()

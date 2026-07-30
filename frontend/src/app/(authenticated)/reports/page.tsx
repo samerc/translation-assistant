@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { useSettings } from '@/lib/settings-context';
+import { formatCurrency } from '@/lib/format';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar,
@@ -35,6 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const { baseCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState('revenue');
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [clientData, setClientData] = useState<ClientData[]>([]);
@@ -47,15 +50,20 @@ export default function ReportsPage() {
       const from = new Date(now.getFullYear(), now.getMonth() - 6, 1);
       const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`;
       api.get<RevenueData[]>(`/reports/revenue?period=${period}&from=${fromStr}`)
-        .then(setRevenueData)
+        // Aggregates come back as strings from the DB — coerce for recharts + toFixed.
+        .then((rows) => setRevenueData(rows.map((r) => ({ ...r, revenue: Number(r.revenue) }))))
         .catch(() => setRevenueData([]));
     } else if (activeTab === 'client') {
       api.get<ClientData[]>('/reports/by-client')
-        .then(setClientData)
+        .then((rows) => setClientData(rows.map((c) => ({
+          ...c,
+          totalRevenue: Number(c.totalRevenue),
+          invoiceCount: Number(c.invoiceCount),
+        }))))
         .catch(() => setClientData([]));
     } else if (activeTab === 'status') {
       api.get<StatusData[]>('/reports/job-status')
-        .then(setStatusData)
+        .then((rows) => setStatusData(rows.map((s) => ({ ...s, count: Number(s.count) }))))
         .catch(() => setStatusData([]));
     }
   }, [activeTab, period]);
@@ -138,8 +146,8 @@ export default function ReportsPage() {
                   <Bar dataKey="totalRevenue" fill="var(--color-primary)" radius={[4, 4, 0, 0]} name="Revenue" />
                 </BarChart>
               </ResponsiveContainer>
-              <div className="mt-6">
-                <table className="w-full text-sm">
+              <div className="mt-6 overflow-x-auto">
+                <table className="w-full text-sm min-w-[400px]">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-semibold text-text-secondary">Client</th>
@@ -152,7 +160,7 @@ export default function ReportsPage() {
                       <tr key={c.clientId} className="border-b border-border last:border-0">
                         <td className="py-2 text-text">{c.clientName}</td>
                         <td className="py-2 text-text-secondary text-right">{c.invoiceCount}</td>
-                        <td className="py-2 text-text font-medium text-right">${c.totalRevenue.toFixed(2)}</td>
+                        <td className="py-2 text-text font-medium text-right">{formatCurrency(c.totalRevenue, baseCurrency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -186,8 +194,8 @@ export default function ReportsPage() {
                 </PieChart>
               </ResponsiveContainer>
               </div>
-              <div className="w-full lg:flex-1">
-                <table className="w-full text-sm">
+              <div className="w-full lg:flex-1 overflow-x-auto">
+                <table className="w-full text-sm min-w-[300px]">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-semibold text-text-secondary">Status</th>
