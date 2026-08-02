@@ -175,6 +175,17 @@ export class InvoicesService {
     return invoice;
   }
 
+  /** The invoice client's primary (or first) email — the default email-to-client recipient. */
+  async getClientEmail(invoiceId: string): Promise<string | null> {
+    const invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+      relations: ['client', 'client.emails'],
+    });
+    const emails = invoice?.client?.emails || [];
+    const chosen = emails.find((e) => e.isPrimary) || emails[0];
+    return chosen?.email || null;
+  }
+
   async create(dto: CreateInvoiceDto, userId: string, isAdmin = false): Promise<Invoice> {
     // Validate all entities in parallel
     const jobIds = dto.items.filter((i) => i.jobId).map((i) => i.jobId!);

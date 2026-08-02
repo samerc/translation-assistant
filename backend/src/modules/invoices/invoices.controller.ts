@@ -1,13 +1,14 @@
 import {
   Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  UseGuards, Res, NotFoundException, ParseUUIDPipe,
+  UseGuards, Res, NotFoundException, BadRequestException, ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream, existsSync, unlinkSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceExportService } from './invoice-export.service.js';
-import { CreateInvoiceDto, UpdateInvoiceDto, UpdateInvoiceStatusDto, RecordPaymentDto } from './dto/invoice.dto.js';
+import { MailService } from '../mail/mail.service.js';
+import { CreateInvoiceDto, UpdateInvoiceDto, UpdateInvoiceStatusDto, RecordPaymentDto, SendInvoiceEmailDto } from './dto/invoice.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -19,6 +20,7 @@ export class InvoicesController {
   constructor(
     private readonly invoicesService: InvoicesService,
     private readonly exportService: InvoiceExportService,
+    private readonly mailService: MailService,
   ) {}
 
   private isAdmin(user: User): boolean {
@@ -117,6 +119,29 @@ export class InvoicesController {
     const stream = createReadStream(filePath);
     stream.pipe(res);
     stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
+  }
+
+  @Post(':id/email')
+  @RequirePermissions('invoices:read')
+  async emailInvoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SendInvoiceEmailDto,
+    @CurrentUser() user: User,
+  ) {
+    const invoice = await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+    const recipient = dto.email || (await this.invoicesService.getClientEmail(id));
+    if (!recipient) {
+      throw new BadRequestException(
+        'No recipient email — the client has no email on file. Provide one to send.',
+      );
+    }
+    const { filePath } = await this.exportService.exportPdf(id);
+    try {
+      await this.mailService.sendInvoiceEmail(recipient, invoice.invoiceNumber, filePath, dto.message);
+    } finally {
+      try { unlinkSync(filePath); } catch {}
+    }
+    return { sent: true, to: recipient };
   }
 
   @Delete(':id')

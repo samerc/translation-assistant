@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { toast } from '@/lib/toast';
 
 interface ClientOption { id: string; name: string; }
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
@@ -116,6 +117,7 @@ export default function NewInvoicePage() {
           unitPrice: i.unitPrice,
         })),
       });
+      toast.success('Invoice created');
       router.push(`/invoices/${invoice.id}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create invoice';

@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog } from '@/lib/confirm';
+import { toast } from '@/lib/toast';
 import { formatDate } from '@/lib/format';
 
 interface InvoiceItem {
@@ -65,6 +66,10 @@ export default function InvoiceDetailPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ issueDate: '', dueDate: '', taxRate: 0, currency: '', notes: '' });
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const loadInvoice = () => {
     api.get<Invoice>(`/invoices/${id}`).then((inv) => {
@@ -87,10 +92,11 @@ export default function InvoiceDetailPage() {
     }
     try {
       await api.patch(`/invoices/${id}/status`, { status: newStatus });
+      toast.success(`Invoice marked ${newStatus}`);
       loadInvoice();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update status';
-      setError(msg);
+      toast.error(msg);
       logger.error('Failed to update status', err, 'invoices');
     }
   };
@@ -103,10 +109,11 @@ export default function InvoiceDetailPage() {
         paidAt: paymentDate,
       });
       setShowPaymentModal(false);
+      toast.success('Payment recorded');
       loadInvoice();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to record payment';
-      setError(msg);
+      toast.error(msg);
       logger.error('Failed to record payment', err, 'invoices');
     } finally {
       setSaving(false);
@@ -117,10 +124,11 @@ export default function InvoiceDetailPage() {
     if (!(await confirmDialog('Delete this draft invoice?'))) return;
     try {
       await api.delete(`/invoices/${id}`);
+      toast.success('Invoice deleted');
       router.push('/invoices');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to delete invoice';
-      setError(msg);
+      toast.error(msg);
       logger.error('Failed to delete invoice', err, 'invoices');
     }
   };
@@ -142,8 +150,28 @@ export default function InvoiceDetailPage() {
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Export failed';
-      setError(msg);
+      toast.error(msg);
       logger.error(`Failed to export invoice as ${format}`, err, 'invoices');
+    }
+  };
+
+  const handleEmailInvoice = async () => {
+    setSendingEmail(true);
+    try {
+      const res = await api.post<{ sent: boolean; to: string }>(`/invoices/${id}/email`, {
+        email: emailTo.trim() || undefined,
+        message: emailMessage.trim() || undefined,
+      });
+      setShowEmailModal(false);
+      setEmailTo('');
+      setEmailMessage('');
+      toast.success(`Invoice emailed to ${res.to}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send email';
+      toast.error(msg);
+      logger.error('Failed to email invoice', err, 'invoices');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -170,10 +198,11 @@ export default function InvoiceDetailPage() {
         notes: editForm.notes || undefined,
       });
       setEditing(false);
+      toast.success('Changes saved');
       loadInvoice();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save changes';
-      setError(msg);
+      toast.error(msg);
       logger.error('Failed to save invoice', err, 'invoices');
     } finally {
       setSaving(false);
@@ -216,6 +245,10 @@ export default function InvoiceDetailPage() {
           <button onClick={() => handleExport('word')}
             className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 flex items-center gap-1.5">
             <ExportIcon className="w-4 h-4" /> Word
+          </button>
+          <button onClick={() => { setEmailTo(''); setEmailMessage(''); setShowEmailModal(true); }}
+            className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 flex items-center gap-1.5">
+            <EmailIcon className="w-4 h-4" /> Email
           </button>
           {invoice.status === 'draft' && !editing && (
             <button onClick={startEditing}
@@ -390,7 +423,50 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Email invoice modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface border border-border rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-text mb-1">Email invoice {invoice.invoiceNumber}</h3>
+            <p className="text-sm text-text-secondary mb-4">The invoice PDF is attached automatically.</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Recipient</label>
+                <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
+                  placeholder="Leave blank to use the client's email on file"
+                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Message (optional)</label>
+                <textarea value={emailMessage} onChange={(e) => setEmailMessage(e.target.value)} rows={3}
+                  placeholder="A short note to include in the email body"
+                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={handleEmailInvoice} disabled={sendingEmail}
+                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+                {sendingEmail ? 'Sending...' : 'Send'}
+              </button>
+              <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}
+                className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 disabled:opacity-50">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function EmailIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+      <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+    </svg>
   );
 }
 
