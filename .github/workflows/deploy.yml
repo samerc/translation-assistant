@@ -1,0 +1,60 @@
+name: Deploy (manual)
+
+# Manual trigger only — deploys stay intentional (single prod environment, no staging).
+# Run from the Actions tab → "Deploy (manual)" → Run workflow.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_HOST     e.g. 144.91.89.20
+#   DEPLOY_USER     e.g. samer
+#   DEPLOY_SSH_KEY  a private key whose public half is in the server's authorized_keys
+#
+# NOTE: this uses `pm2 restart` (code-only). If you changed the server's
+# ecosystem env block, do a manual `pm2 delete` + `pm2 start` instead — PM2
+# caches the env and won't reload it on restart.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build backend
+        run: cd backend && npm ci && npm run build
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://translate.fancyshark.com/api
+
+      - name: Package
+        run: |
+          tar czf ta-backend.tar.gz  -C backend  dist package.json package-lock.json
+          tar czf ta-frontend.tar.gz -C frontend .next/standalone .next/static
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Upload artifacts
+        run: |
+          scp -i ~/.ssh/id_deploy ta-backend.tar.gz  "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:C:/apps/translation-assistant/backend-deploy.tar.gz"
+          scp -i ~/.ssh/id_deploy ta-frontend.tar.gz "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:C:/apps/translation-assistant/frontend-deploy.tar.gz"
+
+      - name: Extract, install deps, restart (server / cmd.exe)
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "cd C:\apps\translation-assistant && tar xzf backend-deploy.tar.gz -C backend && tar xzf frontend-deploy.tar.gz -C frontend & del backend-deploy.tar.gz frontend-deploy.tar.gz 2>nul & xcopy /E /I /Y frontend\.next\static frontend\.next\standalone\frontend\.next\static >nul 2>&1 & cd backend && npm install --omit=dev & cd .. & pm2 restart ta-backend ta-frontend & pm2 save"
+
+      - name: Smoke test
+        run: |
+          sleep 10
+          curl -fsS https://translate.fancyshark.com/api/health
+          curl -fsS -o /dev/null -w "site HTTP %{http_code}\n" https://translate.fancyshark.com/
