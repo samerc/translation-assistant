@@ -18,6 +18,11 @@ is idempotent):
   it translators can't load languages/labels and can't create jobs. A backup of
   `roles`/`role_permissions` taken before this change is at
   `C:\apps\translation-assistant\backup-role-permissions-2026-10-26.sql`.
+- **Invoice payments backfill** — after the deploy has created `invoice_payments`
+  (synchronize does that on boot), run `INVOICE_PAYMENTS_BACKFILL` from
+  `backend/src/migrations/1793015124357-InvoicePayments.ts`. It turns each
+  already-paid invoice into one payment row; without it, revenue reports (now summed
+  from payments) drop every invoice paid before this change.
 
 ---
 

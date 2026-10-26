@@ -5,9 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource } from 'typeorm';
+import { Repository, In, DataSource, EntityManager } from 'typeorm';
 import { Invoice } from './entities/invoice.entity.js';
 import { InvoiceItem } from './entities/invoice-item.entity.js';
+import { InvoicePayment } from './entities/invoice-payment.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
@@ -118,8 +119,9 @@ export class InvoicesService {
 
   private static readonly VALID_TRANSITIONS: Record<string, string[]> = {
     draft: ['sent', 'cancelled'],
-    sent: ['paid', 'overdue', 'cancelled'],
-    overdue: ['paid', 'cancelled'],
+    // 'paid' is reached only by recording payments (recordPayment), never set by hand.
+    sent: ['overdue', 'cancelled'],
+    overdue: ['cancelled'],
     paid: [],
     cancelled: ['draft'],
   };
@@ -260,10 +262,13 @@ export class InvoicesService {
       .createQueryBuilder('inv')
       .leftJoinAndSelect('inv.client', 'client')
       .leftJoinAndSelect('inv.items', 'items')
+      .leftJoinAndSelect('inv.payments', 'payments')
       .leftJoin('items.job', 'job')
       .addSelect(['job.id', 'job.jobNumber', 'job.title'])
       .where('inv.id = :id', { id })
       .orderBy('items.sortOrder', 'ASC')
+      .addOrderBy('payments.paidAt', 'ASC')
+      .addOrderBy('payments.createdAt', 'ASC')
       .getOne();
     if (!invoice) throw new NotFoundException('Invoice not found');
     return invoice;
@@ -422,6 +427,12 @@ export class InvoicesService {
       throw new BadRequestException('This status transition is not allowed');
     }
 
+    if (status === 'cancelled' && Number(invoice.paidAmount) > 0) {
+      throw new BadRequestException(
+        'This invoice has payments recorded. Delete them before cancelling it.',
+      );
+    }
+
     const oldStatus = invoice.status;
     invoice.status = status;
 
@@ -446,29 +457,122 @@ export class InvoicesService {
     return this.findOne(id);
   }
 
-  async recordPayment(id: string, dto: RecordPaymentDto): Promise<Invoice> {
-    const invoice = await this.findOne(id);
-    if (!['sent', 'overdue'].includes(invoice.status)) {
-      throw new BadRequestException(
-        'Can only record payment for sent or overdue invoices',
+  // ── Payments ──
+  // An invoice can be paid in parts. Each payment is a row; Invoice.paidAmount is
+  // their sum. The invoice stays sent/overdue (shown as "partially paid") until
+  // the balance reaches zero, then becomes paid and moves its jobs to paid.
+
+  async recordPayment(
+    id: string,
+    dto: RecordPaymentDto,
+    userId?: string,
+  ): Promise<Invoice> {
+    await this.dataSource.transaction(async (manager) => {
+      // Row lock: two concurrent payments can't both pass the balance check.
+      const invoice = await manager.findOne(Invoice, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!invoice) throw new NotFoundException('Invoice not found');
+      if (!['sent', 'overdue'].includes(invoice.status)) {
+        throw new BadRequestException(
+          'Payments can only be recorded on sent or overdue invoices',
+        );
+      }
+      const balance = this.round(
+        Number(invoice.total) - Number(invoice.paidAmount ?? 0),
       );
+      const amount = this.round(dto.paidAmount);
+      if (amount > balance) {
+        throw new BadRequestException(
+          `The payment is more than the balance due (${invoice.currency} ${balance.toFixed(2)})`,
+        );
+      }
+      await manager.save(
+        manager.create(InvoicePayment, {
+          invoiceId: id,
+          amount,
+          paidAt: dto.paidAt || this.today(),
+          method: dto.method?.trim() || null,
+          note: dto.note?.trim() || null,
+          createdByUserId: userId ?? null,
+        }),
+      );
+      await this.applyPayments(manager, invoice);
+    });
+    return this.findOne(id);
+  }
+
+  async removePayment(id: string, paymentId: string): Promise<Invoice> {
+    await this.dataSource.transaction(async (manager) => {
+      const invoice = await manager.findOne(Invoice, {
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!invoice) throw new NotFoundException('Invoice not found');
+      const result = await manager.delete(InvoicePayment, {
+        id: paymentId,
+        invoiceId: id,
+      });
+      if (!result.affected) throw new NotFoundException('Payment not found');
+      await this.applyPayments(manager, invoice);
+    });
+    return this.findOne(id);
+  }
+
+  /** Recompute paidAmount from the payment rows and move the invoice (and its
+   *  jobs) into or out of 'paid'. */
+  private async applyPayments(
+    manager: EntityManager,
+    invoice: Invoice,
+  ): Promise<void> {
+    const sum = await manager
+      .createQueryBuilder(InvoicePayment, 'p')
+      .select('COALESCE(SUM(p.amount), 0)', 'paid')
+      .addSelect('MAX(p.paidAt)', 'lastPaidAt')
+      .where('p.invoice_id = :id', { id: invoice.id })
+      .getRawOne<{ paid: string | number; lastPaidAt: string | null }>();
+    const paid = this.round(Number(sum?.paid ?? 0));
+    const fullyPaid = paid > 0 && paid >= this.round(Number(invoice.total));
+
+    let status = invoice.status;
+    if (fullyPaid) status = 'paid';
+    else if (invoice.status === 'paid') {
+      // A payment was removed — back to open, overdue if the due date passed.
+      status = invoice.dueDate < this.today() ? 'overdue' : 'sent';
     }
 
-    invoice.status = 'paid';
-    invoice.paidAmount = dto.paidAmount;
-    invoice.paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
+    await manager.update(Invoice, invoice.id, {
+      paidAmount: paid > 0 ? paid : null,
+      paidAt: fullyPaid && sum?.lastPaidAt ? new Date(sum.lastPaidAt) : null,
+      status,
+    });
 
-    // Batch transition linked jobs to 'paid'
-    const jobIds = invoice.items.filter((i) => i.jobId).map((i) => i.jobId);
-    if (jobIds.length > 0) {
-      await this.jobRepository.update(
+    const jobIds = await manager
+      .find(InvoiceItem, { where: { invoiceId: invoice.id } })
+      .then((items) => items.filter((i) => i.jobId).map((i) => i.jobId));
+    if (jobIds.length === 0 || status === invoice.status) return;
+    if (status === 'paid') {
+      await manager.update(
+        Job,
         { id: In(jobIds), status: In(['invoiced', 'delivered']) },
         { status: 'paid' },
       );
+    } else if (invoice.status === 'paid') {
+      await manager.update(
+        Job,
+        { id: In(jobIds), status: 'paid' },
+        { status: 'invoiced' },
+      );
     }
+  }
 
-    await this.invoiceRepository.save(invoice);
-    return this.findOne(id);
+  private round(n: number): number {
+    return Math.round(n * 100) / 100;
+  }
+
+  private today(): string {
+    return new Date().toISOString().slice(0, 10);
   }
 
   async remove(id: string): Promise<void> {

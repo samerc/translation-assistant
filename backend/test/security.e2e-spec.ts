@@ -1071,3 +1071,33 @@ describe('Invoice PDF (Unicode fonts + pagination)', () => {
     }
   });
 });
+
+describe('Invoice status vs payments', () => {
+  const make = (invoice: object) => {
+    const svc = new InvoicesService(
+      { save: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    jest.spyOn(svc, 'findOne').mockResolvedValue(invoice as any);
+    return svc;
+  };
+
+  it('"paid" can only be reached by recording payments', async () => {
+    const svc = make({ status: 'sent', paidAmount: null, items: [] });
+    await expect(svc.updateStatus('inv-1', 'paid')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('an invoice with payments cannot be cancelled', async () => {
+    const svc = make({ status: 'sent', paidAmount: '30.00', items: [] });
+    await expect(svc.updateStatus('inv-1', 'cancelled')).rejects.toThrow(
+      /payments recorded/,
+    );
+  });
+});

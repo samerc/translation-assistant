@@ -130,6 +130,12 @@ export class InvoiceExportService {
     return invoice;
   }
 
+  /** Still owed after payments so far (0 once fully paid). */
+  private balanceDue(invoice: Invoice): number {
+    const owed = Number(invoice.total) - Number(invoice.paidAmount ?? 0);
+    return Math.max(0, Math.round(owed * 100) / 100);
+  }
+
   // issueDate/dueDate are date-only strings ("2026-10-26"). new Date() reads
   // them as UTC midnight, so format in UTC — the server's own time zone would
   // shift the printed day.
@@ -577,16 +583,27 @@ export class InvoiceExportService {
       }),
     );
 
+    const balance = this.balanceDue(invoice);
+    const paymentLines: [string, string, boolean][] = [];
     if (invoice.paidAmount !== null) {
+      paymentLines.push([
+        `Paid: ${invoice.currency} ${Number(invoice.paidAmount).toFixed(2)}`,
+        '16A34A',
+        false,
+      ]);
+    }
+    if (invoice.paidAmount !== null && balance > 0) {
+      paymentLines.push([
+        `Balance due: ${invoice.currency} ${balance.toFixed(2)}`,
+        'B91C1C',
+        true,
+      ]);
+    }
+    for (const [text, color, bold] of paymentLines) {
       totalsChildren.push(
         new Paragraph({
           children: [
-            new TextRun({
-              text: `Paid: ${invoice.currency} ${Number(invoice.paidAmount).toFixed(2)}`,
-              size: 20,
-              color: '16A34A',
-              font: 'Arial',
-            }),
+            new TextRun({ text, size: 20, color, bold, font: 'Arial' }),
           ],
           alignment: AlignmentType.RIGHT,
           spacing: { after: 60 },
@@ -905,7 +922,8 @@ export class InvoiceExportService {
     const totalsX = colX[2];
     const totalsW = colWidths[2] + colWidths[3];
     const half = totalsW * 0.5;
-    ensure(20 + 16 * 2 + 30 + (invoice.paidAmount !== null ? 20 : 0));
+    const balance = this.balanceDue(invoice);
+    ensure(20 + 16 * 2 + 30 + (invoice.paidAmount !== null ? 40 : 0));
     y += 20;
     const totalRow = (label: string, value: string, style: TextStyle) => {
       t.drawLine(label, totalsX, y, half, style);
@@ -940,6 +958,14 @@ export class InvoiceExportService {
         color: '#16A34A',
       });
       y += 20;
+      if (balance > 0) {
+        totalRow('Balance due', money(balance), {
+          size: 10,
+          bold: true,
+          color: '#B91C1C',
+        });
+        y += 20;
+      }
     }
 
     // Notes — may run over several pages

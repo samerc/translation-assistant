@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
+import { InvoicePayment } from '../invoices/entities/invoice-payment.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 
 @Injectable()
@@ -36,18 +37,16 @@ export class ReportsService {
     }
     const activeJobs = await activeJobsQb.getCount();
 
-    // Monthly revenue (paid invoices this month)
+    // Monthly revenue: payments received this month
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
     const monthEnd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
 
-    const revenueQb = this.invoiceRepository
-      .createQueryBuilder('inv')
-      .select('COALESCE(SUM(inv.paidAmount), 0)', 'revenue')
-      .where('inv.status = :status', { status: 'paid' })
-      .andWhere('inv.paidAt BETWEEN :start AND :end', {
+    const revenueQb = this.paymentsQuery()
+      .select('COALESCE(SUM(p.amount), 0)', 'revenue')
+      .where('p.paidAt BETWEEN :start AND :end', {
         start: monthStart,
-        end: monthEnd + ' 23:59:59',
+        end: monthEnd,
       });
     if (!isAdmin) {
       revenueQb.andWhere('inv.created_by_user_id = :userId', { userId });
@@ -104,6 +103,13 @@ export class ReportsService {
     };
   }
 
+  /** Payments joined to their invoice (for the per-user creator filter). */
+  private paymentsQuery() {
+    return this.invoiceRepository.manager
+      .createQueryBuilder(InvoicePayment, 'p')
+      .innerJoin(Invoice, 'inv', 'inv.id = p.invoice_id');
+  }
+
   async getRevenue(
     userId: string,
     isAdmin: boolean,
@@ -111,26 +117,24 @@ export class ReportsService {
     from?: string,
     to?: string,
   ) {
-    const qb = this.invoiceRepository
-      .createQueryBuilder('inv')
-      .where('inv.status = :status', { status: 'paid' });
+    const qb = this.paymentsQuery().where('1 = 1');
 
     if (!isAdmin) {
       qb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
 
-    if (from) qb.andWhere('inv.paidAt >= :from', { from });
-    if (to) qb.andWhere('inv.paidAt <= :to', { to: to + ' 23:59:59' });
+    if (from) qb.andWhere('p.paidAt >= :from', { from });
+    if (to) qb.andWhere('p.paidAt <= :to', { to });
 
     if (period === 'weekly') {
-      qb.select('YEARWEEK(inv.paidAt, 1)', 'period')
-        .addSelect('SUM(inv.paidAmount)', 'revenue')
-        .groupBy('YEARWEEK(inv.paidAt, 1)')
+      qb.select('YEARWEEK(p.paidAt, 1)', 'period')
+        .addSelect('SUM(p.amount)', 'revenue')
+        .groupBy('YEARWEEK(p.paidAt, 1)')
         .orderBy('period', 'ASC');
     } else {
-      qb.select("DATE_FORMAT(inv.paidAt, '%Y-%m')", 'period')
-        .addSelect('SUM(inv.paidAmount)', 'revenue')
-        .groupBy("DATE_FORMAT(inv.paidAt, '%Y-%m')")
+      qb.select("DATE_FORMAT(p.paidAt, '%Y-%m')", 'period')
+        .addSelect('SUM(p.amount)', 'revenue')
+        .groupBy("DATE_FORMAT(p.paidAt, '%Y-%m')")
         .orderBy('period', 'ASC');
     }
 
@@ -151,11 +155,8 @@ export class ReportsService {
       .select('client.id', 'clientId')
       .addSelect('client.name', 'clientName')
       .addSelect('COUNT(DISTINCT inv.id)', 'invoiceCount')
-      .addSelect(
-        'COALESCE(SUM(CASE WHEN inv.status = :paid THEN inv.paidAmount ELSE 0 END), 0)',
-        'totalRevenue',
-      )
-      .setParameter('paid', 'paid')
+      // paidAmount = payments received so far, partial ones included
+      .addSelect('COALESCE(SUM(inv.paidAmount), 0)', 'totalRevenue')
       .groupBy('client.id')
       .addGroupBy('client.name')
       .orderBy('totalRevenue', 'DESC');

@@ -160,6 +160,9 @@ export default function InvoicesPage() {
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${isOverdue ? 'bg-danger-light text-danger' : badge.color}`}>
                       {isOverdue ? 'Overdue' : badge.label}
                     </span>
+                    {['sent', 'overdue'].includes(inv.status) && Number(inv.paidAmount) > 0 && (
+                      <span className="ml-2 text-xs text-text-muted">partially paid</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-text-secondary">{formatDate(inv.issueDate)}</td>
                   <td className="px-4 py-3 text-text-secondary">{formatDate(inv.dueDate)}</td>

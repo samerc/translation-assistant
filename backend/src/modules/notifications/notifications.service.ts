@@ -213,9 +213,10 @@ export class NotificationsService {
 
     if (overdueInvoices.length === 0) return;
 
-    // Batch update all to overdue in one query
+    // Batch update all to overdue in one query. Still require 'sent': an invoice
+    // paid off since the find above must not be flipped back to overdue.
     await this.invoiceRepository.update(
-      { id: In(overdueInvoices.map((i) => i.id)) },
+      { id: In(overdueInvoices.map((i) => i.id)), status: 'sent' },
       { status: 'overdue' },
     );
 

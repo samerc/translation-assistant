@@ -118,15 +118,27 @@ export class UpdateInvoiceStatusDto {
 }
 
 export class RecordPaymentDto {
+  /** This payment's amount (may be part of the balance). */
   @Type(() => Number)
-  @IsNumber()
-  @Min(0)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
   @Max(99999999.99)
   paidAmount: number;
 
+  /** Date received (YYYY-MM-DD); defaults to today. */
   @IsOptional()
   @IsDateString()
   paidAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  method?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  note?: string;
 }
 
 export class SendInvoiceEmailDto {
