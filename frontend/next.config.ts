@@ -13,10 +13,13 @@ try {
 // hydration/bootstrap scripts and styles (no nonce pipeline here); the value of
 // this policy is in the restrictive directives (frame-ancestors, object-src,
 // base-uri) and pinning connect/img/font sources. `data:` on img-src is needed
-// for the per-user base64 logos and avatars.
+// for the per-user base64 logos and avatars. 'unsafe-eval' is added in
+// development only: React's dev build uses eval() for its debugging features
+// (never in production builds).
+const isDev = process.env.NODE_ENV === "development";
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
