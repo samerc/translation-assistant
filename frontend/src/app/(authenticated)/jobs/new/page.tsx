@@ -191,14 +191,14 @@ export default function NewJobPage() {
 
   return (
     <div>
-      <button onClick={() => router.push('/jobs')} className="text-sm text-text-secondary hover:text-primary mb-4 inline-block">← Back to Jobs</button>
-      <h1 className="text-2xl font-bold text-text mb-6">New Job</h1>
+      <button onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Jobs</button>
+      <h1 className="text-2xl font-bold tracking-tight text-text mb-6">New Job</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
-        {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
         {/* Basic info */}
-        <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
+        <div className="card p-6 space-y-4">
           <h3 className="font-semibold text-text">Job Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -228,7 +228,7 @@ export default function NewJobPage() {
         </div>
 
         {/* Client & Language */}
-        <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
+        <div className="card p-6 space-y-4">
           <h3 className="font-semibold text-text">Client & Languages</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -281,13 +281,13 @@ export default function NewJobPage() {
         </div>
 
         {/* Line Items */}
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-semibold text-text">
               {form.type === 'template' ? 'Templates' : 'Documents'}
             </h3>
             <button type="button" onClick={addLineItem}
-              className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+              className="btn btn-primary btn-sm">
               + Add {form.type === 'template' ? 'Template' : 'Document'}
             </button>
           </div>
@@ -307,7 +307,7 @@ export default function NewJobPage() {
                     <label className="block text-xs font-medium text-text mb-1">Description</label>
                     <input value={li.description} onChange={(e) => updateLineItem(li.key, { description: e.target.value })}
                       placeholder="Line item description"
-                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                      className="input h-8 px-2 w-full" />
                   </div>
                 )}
                 <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-end">
@@ -318,7 +318,7 @@ export default function NewJobPage() {
                     </label>
                     {form.type === 'template' ? (
                       <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
-                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        className="input h-8 px-2 w-full">
                         <option value="">Select...</option>
                         {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
                       </select>
@@ -326,7 +326,7 @@ export default function NewJobPage() {
                       <select
                         value={li.freeformTypeId ? `ft:${li.freeformTypeId}` : li.templateId ? `tpl:${li.templateId}` : ''}
                         onChange={(e) => handleFreeformSelect(li.key, e.target.value)}
-                        className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        className="input h-8 px-2 w-full">
                         <option value="">Custom (manual entry)</option>
                         {freeformTypes.length > 0 && (
                           <optgroup label="Freeform Types">
@@ -347,7 +347,7 @@ export default function NewJobPage() {
                     <label className="block text-xs font-medium text-text mb-1">Pages</label>
                     <input type="number" min={1} value={li.pageCount}
                       onChange={(e) => updateLineItem(li.key, { pageCount: parseInt(e.target.value) || 1 })}
-                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                      className="input h-8 px-2 w-full" />
                   </div>
 
                   {/* Price */}
@@ -355,7 +355,7 @@ export default function NewJobPage() {
                     <label className="block text-xs font-medium text-text mb-1">Price/Page</label>
                     <input type="number" step="0.01" min={0} value={li.pricePerPage}
                       onChange={(e) => updateLineItem(li.key, { pricePerPage: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                      className="input h-8 px-2 w-full" />
                   </div>
 
                   {/* Discounted */}
@@ -364,7 +364,7 @@ export default function NewJobPage() {
                     <input type="number" step="0.01" min={0} value={li.discountedPricePerPage || ''}
                       onChange={(e) => updateLineItem(li.key, { discountedPricePerPage: parseFloat(e.target.value) || 0 })}
                       placeholder="—"
-                      className="w-full px-2 py-1.5 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                      className="input h-8 px-2 w-full" />
                   </div>
 
                   {/* Use discount checkbox */}
@@ -400,7 +400,7 @@ export default function NewJobPage() {
         </div>
 
         {/* Pro bono */}
-        <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
+        <div className="card p-6 space-y-4">
           <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
             <input type="checkbox" checked={form.isFreeOfCharge} onChange={(e) => setForm({ ...form, isFreeOfCharge: e.target.checked })}
               className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
@@ -415,16 +415,16 @@ export default function NewJobPage() {
         </div>
 
         {/* Notes */}
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card p-6">
           <label className="block text-sm font-medium text-text mb-1.5">Notes</label>
           <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} className={`${inputClass} resize-none`} />
         </div>
 
         <div className="flex gap-3">
-          <button type="submit" disabled={saving} className="px-6 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button type="submit" disabled={saving} className="btn btn-primary">
             {saving ? 'Creating...' : 'Create Job'}
           </button>
-          <button type="button" onClick={() => router.push('/jobs')} className="px-6 py-2.5 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+          <button type="button" onClick={() => router.push('/jobs')} className="btn btn-secondary">Cancel</button>
         </div>
       </form>
     </div>

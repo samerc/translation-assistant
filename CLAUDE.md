@@ -169,7 +169,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - Use these instead of hand-written class strings: `Button`/`buttonClass()` (primary/secondary/ghost/danger; Cancel = secondary), `Input`/`Select`/`Textarea`/`SearchInput`/`Field`, `Badge`, `PageHeader`, `EmptyState`, `Alert`, `SegmentedControl` (≤4 options), `TableCard`/`SortableTh`/`RowChevron`/`Pagination` (`DataTable.tsx`), outline icons in `icons.tsx`.
 - CSS component classes behind them live in `globals.css` `@layer components` (`.btn*`, `.input`, `.card`, `.data-table`, `.badge`, `.tone-*`, `.segmented`). Status colours: `lib/status.ts` maps → tone classes.
 - Clickable table rows: `<tr data-href onClick=…>` + `<RowChevron />` as the last cell.
-- Migrated so far: app shell (Sidebar/Topbar), Clients/Jobs/Invoices/Templates lists, Settings > Appearance. Other pages still use inline classes (they pick up the new tokens) — migrate when touched.
+- Fully on React kit components: app shell (Sidebar/Topbar), dashboard, Clients/Jobs/Invoices/Templates lists, Settings > Appearance. All other pages use the kit's CSS classes directly (`className="btn btn-primary"`, `input`, `card`, `data-table`, `tone tone-*`) — swap to the React components when you touch them; never reintroduce hand-written button/input class strings.
 
 ## Database Entities
 

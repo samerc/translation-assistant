@@ -86,7 +86,7 @@ export function ConfirmHost() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50" onClick={() => finish(false)} />
-      <div className="relative bg-surface border border-border rounded-xl shadow-xl w-full max-w-sm p-6">
+      <div className="card relative shadow-xl w-full max-w-sm p-6">
         <h3 className="text-lg font-semibold text-text mb-2">
           {current.title || (current.mode === 'alert' ? 'Notice' : 'Are you sure?')}
         </h3>
@@ -95,7 +95,7 @@ export function ConfirmHost() {
           {current.mode === 'confirm' && (
             <button
               onClick={() => finish(false)}
-              className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 transition-colors"
+              className="btn btn-secondary"
             >
               {current.cancelText || 'Cancel'}
             </button>

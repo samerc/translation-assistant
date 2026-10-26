@@ -49,7 +49,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className="bg-surface border border-border rounded-xl p-6 w-full max-w-md shadow-xl"
+        className="card p-6 w-full max-w-md shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-5">
@@ -60,12 +60,12 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
         </div>
 
         {success ? (
-          <div className="p-3 bg-success-light text-success rounded-lg text-sm text-center">
+          <div className="p-3 tone tone-success rounded-lg text-sm text-center">
             Password changed. Signing you out — please log in with your new password.
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
-            {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+            {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-text mb-1.5">Current Password</label>
@@ -113,7 +113,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
               <button
                 type="submit"
                 disabled={loading || !currentPassword || !newPassword || !confirmPassword}
-                className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
+                className="btn btn-primary"
               >
                 {loading ? 'Saving...' : 'Change Password'}
               </button>

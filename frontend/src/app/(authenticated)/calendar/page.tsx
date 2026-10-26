@@ -109,7 +109,7 @@ export default function CalendarPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Calendar</h1>
         <div className="flex items-center gap-3">
-          <button onClick={goToToday} className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary hover:bg-border/50">
+          <button onClick={goToToday} className="btn btn-secondary btn-sm">
             Today
           </button>
           <button onClick={prevMonth} className="p-2 rounded-lg text-text-secondary hover:bg-bg">
@@ -127,7 +127,7 @@ export default function CalendarPage() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Calendar grid */}
         <div className="flex-1">
-          <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="card overflow-hidden">
             {/* Day headers */}
             <div className="grid grid-cols-7 border-b border-border">
               {DAY_NAMES.map((d) => (
@@ -175,7 +175,7 @@ export default function CalendarPage() {
 
         {/* Event detail panel */}
         <div className="w-full lg:w-80 lg:flex-shrink-0">
-          <div className="bg-surface border border-border rounded-xl p-5 sticky top-20">
+          <div className="card p-5 sticky top-20">
             <h3 className="text-sm font-semibold text-text-secondary mb-3">
               {selectedDate
                 ? new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -198,7 +198,7 @@ export default function CalendarPage() {
                     </div>
                     <div className="text-sm font-medium text-text">{ev.title}</div>
                     <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold
-                      ${ev.status === 'overdue' ? 'bg-danger-light text-danger' : ev.type === 'job_deadline' ? 'bg-primary-light text-primary' : 'bg-warning-light text-warning'}
+                      ${ev.status === 'overdue' ? 'tone tone-danger' : ev.type === 'job_deadline' ? 'tone tone-primary' : 'tone tone-warning'}
                     `}>{ev.status}</span>
                   </button>
                 ))}

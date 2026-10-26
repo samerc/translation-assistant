@@ -71,15 +71,15 @@ export default function TemplateDetailPage() {
     <div>
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={() => router.push('/templates')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">← Back to Templates</button>
+          <button onClick={() => router.push('/templates')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Templates</button>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-text">{template.name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-text">{template.name}</h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
               template.type === 'word' ? TEMPLATE_TYPE_BADGE.word : template.type === 'simple' ? TEMPLATE_TYPE_BADGE.simple : TEMPLATE_TYPE_BADGE.designer
             }`}>
               {template.type === 'word' ? 'Word' : template.type === 'simple' ? 'Simple' : 'Designer'}
             </span>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${template.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'}`}>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${template.isActive ? 'tone tone-success' : 'bg-bg text-text-muted'}`}>
               {template.isActive ? 'Active' : 'Inactive'}
             </span>
           </div>
@@ -91,7 +91,7 @@ export default function TemplateDetailPage() {
       <div className="flex gap-1 border-b border-border mb-6">
         {tabs.filter((t) => t.show).map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'}`}>
+            className={`px-0.5 py-3 mr-6 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.id ? 'border-primary text-text font-semibold' : 'border-transparent text-text-secondary hover:text-text'}`}>
             {tab.label}
           </button>
         ))}
@@ -278,16 +278,16 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
           {selected.size > 0 && (
             <>
               <span className="text-sm text-text-secondary">{selected.size} selected</span>
-              <button onClick={() => { setShowBulkGroup(!showBulkGroup); }} className="px-3 py-1.5 bg-accent/20 text-accent rounded-lg text-xs font-medium hover:bg-accent/30">
+              <button onClick={() => { setShowBulkGroup(!showBulkGroup); }} className="px-3 py-1.5 tone tone-accent rounded-lg text-xs font-medium hover:bg-accent/30">
                 Set Group
               </button>
-              <button onClick={handleDeleteSelected} className="px-3 py-1.5 bg-danger-light text-danger rounded-lg text-xs font-medium hover:bg-danger/20">
+              <button onClick={handleDeleteSelected} className="px-3 py-1.5 tone tone-danger rounded-lg text-xs font-medium hover:bg-danger/20">
                 Delete Selected
               </button>
             </>
           )}
         </div>
-        <button onClick={startNewRow} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+        <button onClick={startNewRow} className="btn btn-primary">
           + Add Field
         </button>
       </div>
@@ -301,39 +301,39 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
             onChange={(e) => setBulkGroup(e.target.value)}
             placeholder="Group name (empty = fixed)"
             list="bulk-group-options"
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm w-48 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="input h-8 px-2 w-48"
           />
           <datalist id="bulk-group-options">
             {existingGroups.map((g) => <option key={g} value={g} />)}
           </datalist>
-          <button onClick={handleBulkGroup} disabled={saving} className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button onClick={handleBulkGroup} disabled={saving} className="btn btn-primary btn-sm">
             Apply
           </button>
-          <button onClick={() => setShowBulkGroup(false)} className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-xs">
+          <button onClick={() => setShowBulkGroup(false)} className="btn btn-secondary btn-sm">
             Cancel
           </button>
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-sm">
+      <div className="card overflow-x-auto">
+        <table className="data-table">
           <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="px-3 py-2.5 w-10">
+            <tr>
+              <th className="px-3 w-10">
                 <input type="checkbox" checked={sorted.length > 0 && selected.size === sorted.length} onChange={toggleAll}
                   className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-text-secondary">Field Key</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-text-secondary w-24">Type</th>
-              <th className="px-3 py-2.5 text-center text-xs font-semibold text-text-secondary w-16">Req.</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-text-secondary w-32">Group</th>
+              <th className="px-3 text-left">Field Key</th>
+              <th className="px-3 text-left w-24">Type</th>
+              <th className="px-3 text-center w-16">Req.</th>
+              <th className="px-3 text-left w-32">Group</th>
               {languages.map((l) => (
-                <th key={l.id} className="px-3 py-2.5 text-left text-xs font-semibold text-text-secondary">
+                <th key={l.id} className="px-3 text-left">
                   {l.name} <span className="text-text-muted uppercase">({l.code})</span>
                 </th>
               ))}
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-text-secondary w-24">Actions</th>
+              <th className="px-3 text-right w-24">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -364,7 +364,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                         {FIELD_TYPES.map((ft) => <option key={ft.value} value={ft.value}>{ft.label}</option>)}
                       </select>
                     ) : (
-                      <span className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium">
+                      <span className="px-2 py-0.5 tone tone-primary rounded text-xs font-medium">
                         {FIELD_TYPES.find((ft) => ft.value === field.fieldType)?.label}
                       </span>
                     )}
@@ -374,7 +374,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                       <input type="checkbox" checked={data!.required === 'true'} onChange={(e) => setEditForm({ ...editForm, required: String(e.target.checked) })}
                         className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
                     ) : (
-                      field.required && <span className="px-2 py-0.5 bg-warning-light text-warning rounded text-xs font-medium">Yes</span>
+                      field.required && <span className="px-2 py-0.5 tone tone-warning rounded text-xs font-medium">Yes</span>
                     )}
                   </td>
                   <td className={cellClass}>
@@ -382,7 +382,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                       <input value={data!.groupKey} onChange={(e) => setEditForm({ ...editForm, groupKey: e.target.value })}
                         list="edit-group-options" placeholder="None" className={inputClass} />
                     ) : (
-                      field.groupKey && <span className="px-2 py-0.5 bg-accent/20 text-accent rounded text-xs font-medium">{field.groupKey}</span>
+                      field.groupKey && <span className="px-2 py-0.5 tone tone-accent rounded text-xs font-medium">{field.groupKey}</span>
                     )}
                   </td>
                   {languages.map((l) => {
@@ -471,7 +471,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
         const fieldsWithMissing = sorted.filter((f) => getMissingLabels(f).length > 0);
         if (fieldsWithMissing.length === 0) return null;
         return (
-          <div className="mt-4 p-3 bg-warning-light text-warning rounded-lg text-sm">
+          <div className="mt-4 p-3 tone tone-warning rounded-lg text-sm">
             {fieldsWithMissing.length} field(s) have missing language labels: {fieldsWithMissing.map((f) => f.fieldKey).join(', ')}
           </div>
         );
@@ -574,7 +574,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
         <div className="flex gap-2 mb-4 flex-wrap">
           {([['header', 'Header'], ['text', 'Text'], ['field', 'Field'], ['field-row', 'Field Row'], ['divider', 'Divider'], ['footer', 'Footer'], ['date', 'Date']] as const).map(([type, label]) => (
             <button key={type} onClick={() => addBlock(type)}
-              className="px-3 py-1.5 bg-primary-light text-primary rounded-lg text-xs font-medium hover:bg-primary/20">
+              className="px-3 py-1.5 tone tone-primary rounded-lg text-xs font-medium hover:bg-primary/20">
               + {label}
             </button>
           ))}
@@ -679,7 +679,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
         </div>
 
         <div className="mt-4 flex items-center gap-3">
-          <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
             {saving ? 'Saving...' : 'Save Layout'}
           </button>
           {message && <span className="text-sm text-success">{message}</span>}
@@ -688,7 +688,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
 
       {/* Properties panel */}
       <div className="lg:col-span-1">
-        <div className="bg-surface border border-border rounded-xl p-5 sticky top-20">
+        <div className="card p-5 sticky top-20">
           <h3 className="font-semibold text-text mb-4">Properties</h3>
           {!selected ? (
             <p className="text-sm text-text-muted">Select a block to edit its properties.</p>
@@ -700,7 +700,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                 <div>
                   <label className="block text-xs font-medium text-text mb-1">Content</label>
                   <textarea value={selected.content || ''} onChange={(e) => updateBlock(selectedIdx!, { content: e.target.value })} rows={3}
-                    className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                    className="input w-full text-xs resize-none" />
                 </div>
               )}
 
@@ -708,7 +708,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                 <div>
                   <label className="block text-xs font-medium text-text mb-1">Field</label>
                   <select value={selected.fieldKey || ''} onChange={(e) => updateBlock(selectedIdx!, { fieldKey: e.target.value })}
-                    className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary">
+                    className="input h-8 px-2 w-full text-xs">
                     <option value="">Select field...</option>
                     {fieldKeys.map((fk) => <option key={fk} value={fk}>{fk}</option>)}
                   </select>
@@ -753,7 +753,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                             <label className="block text-xs text-text-muted mb-1">Custom label text</label>
                             <input value={selected.labelText || ''} onChange={(e) => updateBlock(selectedIdx!, { labelText: e.target.value })}
                               placeholder={selected.fieldKey || 'Field name'}
-                              className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
+                              className="input h-8 px-2 w-full text-xs" />
                           </div>
                         )}
                         <div>
@@ -830,7 +830,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                     <label className="block text-xs font-medium text-text mb-1">Font Size</label>
                     <input type="number" min={8} max={48} value={selected.fontSize || 12}
                       onChange={(e) => updateBlock(selectedIdx!, { fontSize: parseInt(e.target.value) || 12 })}
-                      className="w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary" />
+                      className="input h-8 px-2 w-full text-xs" />
                   </div>
 
                   <div>
@@ -876,7 +876,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
                 </>
               )}
 
-              <button onClick={() => removeBlock(selectedIdx!)} className="w-full px-3 py-1.5 bg-danger-light text-danger rounded-lg text-xs font-medium hover:bg-danger/20">
+              <button onClick={() => removeBlock(selectedIdx!)} className="w-full px-3 py-1.5 tone tone-danger rounded-lg text-xs font-medium hover:bg-danger/20">
                 Remove Block
               </button>
             </div>
@@ -965,7 +965,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
   return (
     <div>
       {/* Upload */}
-      <form onSubmit={handleUpload} className="bg-surface border border-border rounded-xl p-5 mb-6">
+      <form onSubmit={handleUpload} className="card p-5 mb-6">
         <h3 className="font-semibold text-text mb-3">
           {template.wordFileName ? 'Replace Word File' : 'Upload Word Template'}
         </h3>
@@ -979,11 +979,11 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
             <input type="file" accept=".docx" required
               className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
-          <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button type="submit" disabled={uploading} className="btn btn-primary">
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
-        {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         <p className="text-xs text-text-muted mt-3">
           Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{field_name}'}</code> in your Word document.
           Use only letters, numbers, and underscores. No spaces.
@@ -1034,7 +1034,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
               <div className="space-y-4">
                 {/* Valid / linked */}
                 {preview.valid.length > 0 && (
-                  <div className="bg-surface border border-border rounded-xl p-4">
+                  <div className="card p-4">
                     <h4 className="text-xs font-semibold text-success uppercase tracking-wide mb-2">Linked ({preview.valid.length})</h4>
                     <div className="space-y-1.5">
                       {preview.valid.map((p) => (
@@ -1061,7 +1061,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
                       ))}
                     </div>
                     <button onClick={handleSyncPlaceholders} disabled={syncing}
-                      className="w-full px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover disabled:opacity-50">
+                      className="btn btn-primary btn-sm w-full">
                       Create Fields for All ({preview.unlinked.length})
                     </button>
                   </div>
@@ -1069,7 +1069,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
 
                 {/* No placeholders at all */}
                 {totalPlaceholders === 0 && !hasMalformed && (
-                  <div className="bg-surface border border-border rounded-xl p-5 text-center">
+                  <div className="card p-5 text-center">
                     <p className="text-sm text-text-muted">
                       No placeholders found in the document.
                     </p>
@@ -1081,7 +1081,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
 
                 {/* All good */}
                 {preview.valid.length > 0 && !hasUnlinked && !hasMalformed && (
-                  <div className="p-3 bg-success-light text-success rounded-lg text-sm text-center font-medium">
+                  <div className="p-3 tone tone-success rounded-lg text-sm text-center font-medium">
                     All placeholders are valid and linked!
                   </div>
                 )}
@@ -1131,28 +1131,28 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
 
   return (
     <form onSubmit={handleSubmit} className="max-w-lg">
-      <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
+      <div className="card p-6 space-y-4">
         <div>
           <label className="block text-sm font-medium text-text mb-1.5">Name</label>
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            className="input w-full" />
         </div>
         <div>
           <label className="block text-sm font-medium text-text mb-1.5">Description</label>
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+            className="input w-full resize-none" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Price per Page</label>
             <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })}
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              className="input w-full" />
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Discounted Price</label>
             <input type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })}
               placeholder="Optional"
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              className="input w-full" />
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
@@ -1162,7 +1162,7 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
         </label>
       </div>
       <div className="mt-4 flex items-center gap-3">
-        <button type="submit" disabled={saving} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+        <button type="submit" disabled={saving} className="btn btn-primary">
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
         {message && <span className="text-sm text-success">{message}</span>}

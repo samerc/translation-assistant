@@ -70,20 +70,20 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={() => router.push('/clients')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">
+          <button onClick={() => router.push('/clients')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
             ← Back to Clients
           </button>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-text">{client.name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-text">{client.name}</h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              client.type === 'company' ? 'bg-primary-light text-primary' : 'bg-warning-light text-warning'
+              client.type === 'company' ? 'tone tone-primary' : 'tone tone-warning'
             }`}>
               {client.type === 'company' ? 'Company' : 'Person'}
             </span>
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => router.push(`/jobs/new?clientId=${client.id}`)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+          <button onClick={() => router.push(`/jobs/new?clientId=${client.id}`)} className="btn btn-primary">
             + New Job
           </button>
           <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">
@@ -98,8 +98,8 @@ export default function ClientDetailPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'
+            className={`px-0.5 py-3 mr-6 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id ? 'border-primary text-text font-semibold' : 'border-transparent text-text-secondary hover:text-text'
             }`}
           >
             {tab.label}
@@ -145,7 +145,7 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Client Info Card */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-text">Client Information</h3>
           {!editing && (
@@ -162,13 +162,13 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                className="input w-full resize-none" />
             </div>
             <div className="flex gap-2">
-              <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+              <button type="submit" disabled={saving} className="btn btn-primary">
                 {saving ? 'Saving...' : 'Save'}
               </button>
-              <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+              <button type="button" onClick={() => setEditing(false)} className="btn btn-secondary">Cancel</button>
             </div>
           </form>
         ) : (
@@ -324,7 +324,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
   const isFormOpen = adding || editingId !== null;
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6">
+    <div className="card p-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-semibold text-text">{title}</h3>
         {!isFormOpen && (
@@ -343,7 +343,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
           <div key={item.id} className="flex justify-between items-center py-2 px-3 bg-bg rounded-lg group">
             <div className="flex items-center gap-2">
               {item.label && (
-                <span className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium">{item.label}</span>
+                <span className="px-2 py-0.5 tone tone-primary rounded text-xs font-medium">{item.label}</span>
               )}
               <span className="text-sm text-text">{item.value}</span>
             </div>
@@ -366,7 +366,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
             <select
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="w-32 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="input w-32"
             >
               <option value="">Label...</option>
               {labelOptions.map((opt) => (
@@ -380,20 +380,20 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
               placeholder={placeholder}
               required
               autoFocus
-              className="flex-1 px-3 py-2 bg-surface border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="input flex-1"
             />
           </div>
           <div className="flex gap-2 mt-2">
-            <button type="submit" disabled={saving} className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover disabled:opacity-50">
+            <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
               {saving ? 'Saving...' : editingId !== null ? 'Update' : 'Add'}
             </button>
-            <button type="button" onClick={cancelForm} className="px-3 py-1.5 bg-surface border border-border text-text-secondary rounded-lg text-xs">
+            <button type="button" onClick={cancelForm} className="btn btn-secondary btn-sm">
               Cancel
             </button>
           </div>
         </form>
       )}
-      {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
     </div>
   );
 }
@@ -454,11 +454,11 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
     <div className="max-w-3xl">
       <div className="flex justify-end mb-4">
         <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' }); }}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Contact</button>
+          className="btn btn-primary">+ Add Contact</button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-5 mb-4">
+        <form onSubmit={handleSubmit} className="card p-5 mb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="First Name *" value={form.firstName} onChange={(v) => setForm({ ...form, firstName: v })} required />
             <Field label="Last Name *" value={form.lastName} onChange={(v) => setForm({ ...form, lastName: v })} required />
@@ -467,19 +467,19 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
             <Field label="Role/Title" value={form.role} onChange={(v) => setForm({ ...form, role: v })} />
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Saving...' : editingId ? 'Update' : 'Add Contact'}</button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+            <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Saving...' : editingId ? 'Update' : 'Add Contact'}</button>
+            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="btn btn-secondary">Cancel</button>
           </div>
         </form>
       )}
 
       {/* Contact cards */}
       {contacts.length === 0 && !showForm && (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No contacts yet.</div>
+        <div className="card p-8 text-center text-text-muted">No contacts yet.</div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {contacts.map((c) => (
-          <div key={c.id} className="bg-surface border border-border rounded-xl p-5">
+          <div key={c.id} className="card p-5">
             <div className="flex justify-between items-start mb-3">
               <div>
                 <div className="font-semibold text-text">{c.firstName} {c.lastName}</div>
@@ -551,35 +551,35 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
 
   return (
     <div className="max-w-2xl">
-      <form onSubmit={handleUpload} className="bg-surface border border-border rounded-xl p-5 mb-4">
+      <form onSubmit={handleUpload} className="card p-5 mb-4">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
             <label className="block text-sm font-medium text-text mb-1.5">Label</label>
             <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Client Passport"
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              className="input w-full" />
           </div>
           <div className="flex-1">
             <label className="block text-sm font-medium text-text mb-1.5">File</label>
             <input type="file" accept="image/*,.pdf" required
               className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
-          <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button type="submit" disabled={uploading} className="btn btn-primary">
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
         {error && (
-          <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">
+          <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">
             {error}
           </div>
         )}
       </form>
 
       {copies.length === 0 && (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No passport copies uploaded yet.</div>
+        <div className="card p-8 text-center text-text-muted">No passport copies uploaded yet.</div>
       )}
       <div className="space-y-3">
         {copies.map((pc) => (
-          <div key={pc.id} className="bg-surface border border-border rounded-xl p-4 flex justify-between items-center">
+          <div key={pc.id} className="card p-4 flex justify-between items-center">
             <div>
               <div className="font-medium text-text text-sm">{pc.label}</div>
               <div className="text-xs text-text-muted mt-0.5">{pc.originalName} — {formatSize(pc.fileSize)} — {formatDate(pc.uploadedAt)}</div>
@@ -623,20 +623,20 @@ function JobsTab({ clientId }: { clientId: string }) {
     <div className="max-w-3xl">
       <div className="flex justify-end mb-4">
         <button onClick={() => router.push(`/jobs/new?clientId=${clientId}`)}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ New Job</button>
+          className="btn btn-primary">+ New Job</button>
       </div>
       {jobs.length === 0 ? (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No jobs for this client yet.</div>
+        <div className="card p-8 text-center text-text-muted">No jobs for this client yet.</div>
       ) : (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-hidden">
+          <table className="data-table">
             <thead>
-              <tr className="bg-bg border-b border-border">
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Title</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Languages</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Total</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Created</th>
+              <tr>
+                <th className="text-left">Title</th>
+                <th className="text-left">Languages</th>
+                <th className="text-left">Status</th>
+                <th className="text-left">Total</th>
+                <th className="text-left">Created</th>
               </tr>
             </thead>
             <tbody>
@@ -675,7 +675,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
     <div>
       <label className="block text-sm font-medium text-text mb-1.5">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required}
-        className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+        className="input w-full" />
     </div>
   );
 }

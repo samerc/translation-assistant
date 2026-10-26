@@ -123,7 +123,7 @@ export default function JobDetailPage() {
           <span className="text-sm text-warning font-medium">
             This job is locked ({STATUSES.find((s) => s.value === job.status)?.label}). Reopen to make changes.
           </span>
-          <button onClick={handleReopen} className="px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+          <button onClick={handleReopen} className="btn btn-primary btn-sm">
             Reopen Job
           </button>
         </div>
@@ -132,14 +132,14 @@ export default function JobDetailPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
         <div className="min-w-0">
-          <button onClick={() => router.push('/jobs')} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">← Back to Jobs</button>
+          <button onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Jobs</button>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono text-text-muted">{job.jobNumber}</span>
-            <h1 className="text-xl md:text-2xl font-bold text-text">{job.title}</h1>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-text">{job.title}</h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor(job.status)}`}>
               {STATUSES.find((s) => s.value === job.status)?.label}
             </span>
-            {job.isFreeOfCharge && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-accent/20 text-accent">Pro Bono</span>}
+            {job.isFreeOfCharge && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold tone tone-accent">Pro Bono</span>}
           </div>
           <p className="text-sm text-text-secondary mt-1">
             {job.client.name} — {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
@@ -163,7 +163,7 @@ export default function JobDetailPage() {
             </button>
           )}
           <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
-            className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+            className="input">
             {STATUSES.map((s) => {
               const allowed = s.value === job.status || (VALID_TRANSITIONS[job.status] || []).includes(s.value);
               return <option key={s.value} value={s.value} disabled={!allowed}>{s.label}{!allowed ? ' (N/A)' : ''}</option>;
@@ -177,7 +177,7 @@ export default function JobDetailPage() {
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
         {tabs.map((tab) => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-text-secondary hover:text-text'}`}>
+            className={`px-0.5 py-3 mr-6 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-text font-semibold' : 'border-transparent text-text-secondary hover:text-text'}`}>
             {tab.label}
           </button>
         ))}
@@ -235,7 +235,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
     <div className="space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Job Info */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-text">Job Information</h3>
           {!editing && !locked && <button onClick={() => setEditing(true)} className="text-sm text-primary hover:text-primary-hover font-medium">Edit</button>}
@@ -243,17 +243,17 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
         {editing ? (
           <form onSubmit={handleSave} className="space-y-3">
             <div><label className="block text-xs font-medium text-text mb-1">Title</label>
-              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required className="input w-full" /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Description</label>
-              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" /></div>
+              <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="input w-full resize-none" /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Deadline</label>
-              <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" /></div>
+              <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="input w-full" /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" /></div>
-            {saveError && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{saveError}</div>}
+              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="input w-full resize-none" /></div>
+            {saveError && <div className="p-3 tone tone-danger rounded-lg text-sm">{saveError}</div>}
             <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Saving...' : 'Save'}</button>
-              <button type="button" onClick={() => setEditing(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+              <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Saving...' : 'Save'}</button>
+              <button type="button" onClick={() => setEditing(false)} className="btn btn-secondary">Cancel</button>
             </div>
           </form>
         ) : (
@@ -269,7 +269,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
       </div>
 
       {/* Pricing / Line Items */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-4">Pricing</h3>
         {job.isFreeOfCharge ? (
           <div className="space-y-2.5">
@@ -280,13 +280,13 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
           <>
             {job.lineItems.length > 0 ? (
               <div className="overflow-hidden rounded-lg border border-border mb-4">
-                <table className="w-full text-sm">
+                <table className="data-table">
                   <thead>
-                    <tr className="bg-bg border-b border-border">
-                      <th className="text-left px-3 py-2 font-semibold text-text-secondary">Item</th>
-                      <th className="text-center px-3 py-2 font-semibold text-text-secondary">Pages</th>
-                      <th className="text-right px-3 py-2 font-semibold text-text-secondary">Price/Page</th>
-                      <th className="text-right px-3 py-2 font-semibold text-text-secondary">Total</th>
+                    <tr>
+                      <th className="px-3 text-left">Item</th>
+                      <th className="px-3 text-center">Pages</th>
+                      <th className="px-3 text-right">Price/Page</th>
+                      <th className="px-3 text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -372,9 +372,9 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
   const inputClass = 'px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6">
+    <div className="card p-6">
       <h3 className="font-semibold text-text mb-4">Assigned Users</h3>
-      {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
       {assigned.length === 0 ? (
         <p className="text-sm text-text-muted mb-4">No users assigned{isAdmin ? ' — add someone below.' : '.'}</p>
       ) : (
@@ -384,7 +384,7 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
               <div>
                 <span className="text-sm text-text">{a.user.firstName} {a.user.lastName}</span>
                 <span className="text-xs text-text-muted ml-2">{a.user.email}</span>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-neutral-light text-neutral ml-2">{a.permissionLevel}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded tone tone-neutral ml-2">{a.permissionLevel}</span>
               </div>
               {isAdmin && (
                 <button onClick={() => remove(a.userId)} disabled={busy} className="text-xs text-danger hover:underline">Remove</button>
@@ -403,7 +403,7 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
             <option value="edit">Edit</option>
             <option value="view">View</option>
           </select>
-          <button onClick={add} disabled={busy || !pickUser} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">Assign</button>
+          <button onClick={add} disabled={busy || !pickUser} className="btn btn-primary">Assign</button>
         </div>
       )}
     </div>
@@ -497,19 +497,19 @@ function DocumentsTab({ job }: { job: Job }) {
     <div className="max-w-3xl">
       <div className="flex justify-end gap-2 mb-4">
         <button onClick={() => { setShowClone(true); setShowAdd(false); }}
-          className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm font-medium hover:bg-border/40">Clone existing</button>
+          className="btn btn-secondary">Clone existing</button>
         <button onClick={() => { setShowAdd(true); setShowClone(false); }}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ Add Document</button>
+          className="btn btn-primary">+ Add Document</button>
       </div>
 
       {showClone && (
-        <div className="bg-surface border border-border rounded-xl p-5 mb-4">
+        <div className="card p-5 mb-4">
           <div className="flex justify-between items-center mb-3">
             <h4 className="font-semibold text-text">Clone from an existing document</h4>
             <button onClick={() => setShowClone(false)} className="text-xs text-text-secondary">Cancel</button>
           </div>
           <input value={cloneSearch} onChange={(e) => setCloneSearch(e.target.value)} placeholder="Search by template or client…" aria-label="Search documents to clone"
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary mb-3" />
+            className="input w-full mb-3" />
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {cloneResults.length === 0 ? (
               <p className="text-sm text-text-muted py-2">No completed documents found to clone.</p>
@@ -528,37 +528,37 @@ function DocumentsTab({ job }: { job: Job }) {
       )}
 
       {showAdd && (
-        <div className="bg-surface border border-border rounded-xl p-5 mb-4">
+        <div className="card p-5 mb-4">
           <h4 className="font-semibold text-text mb-3">Create Document from Template</h4>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <label className="block text-sm font-medium text-text mb-1.5">Template</label>
               <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                className="input w-full">
                 <option value="">Select template...</option>
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <button onClick={handleCreate} disabled={!selectedTemplateId}
-              className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">Create</button>
+              className="btn btn-primary">Create</button>
             <button onClick={() => setShowAdd(false)}
-              className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+              className="btn btn-secondary">Cancel</button>
           </div>
         </div>
       )}
 
       {docs.length === 0 && !showAdd && (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No documents yet. Add one above.</div>
+        <div className="card p-8 text-center text-text-muted">No documents yet. Add one above.</div>
       )}
 
       <div className="space-y-3">
         {docs.map((doc) => (
-          <div key={doc.id} className="bg-surface border border-border rounded-xl p-4 flex justify-between items-center hover:border-primary/40 transition-colors">
+          <div key={doc.id} className="card p-4 flex justify-between items-center hover:border-primary/40 transition-colors">
             <div className="cursor-pointer flex-1" onClick={() => router.push(`/documents/${doc.id}`)}>
               <div className="flex items-center gap-3">
                 <span className="font-medium text-text">{doc.template.name}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  doc.status === 'completed' ? 'bg-success-light text-success' : 'bg-warning-light text-warning'
+                  doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'
                 }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
               </div>
               <div className="text-xs text-text-muted mt-1">
@@ -637,32 +637,32 @@ function FilesTab({ job, category, files, locked, onUpdate }: { job: Job; catego
   return (
     <div className="max-w-2xl">
       {locked ? (
-        <div className="bg-surface border border-border rounded-xl p-4 mb-4 text-sm text-text-secondary">
+        <div className="card p-4 mb-4 text-sm text-text-secondary">
           This job is locked — reopen it to add or remove files.
-          {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+          {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         </div>
       ) : (
-      <form onSubmit={handleUpload} className="bg-surface border border-border rounded-xl p-5 mb-4">
+      <form onSubmit={handleUpload} className="card p-5 mb-4">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
             <label className="block text-sm font-medium text-text mb-1.5">Upload {category} file</label>
             <input type="file" required
               className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
-          <button type="submit" disabled={uploading} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button type="submit" disabled={uploading} className="btn btn-primary">
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
-        {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
       </form>
       )}
 
       {files.length === 0 && (
-        <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No {category} files yet.</div>
+        <div className="card p-8 text-center text-text-muted">No {category} files yet.</div>
       )}
       <div className="space-y-3">
         {files.map((f) => (
-          <div key={f.id} className="bg-surface border border-border rounded-xl p-4 flex justify-between items-center">
+          <div key={f.id} className="card p-4 flex justify-between items-center">
             <div>
               <div className="font-medium text-text text-sm">{f.fileName}</div>
               <div className="text-xs text-text-muted mt-0.5">

@@ -181,7 +181,7 @@ export default function DocumentFillPage() {
           <button
             type="button"
             onClick={() => setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id, page: pageNum, entry: entryIdx })}
-            className="px-2 py-0.5 bg-primary-light text-primary rounded text-xs font-medium hover:bg-primary/20"
+            className="px-2 py-0.5 tone tone-primary rounded text-xs font-medium hover:bg-primary/20"
           >
             GT
           </button>
@@ -192,21 +192,21 @@ export default function DocumentFillPage() {
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             rows={3}
             dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            className="input w-full resize-none"
           />
         ) : field.fieldType === 'date' ? (
           <input
             type="date"
             value={val}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="input w-full"
           />
         ) : field.fieldType === 'number' ? (
           <input
             type="number"
             value={val}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="input w-full"
           />
         ) : (
           <input
@@ -214,7 +214,7 @@ export default function DocumentFillPage() {
             value={val}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="input w-full"
           />
         )}
       </div>
@@ -226,14 +226,14 @@ export default function DocumentFillPage() {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={async () => { if (await confirmLeave()) router.push(`/jobs/${doc.jobId}`); }} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">
+          <button onClick={async () => { if (await confirmLeave()) router.push(`/jobs/${doc.jobId}`); }} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
             ← Back to {job.jobNumber} — {job.title}
           </button>
-          <h1 className="text-2xl font-bold text-text">{doc.template.name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-text">{doc.template.name}</h1>
           <p className="text-sm text-text-secondary mt-1">
             {sourceLang.name}{targetLang ? ` → ${targetLang.name}` : ''} —
             <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
-              doc.status === 'completed' ? 'bg-success-light text-success' : 'bg-warning-light text-warning'
+              doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'
             }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
           </p>
         </div>
@@ -243,25 +243,25 @@ export default function DocumentFillPage() {
             {saving ? 'Saving...' : 'Save'}
           </button>
           <button onClick={handleMarkComplete}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+            className="btn btn-primary">
             Save & Complete
           </button>
           {doc.template.type !== 'simple' && (
             <button onClick={handleExport}
-              className="px-4 py-2 bg-bg border border-border text-text rounded-lg text-sm font-medium hover:bg-border/50">
+              className="btn btn-secondary">
               Export .docx
             </button>
           )}
         </div>
       </div>
 
-      {message && <div className="mb-4 p-3 bg-success-light text-success rounded-lg text-sm">{message}</div>}
+      {message && <div className="mb-4 p-3 tone tone-success rounded-lg text-sm">{message}</div>}
 
       {/* Fields */}
       <div className="max-w-2xl">
         {/* Fixed fields */}
         {fixedFields.length > 0 && (
-          <div className="bg-surface border border-border rounded-xl p-6 mb-6">
+          <div className="card p-6 mb-6">
             {fixedFields.map((field) => renderField(field, 1))}
           </div>
         )}
@@ -274,16 +274,16 @@ export default function DocumentFillPage() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-text text-sm">{groupKey}</h3>
-                  <span className="px-2 py-0.5 bg-accent/20 text-accent rounded text-xs font-medium">Repeatable</span>
+                  <span className="px-2 py-0.5 tone tone-accent rounded text-xs font-medium">Repeatable</span>
                 </div>
                 <button type="button" onClick={() => addGroupEntry(groupKey)}
-                  className="px-3 py-1 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+                  className="btn btn-primary btn-sm">
                   + Add Entry
                 </button>
               </div>
 
               {Array.from({ length: entryCount }, (_, entryIdx) => (
-                <div key={entryIdx} className="bg-surface border border-border rounded-xl p-6 mb-3">
+                <div key={entryIdx} className="card p-6 mb-3">
                   <div className="text-xs text-text-muted mb-3 font-medium">Entry {entryIdx + 1}</div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
                     {groupFields.map((field) => renderField(field, 1, entryIdx))}
@@ -345,7 +345,7 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-surface border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="card p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-5">
           <h3 className="font-semibold text-text">Google Translate Helper</h3>
           <button onClick={onClose} aria-label="Close" className="text-text-muted hover:text-text text-lg">&times;</button>
@@ -361,18 +361,18 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
             rows={3}
             autoFocus
             placeholder={`Type in ${sourceLanguage.name}...`}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            className="input w-full resize-none"
             dir={sourceLanguage.direction === 'rtl' ? 'rtl' : 'ltr'}
           />
         </div>
 
         <div className="text-center mb-4">
           <button onClick={handleTranslate} disabled={loading || !sourceText.trim()}
-            className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            className="btn btn-primary">
             {loading ? 'Translating...' : 'Translate ↓'}
           </button>
         </div>
-        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
         <div className="mb-5">
           <label className="block text-sm font-medium text-text mb-1.5">
@@ -388,7 +388,7 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
         </div>
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">
+          <button onClick={onClose} className="btn btn-secondary">
             Close
           </button>
           {translatedText && (

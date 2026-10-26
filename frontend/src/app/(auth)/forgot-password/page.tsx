@@ -56,11 +56,11 @@ export default function ForgotPasswordPage() {
           <p className="text-text-secondary text-sm mt-1">Enter your email to receive a reset link</p>
         </div>
 
-        <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+        <div className="card p-6 shadow-sm">
           {!submitted ? (
             <form onSubmit={handleSubmit}>
               {error && (
-                <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>
+                <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>
               )}
 
               <div className="mb-6">
@@ -72,7 +72,7 @@ export default function ForgotPasswordPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoFocus
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="input w-full"
                   placeholder="you@example.com"
                 />
               </div>
@@ -80,7 +80,7 @@ export default function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 bg-primary text-white rounded-lg font-medium text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn btn-primary w-full"
               >
                 {loading ? 'Sending...' : 'Send Reset Link'}
               </button>

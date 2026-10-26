@@ -44,8 +44,8 @@ function RegisterForm() {
 
   if (!token) {
     return (
-      <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
-        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+      <div className="card p-6 shadow-sm">
+        <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">
           This registration link is missing its invite token. Please use the link from your invite email.
         </div>
         <div className="text-center">
@@ -59,9 +59,9 @@ function RegisterForm() {
     'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent';
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+    <div className="card p-6 shadow-sm">
       <form onSubmit={handleSubmit}>
-        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
         <div className="mb-4">
           <label htmlFor="email" className="block text-sm font-medium text-text mb-1.5">Email</label>
@@ -93,7 +93,7 @@ function RegisterForm() {
         </div>
 
         <button type="submit" disabled={loading}
-          className="w-full py-2.5 bg-primary text-white rounded-lg font-medium text-sm hover:bg-primary-hover transition-colors disabled:opacity-50">
+          className="btn btn-primary w-full">
           {loading ? 'Creating account...' : 'Create account'}
         </button>
       </form>
@@ -120,7 +120,7 @@ export default function RegisterPage() {
         </div>
 
         <Suspense fallback={
-          <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+          <div className="card p-6 shadow-sm">
             <p className="text-sm text-text-secondary text-center">Loading...</p>
           </div>
         }>

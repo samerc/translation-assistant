@@ -73,7 +73,7 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-text mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-text mb-6">Settings</h1>
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border mb-6 overflow-x-auto">
@@ -81,9 +81,9 @@ export default function SettingsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
+            className={`px-0.5 py-3 mr-6 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
               activeTab === tab.id
-                ? 'border-primary text-primary'
+                ? 'border-primary text-text font-semibold'
                 : 'border-transparent text-text-secondary hover:text-text'
             }`}
           >
@@ -142,11 +142,11 @@ function GeneralSettings() {
     }
   };
 
-  if (!settings) return loadError ? <div className="max-w-4xl p-3 bg-danger-light text-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
+  if (!settings) return loadError ? <div className="max-w-4xl p-3 tone tone-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
 
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl">
-      <div className="bg-surface border border-border rounded-xl p-6 space-y-5">
+      <div className="card p-6 space-y-5">
         <InputField
           label="Company Name"
           value={settings.companyName}
@@ -158,7 +158,7 @@ function GeneralSettings() {
             value={settings.companyAddress || ''}
             onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
             rows={3}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+            className="input w-full resize-none"
           />
         </div>
         <InputField
@@ -178,7 +178,7 @@ function GeneralSettings() {
         <button
           type="submit"
           disabled={saving}
-          className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50"
+          className="btn btn-primary"
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
@@ -253,7 +253,7 @@ function LanguagesSettings() {
         </p>
         <button
           onClick={() => { setShowForm(true); setEditingId(null); setForm({ code: '', name: '', direction: 'ltr' }); }}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
+          className="btn btn-primary"
         >
           + Add Language
         </button>
@@ -261,7 +261,7 @@ function LanguagesSettings() {
 
       {/* Add/Edit form */}
       {showForm && (
-        <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-5 mb-4">
+        <form onSubmit={handleSubmit} className="card p-5 mb-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Code</label>
@@ -271,7 +271,7 @@ function LanguagesSettings() {
                 required
                 disabled={!!editingId}
                 placeholder="ar"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50"
+                className="input w-full disabled:opacity-50"
               />
             </div>
             <div>
@@ -281,7 +281,7 @@ function LanguagesSettings() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
                 placeholder="Arabic"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="input w-full"
               />
             </div>
             <div>
@@ -289,7 +289,7 @@ function LanguagesSettings() {
               <select
                 value={form.direction}
                 onChange={(e) => setForm({ ...form, direction: e.target.value as 'ltr' | 'rtl' })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="input w-full"
               >
                 <option value="ltr">Left to Right (LTR)</option>
                 <option value="rtl">Right to Left (RTL)</option>
@@ -297,10 +297,10 @@ function LanguagesSettings() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors">
+            <button type="submit" className="btn btn-primary">
               {editingId ? 'Update' : 'Add Language'}
             </button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 transition-colors">
+            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="btn btn-secondary">
               Cancel
             </button>
           </div>
@@ -308,15 +308,15 @@ function LanguagesSettings() {
       )}
 
       {/* Languages table */}
-      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
+      <div className="card overflow-x-auto">
+        <table className="data-table min-w-[560px]">
           <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Code</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Name</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Direction</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Actions</th>
+            <tr>
+              <th className="text-left">Code</th>
+              <th className="text-left">Name</th>
+              <th className="text-left">Direction</th>
+              <th className="text-left">Status</th>
+              <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -337,7 +337,7 @@ function LanguagesSettings() {
                     onClick={() => handleToggleActive(lang)}
                     className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                       lang.isActive
-                        ? 'bg-success-light text-success'
+                        ? 'tone tone-success'
                         : 'bg-bg text-text-muted'
                     }`}
                   >
@@ -431,7 +431,7 @@ function LabelsSettings() {
           const catLabels = labels.filter((l) => l.category === cat.id);
 
           return (
-            <div key={cat.id} className="bg-surface border border-border rounded-xl p-6">
+            <div key={cat.id} className="card p-6">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-text">{cat.label}</h3>
                 {adding !== cat.id && (
@@ -458,7 +458,7 @@ function LabelsSettings() {
                           onChange={(e) => setEditValue(e.target.value)}
                           autoFocus
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEditSave(label.id); } if (e.key === 'Escape') setEditingId(null); }}
-                          className="flex-1 px-2 py-1 bg-surface border border-border rounded text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          className="input h-8 px-2 flex-1"
                         />
                         <button onClick={() => handleEditSave(label.id)} className="text-xs text-primary font-medium">Save</button>
                         <button onClick={() => setEditingId(null)} className="text-xs text-text-secondary">Cancel</button>
@@ -484,17 +484,17 @@ function LabelsSettings() {
                     placeholder="Label name"
                     autoFocus
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(cat.id); } }}
-                    className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="input flex-1"
                   />
                   <button
                     onClick={() => handleAdd(cat.id)}
-                    className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover"
+                    className="btn btn-primary btn-sm"
                   >
                     Add
                   </button>
                   <button
                     onClick={() => setAdding(null)}
-                    className="px-3 py-2 bg-bg border border-border text-text-secondary rounded-lg text-xs"
+                    className="btn btn-secondary btn-sm"
                   >
                     Cancel
                   </button>
@@ -572,12 +572,12 @@ function UploadSettings() {
     }
   };
 
-  if (!settings) return loadError ? <div className="max-w-4xl p-3 bg-danger-light text-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
+  if (!settings) return loadError ? <div className="max-w-4xl p-3 tone tone-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
 
   return (
     <div className="max-w-4xl space-y-6">
       {/* Max Upload Size */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <label className="block text-sm font-medium text-text mb-1.5">
           Max Upload Size (MB)
         </label>
@@ -588,12 +588,12 @@ function UploadSettings() {
             max={100}
             value={settings.maxUploadSizeMb}
             onChange={(e) => setSettings({ ...settings, maxUploadSizeMb: parseInt(e.target.value) || 5 })}
-            className="w-32 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="input w-32"
           />
           <button
             onClick={handleSaveSize}
             disabled={saving}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50"
+            className="btn btn-primary"
           >
             Save
           </button>
@@ -630,11 +630,11 @@ function FileTypePills({ title, description, items, inputValue, onInputChange, o
   color: 'primary' | 'danger';
 }) {
   const pillColors = color === 'primary'
-    ? 'bg-primary-light text-primary'
-    : 'bg-danger-light text-danger';
+    ? 'tone tone-primary'
+    : 'tone tone-danger';
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6">
+    <div className="card p-6">
       <h3 className="text-sm font-medium text-text mb-1">{title}</h3>
       <p className="text-xs text-text-muted mb-4">{description}</p>
 
@@ -663,11 +663,11 @@ function FileTypePills({ title, description, items, inputValue, onInputChange, o
           onChange={(e) => onInputChange(e.target.value)}
           placeholder={placeholder}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd(); } }}
-          className="flex-1 px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          className="input flex-1"
         />
         <button
           onClick={onAdd}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover"
+          className="btn btn-primary btn-sm"
         >
           Add
         </button>
@@ -696,7 +696,7 @@ function InputField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+        className="input w-full"
       />
     </div>
   );
@@ -843,7 +843,7 @@ function SecuritySettings() {
   return (
     <div className="space-y-6">
       {/* Log out everywhere */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-2">Log Out Everywhere</h3>
         <p className="text-sm text-text-secondary mb-4">
           This will invalidate all active sessions across all devices. You will need to log in again.
@@ -851,14 +851,14 @@ function SecuritySettings() {
         <button
           onClick={handleLogoutEverywhere}
           disabled={revoking}
-          className="px-4 py-2 bg-danger text-white rounded-lg text-sm font-medium hover:bg-danger/90 disabled:opacity-50"
+          className="btn btn-danger"
         >
           {revoking ? 'Logging out...' : 'Log Out All Devices'}
         </button>
       </div>
 
       {/* Active sessions */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-4">Active Sessions</h3>
         {loading ? (
           <p className="text-sm text-text-muted">Loading sessions...</p>
@@ -967,10 +967,10 @@ function UsersSettings() {
   return (
     <div className="max-w-4xl space-y-6">
       {/* Invite */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">Invite a user</h3>
         <p className="text-sm text-text-secondary mb-4">Generates an invite link (also emailed if SMTP is configured).</p>
-        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         <form onSubmit={invite} className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="flex-1">
             <label htmlFor="inviteEmail" className="block text-sm font-medium text-text mb-1.5">Email</label>
@@ -983,23 +983,23 @@ function UsersSettings() {
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
-          <button type="submit" disabled={inviteBusy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button type="submit" disabled={inviteBusy} className="btn btn-primary">
             {inviteBusy ? 'Creating...' : 'Create invite'}
           </button>
         </form>
         {inviteResult && (
-          <div className="mt-4 p-3 bg-success-light text-success rounded-lg text-sm break-all">
+          <div className="mt-4 p-3 tone tone-success rounded-lg text-sm break-all">
             Invite link: <a href={inviteResult.link} className="underline font-medium">{inviteResult.link}</a>
           </div>
         )}
       </div>
 
       {/* User list */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-4">Users</h3>
-        {loadError && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">Couldn&apos;t load users.</div>}
+        {loadError && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">Couldn&apos;t load users.</div>}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[520px]">
+          <table className="data-table min-w-[520px]">
             <thead>
               <tr className="border-b border-border text-left text-text-secondary">
                 <th className="py-2 font-semibold">Name</th>
@@ -1016,7 +1016,7 @@ function UsersSettings() {
                   <td className="py-2 text-text-secondary">{u.email}</td>
                   <td className="py-2 text-text-secondary">{u.role?.name || '—'}</td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.isActive ? 'bg-success-light text-success' : 'bg-neutral-light text-neutral'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.isActive ? 'tone tone-success' : 'tone tone-neutral'}`}>
                       {u.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -1111,11 +1111,11 @@ function EmailSettings() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">SMTP / Email</h3>
         <p className="text-sm text-text-secondary mb-4">Used to send invite and password-reset links. For local testing, point this at smtp4dev (host <code>localhost</code>, port <code>25</code>).</p>
         {message && (
-          <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'ok' ? 'bg-success-light text-success' : 'bg-danger-light text-danger'}`}>{message.text}</div>
+          <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'ok' ? 'tone tone-success' : 'tone tone-danger'}`}>{message.text}</div>
         )}
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1150,13 +1150,13 @@ function EmailSettings() {
             <label htmlFor="appBaseUrl" className="block text-sm font-medium text-text mb-1.5">App base URL (for links in emails)</label>
             <input id="appBaseUrl" value={form.appBaseUrl} onChange={(e) => setForm({ ...form, appBaseUrl: e.target.value })} placeholder="https://translate.fancyshark.com" className={inputClass} />
           </div>
-          <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button type="submit" disabled={saving} className="btn btn-primary">
             {saving ? 'Saving...' : 'Save email settings'}
           </button>
         </form>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">Send a test email</h3>
         <p className="text-sm text-text-secondary mb-4">Verify your SMTP configuration by sending a test message.</p>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -1164,7 +1164,7 @@ function EmailSettings() {
             <label htmlFor="testEmail" className="block text-sm font-medium text-text mb-1.5">Recipient</label>
             <input id="testEmail" type="email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className={inputClass} />
           </div>
-          <button onClick={sendTest} disabled={testing || !testEmail} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+          <button onClick={sendTest} disabled={testing || !testEmail} className="btn btn-primary">
             {testing ? 'Sending...' : 'Send test'}
           </button>
         </div>
@@ -1237,9 +1237,9 @@ function RolesSettings() {
 
   if (editing) {
     return (
-      <div className="max-w-3xl bg-surface border border-border rounded-xl p-6">
+      <div className="card max-w-3xl p-6">
         <h3 className="font-semibold text-text mb-4">{editing === 'new' ? 'New role' : `Edit role: ${editing.name}`}</h3>
-        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -1277,8 +1277,8 @@ function RolesSettings() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button type="submit" disabled={busy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{busy ? 'Saving...' : 'Save role'}</button>
-            <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+            <button type="submit" disabled={busy} className="btn btn-primary">{busy ? 'Saving...' : 'Save role'}</button>
+            <button type="button" onClick={() => setEditing(null)} className="btn btn-secondary">Cancel</button>
           </div>
         </form>
       </div>
@@ -1289,12 +1289,12 @@ function RolesSettings() {
     <div className="max-w-3xl space-y-4">
       <div className="flex justify-between items-center">
         <p className="text-sm text-text-secondary">Roles control what each user can do. Assign a role when inviting a user.</p>
-        <button onClick={startNew} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">+ New role</button>
+        <button onClick={startNew} className="btn btn-primary">+ New role</button>
       </div>
-      {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {error && <div className="p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
       <div className="space-y-3">
         {roles.map((r) => (
-          <div key={r.id} className="bg-surface border border-border rounded-xl p-4 flex items-start justify-between gap-4">
+          <div key={r.id} className="card p-4 flex items-start justify-between gap-4">
             <div>
               <div className="font-medium text-text">{r.name}</div>
               {r.description && <div className="text-sm text-text-secondary mt-0.5">{r.description}</div>}
@@ -1400,7 +1400,7 @@ function BusinessSettings() {
       </p>
 
       {/* Logo */}
-      <div className="bg-surface border border-border rounded-xl p-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">Logo</h3>
         <p className="text-sm text-text-secondary mb-4">PNG or JPEG, up to 1MB. Shown beside your business name on invoices.</p>
         <div className="flex items-center gap-5">
@@ -1410,7 +1410,7 @@ function BusinessSettings() {
               : <span className="text-xs text-text-muted">No logo</span>}
           </div>
           <div className="flex flex-col gap-2">
-            <label className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors cursor-pointer inline-block text-center">
+            <label className="btn btn-primary cursor-pointer inline-block text-center">
               {uploading ? 'Working…' : logo ? 'Replace logo' : 'Upload logo'}
               <input type="file" accept="image/png,image/jpeg" onChange={handleLogoChange} disabled={uploading} className="hidden" />
             </label>
@@ -1425,7 +1425,7 @@ function BusinessSettings() {
       </div>
 
       {/* Name + address */}
-      <form onSubmit={saveDetails} className="bg-surface border border-border rounded-xl p-6 space-y-5">
+      <form onSubmit={saveDetails} className="card p-6 space-y-5">
         <InputField label="Business Name" value={businessName} onChange={setBusinessName} placeholder="Your business name" />
         <div>
           <label className="block text-sm font-medium text-text mb-1.5">Business Address</label>
@@ -1434,12 +1434,12 @@ function BusinessSettings() {
             onChange={(e) => setBusinessAddress(e.target.value)}
             rows={3}
             placeholder="Street, city, country"
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
+            className="input w-full resize-none"
           />
         </div>
         <div className="flex items-center gap-3">
           <button type="submit" disabled={saving}
-            className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors disabled:opacity-50">
+            className="btn btn-primary">
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
           {message && <span className="text-sm text-success">{message}</span>}
@@ -1533,58 +1533,58 @@ function FreeformTypesSettings() {
         </p>
         <button
           onClick={() => { reset(); setShowForm(true); }}
-          className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors flex-shrink-0"
+          className="btn btn-primary flex-shrink-0"
         >
           + Add Type
         </button>
       </div>
 
-      {error && <div className="p-3 bg-danger-light text-danger rounded-lg text-sm mb-4">{error}</div>}
+      {error && <div className="p-3 tone tone-danger rounded-lg text-sm mb-4">{error}</div>}
 
       {showForm && (
-        <form onSubmit={submit} className="bg-surface border border-border rounded-xl p-5 mb-4 space-y-4">
+        <form onSubmit={submit} className="card p-5 mb-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1">
               <label className="block text-sm font-medium text-text mb-1.5">Name</label>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Certified Translation"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+                className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Price / Page</label>
               <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} placeholder="0.00"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+                className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text mb-1.5">Discounted / Page (optional)</label>
               <input type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} placeholder="—"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+                className="input w-full" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Description (optional)</label>
             <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Short note used as the default line-item description"
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" />
+              className="input w-full" />
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors">
+            <button type="submit" className="btn btn-primary">
               {editingId ? 'Update' : 'Add Type'}
             </button>
-            <button type="button" onClick={reset} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 transition-colors">
+            <button type="button" onClick={reset} className="btn btn-secondary">
               Cancel
             </button>
           </div>
         </form>
       )}
 
-      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
+      <div className="card overflow-x-auto">
+        <table className="data-table min-w-[560px]">
           <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Name</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Price / Page</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Discounted</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Actions</th>
+            <tr>
+              <th className="text-left">Name</th>
+              <th className="text-right">Price / Page</th>
+              <th className="text-right">Discounted</th>
+              <th className="text-left">Status</th>
+              <th className="text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1600,7 +1600,7 @@ function FreeformTypesSettings() {
                 <td className="px-4 py-3 text-right text-text">{Number(t.pricePerPage).toFixed(2)}</td>
                 <td className="px-4 py-3 text-right text-text-secondary">{t.discountedPricePerPage != null ? Number(t.discountedPricePerPage).toFixed(2) : '—'}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => toggle(t)} className={`text-xs px-2 py-1 rounded-full ${t.isActive ? 'bg-success-light text-success' : 'bg-neutral-light text-text-secondary'}`}>
+                  <button onClick={() => toggle(t)} className={`text-xs px-2 py-1 rounded-full ${t.isActive ? 'tone tone-success' : 'bg-neutral-light text-text-secondary'}`}>
                     {t.isActive ? 'Active' : 'Inactive'}
                   </button>
                 </td>

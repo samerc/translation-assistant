@@ -241,6 +241,7 @@ body {
   .tone-neutral { --c: var(--color-neutral); }
   .tone-info { --c: var(--color-info); }
   .tone-primary { --c: var(--color-primary); }
+  .tone-accent { --c: var(--color-accent); }
   .tone-purple { --c: var(--color-purple); }
   .tone-success { --c: var(--color-success); }
   .tone-warning { --c: var(--color-warning); }
