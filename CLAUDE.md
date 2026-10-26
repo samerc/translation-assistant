@@ -6,12 +6,13 @@ Internal multi-user web application for freelance translators. Two core modules:
 2. **Document Translation** — template-based system with document designer and Word export
 
 ## Tech Stack
-- **Backend:** NestJS (TypeScript) — `./backend/`
-- **Frontend:** React + Next.js — `./frontend/`
-- **Database:** MariaDB (via Docker)
-- **ORM:** TypeORM
+- **Runtime:** Node ≥ 22.12 (backend `engines`). NestJS 12 packages are ESM-only; the backend compiles to CommonJS and loads them via native `require(esm)`. Jest needs `--experimental-vm-modules` for the same, so `npm test`/`test:e2e` invoke jest through `node` with that flag.
+- **Backend:** NestJS 12 (TypeScript 6) — `./backend/`
+- **Frontend:** React 19 + Next.js 16 — `./frontend/`
+- **Database:** MariaDB (Docker, or local WAMP MariaDB on 3306)
+- **ORM:** TypeORM 1.x — find options use object syntax (`relations: { role: { permissions: true } }`, never string arrays); `loadRelationCountAndMap` is gone, use `attachRelationCount()` (`common/utils/relation-count.ts`); null/undefined in find `where` throws
 - **Auth:** JWT + refresh tokens, RBAC
-- **File uploads:** Local disk, compressed with `sharp` (images)
+- **File uploads:** Local disk, validated by magic bytes (no image compression)
 - **Word export:** `docx` npm library
 - **PDF export:** `pdfkit` library (invoice export)
 - **Translation helper:** Google Cloud Translation API
@@ -35,6 +36,8 @@ translation-assistant/
 │   │   ├── lib/          # Utilities, API client, hooks
 │   │   └── styles/       # Global styles, theme
 │   └── public/
+├── docs/                 # OPS.md (ops handoff/runbooks), design/ (original design spec + palettes)
+├── scripts/              # backup-db.ps1, test-integration.sh
 ├── docker-compose.yml    # MariaDB + app services
 └── CLAUDE.md
 ```
@@ -42,9 +45,15 @@ translation-assistant/
 ## Commands
 - `npm run dev` — Start both backend + frontend (from project root)
 - `cd backend && npm run start:dev` — Start backend only (port 3005)
-- `cd frontend && npm run dev` — Start frontend only (port 3000)
+- `cd frontend && npm run dev` — Start frontend only (port 3080)
 - `docker compose up -d` — Start MariaDB
 - `docker compose down` — Stop all containers
+- `cd backend && npm test` — unit tests; `npm run test:e2e` — DB-free security e2e suite (both run in CI)
+- `bash scripts/test-integration.sh` — live integration suite (~159 checks; needs backend on :3005 + frontend on :3080 + local DB; writes test data, cleans up after itself)
+
+## Dependencies
+- Dependabot (`.github/dependabot.yml`): weekly grouped minor/patch per app, majors as separate PRs. TypeScript 7 majors ignored (no JS API; ts-jest/typescript-eslint unsupported).
+- `multer` pinned to a patched version via `overrides` in `backend/package.json` (platform-express pins an older one) — drop when Nest catches up.
 
 ## Auth
 - JWT access tokens (15 min TTL, returned in body → localStorage) + refresh tokens (7 days)

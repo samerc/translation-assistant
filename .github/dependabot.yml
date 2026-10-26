@@ -1,0 +1,51 @@
+# Dependabot version updates. Security updates are raised separately (and
+# immediately) once "Dependabot security updates" is enabled in repo settings.
+#
+# Minor/patch bumps are grouped into one PR per package directory per week;
+# majors arrive as individual PRs so each can be reviewed on its own.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      # TS 7 (native compiler) has no JS API yet; ts-jest and typescript-eslint
+      # don't support it. Revisit when they do.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      root:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

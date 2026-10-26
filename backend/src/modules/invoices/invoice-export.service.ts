@@ -99,7 +99,16 @@ export class InvoiceExportService {
   private async getInvoice(id: string): Promise<Invoice> {
     const invoice = await this.invoiceRepository.findOne({
       where: { id },
-      relations: ['client', 'client.emails', 'client.addresses', 'items', 'items.job'],
+      relations: {
+        client: {
+          emails: true,
+          addresses: true
+        },
+
+        items: {
+          job: true
+        }
+      },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
     return invoice;

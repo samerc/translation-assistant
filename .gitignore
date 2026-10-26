@@ -45,3 +45,6 @@ coverage/
 # Misc
 *.tsbuildinfo
 backend/exports/
+
+# Next.js (regenerated on every build)
+frontend/next-env.d.ts

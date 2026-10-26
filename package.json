@@ -15,6 +15,6 @@
     "url": "git+https://github.com/samerc/translation-assistant.git"
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^10.0.6"
   }
 }

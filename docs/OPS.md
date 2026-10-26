@@ -38,6 +38,9 @@ Wired on both sides; nothing is sent until a DSN is configured.
 
 - **CI** (`.github/workflows/ci.yml`) runs automatically on PRs and pushes to `main`
   (backend build + unit + security e2e; frontend build). No setup needed.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly grouped minor/patch PRs per
+  app and individual PRs for majors. Also enable **Settings → Code security →
+  Dependabot alerts + security updates** so vulnerability fixes arrive immediately.
 - **Deploy** (`.github/workflows/deploy.yml`) is **manual** (Actions tab → "Deploy
   (manual)" → Run workflow). Add these repo secrets first
   (**Settings → Secrets and variables → Actions**):
@@ -73,6 +76,9 @@ changes or a column is removed. Migrations make schema changes explicit + review
 (`src/migrations/*-InitialBaseline.ts`) is **missing the post-baseline columns**:
 `users.businessName/businessAddress/logo` and `app_settings.smtp*` + `appBaseUrl`.
 So a top-up migration is required before cutover, or the baseline must be regenerated.
+A second migration, `*-TypeormV1JoinTableFk.ts` (TypeORM 1.x changed the
+`role_permissions → permissions` FK to `ON DELETE CASCADE`), already exists; prod picks
+it up via synchronize, so it also needs stamping in step 2.
 
 **Do this (in a maintenance window, after a fresh backup):**
 
@@ -106,6 +112,8 @@ So a top-up migration is required before cutover, or the baseline must be regene
 ## Quick reference — server facts
 
 - Host `144.91.89.20`, SSH (key-based) as `samer`, shell is **cmd.exe**.
+- **Node ≥ 22.12 required** (NestJS 12 is ESM-only; the CJS backend loads it via
+  native `require(esm)`, which older Node lacks). Check with `node -v` before deploying.
 - PM2 apps: `ta-backend` (3005), `ta-frontend` (3080). **Never touch `mj-wedding`.**
 - Env lives **inline** in `C:\apps\translation-assistant\ecosystem.config.cjs` (not a
   `.env`). PM2 caches it → env changes need `pm2 delete` + `pm2 start`, not `restart`.

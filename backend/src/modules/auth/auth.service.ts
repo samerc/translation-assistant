@@ -65,7 +65,11 @@ export class AuthService {
 
     const user = await this.userRepository.findOne({
       where: { email: dto.email },
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
 
     if (!user) {
@@ -128,7 +132,11 @@ export class AuthService {
 
     const fullUser = await this.userRepository.findOne({
       where: { id: savedUser.id },
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
 
     const accessToken = await this.generateAccessToken(fullUser!);
@@ -147,7 +155,11 @@ export class AuthService {
   async refreshTokens(userId: string, refreshToken: string, ip: string, userAgent: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
 
     if (!user) throw new ForbiddenException('Access denied');
@@ -247,7 +259,11 @@ export class AuthService {
   async getProfile(userId: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
     if (!user) throw new UnauthorizedException();
     return this.sanitizeUser(user);

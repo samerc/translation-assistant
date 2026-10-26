@@ -28,7 +28,11 @@ export class UsersService {
 
   async findAll(): Promise<Partial<User>[]> {
     const users = await this.userRepository.find({
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
     // Drop the (potentially large) base64 logo from list responses — it's only
     // needed on the single-user branding form, served by findOne().
@@ -41,7 +45,11 @@ export class UsersService {
   async findOne(id: string): Promise<Partial<User>> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
     if (!user) throw new NotFoundException('User not found');
     return this.sanitize(user);
