@@ -1,4 +1,13 @@
-import { IsString, IsOptional, IsInt, MinLength, MaxLength, Min, Max, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  MinLength,
+  MaxLength,
+  Min,
+  Max,
+  IsIn,
+} from 'class-validator';
 
 export const LABEL_CATEGORIES = ['email', 'phone', 'address'] as const;
 export type LabelCategory = (typeof LABEL_CATEGORIES)[number];

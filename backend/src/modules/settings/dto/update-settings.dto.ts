@@ -28,7 +28,9 @@ export class UpdateSettingsDto {
   companyLogo?: string;
 
   @IsOptional()
-  @Matches(/^[A-Z]{3}$/, { message: 'baseCurrency must be a 3-letter ISO code (e.g. USD)' })
+  @Matches(/^[A-Z]{3}$/, {
+    message: 'baseCurrency must be a 3-letter ISO code (e.g. USD)',
+  })
   baseCurrency?: string;
 
   @IsOptional()

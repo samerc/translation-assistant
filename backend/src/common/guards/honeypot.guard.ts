@@ -23,7 +23,12 @@ export class HoneypotGuard implements CanActivate {
     const method = request.method;
 
     // Only check write operations
-    if (method === 'GET' || method === 'OPTIONS' || method === 'HEAD' || method === 'DELETE') {
+    if (
+      method === 'GET' ||
+      method === 'OPTIONS' ||
+      method === 'HEAD' ||
+      method === 'DELETE'
+    ) {
       return true;
     }
 
@@ -36,7 +41,9 @@ export class HoneypotGuard implements CanActivate {
     if (body._hp !== undefined && body._hp !== '' && body._hp !== null) {
       const ip = request.ip || request.connection?.remoteAddress || 'unknown';
       const url = request.originalUrl || request.url;
-      this.logger.warn(`[BOT_DETECTED] ip=${ip} url=${url} honeypot_value="${String(body._hp).slice(0, 100)}"`);
+      this.logger.warn(
+        `[BOT_DETECTED] ip=${ip} url=${url} honeypot_value="${String(body._hp).slice(0, 100)}"`,
+      );
       throw new BadRequestException('Request rejected');
     }
 

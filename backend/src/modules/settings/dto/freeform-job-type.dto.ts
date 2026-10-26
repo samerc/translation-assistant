@@ -1,4 +1,13 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, MinLength, MaxLength, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  MinLength,
+  MaxLength,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class CreateFreeformJobTypeDto {
   @IsString()

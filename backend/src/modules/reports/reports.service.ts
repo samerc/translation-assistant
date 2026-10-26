@@ -23,9 +23,16 @@ export class ReportsService {
     // Active jobs
     const activeJobsQb = this.jobRepository
       .createQueryBuilder('job')
-      .where('job.status IN (:...statuses)', { statuses: ['quote', 'accepted', 'in_progress'] });
+      .where('job.status IN (:...statuses)', {
+        statuses: ['quote', 'accepted', 'in_progress'],
+      });
     if (!isAdmin) {
-      activeJobsQb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
+      activeJobsQb.innerJoin(
+        'job.assignedUsers',
+        'ju',
+        'ju.user_id = :userId',
+        { userId },
+      );
     }
     const activeJobs = await activeJobsQb.getCount();
 
@@ -38,7 +45,10 @@ export class ReportsService {
       .createQueryBuilder('inv')
       .select('COALESCE(SUM(inv.paidAmount), 0)', 'revenue')
       .where('inv.status = :status', { status: 'paid' })
-      .andWhere('inv.paidAt BETWEEN :start AND :end', { start: monthStart, end: monthEnd + ' 23:59:59' });
+      .andWhere('inv.paidAt BETWEEN :start AND :end', {
+        start: monthStart,
+        end: monthEnd + ' 23:59:59',
+      });
     if (!isAdmin) {
       revenueQb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
@@ -62,10 +72,17 @@ export class ReportsService {
 
     const dueQb = this.jobRepository
       .createQueryBuilder('job')
-      .where('job.deadline BETWEEN :today AND :weekEnd', { today: todayStr, weekEnd: weekEndStr })
-      .andWhere('job.status NOT IN (:...excluded)', { excluded: ['paid', 'cancelled', 'lost'] });
+      .where('job.deadline BETWEEN :today AND :weekEnd', {
+        today: todayStr,
+        weekEnd: weekEndStr,
+      })
+      .andWhere('job.status NOT IN (:...excluded)', {
+        excluded: ['paid', 'cancelled', 'lost'],
+      });
     if (!isAdmin) {
-      dueQb.innerJoin('job.assignedUsers', 'ju2', 'ju2.user_id = :userId', { userId });
+      dueQb.innerJoin('job.assignedUsers', 'ju2', 'ju2.user_id = :userId', {
+        userId,
+      });
     }
     const dueThisWeek = await dueQb.getCount();
 
@@ -85,7 +102,13 @@ export class ReportsService {
     };
   }
 
-  async getRevenue(userId: string, isAdmin: boolean, period: string, from?: string, to?: string) {
+  async getRevenue(
+    userId: string,
+    isAdmin: boolean,
+    period: string,
+    from?: string,
+    to?: string,
+  ) {
     const qb = this.invoiceRepository
       .createQueryBuilder('inv')
       .where('inv.status = :status', { status: 'paid' });
@@ -123,7 +146,10 @@ export class ReportsService {
       .select('client.id', 'clientId')
       .addSelect('client.name', 'clientName')
       .addSelect('COUNT(DISTINCT inv.id)', 'invoiceCount')
-      .addSelect('COALESCE(SUM(CASE WHEN inv.status = :paid THEN inv.paidAmount ELSE 0 END), 0)', 'totalRevenue')
+      .addSelect(
+        'COALESCE(SUM(CASE WHEN inv.status = :paid THEN inv.paidAmount ELSE 0 END), 0)',
+        'totalRevenue',
+      )
       .setParameter('paid', 'paid')
       .groupBy('client.id')
       .addGroupBy('client.name')
@@ -150,7 +176,9 @@ export class ReportsService {
       .groupBy('job.status');
 
     if (!isAdmin) {
-      qb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
+      qb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', {
+        userId,
+      });
     }
 
     const results = await qb.getRawMany();

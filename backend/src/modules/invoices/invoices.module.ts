@@ -14,7 +14,15 @@ import { MailModule } from '../mail/mail.module.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Invoice, InvoiceItem, Job, JobUser, Client, AppSettings, User]),
+    TypeOrmModule.forFeature([
+      Invoice,
+      InvoiceItem,
+      Job,
+      JobUser,
+      Client,
+      AppSettings,
+      User,
+    ]),
     MailModule,
   ],
   controllers: [InvoicesController],

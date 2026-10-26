@@ -26,9 +26,9 @@ const XSS_PATTERNS = [
 ];
 
 const MAX_FIELD_LENGTH = 50000;
-const MAX_DEPTH = 20;        // reject pathologically nested bodies
-const MAX_NODES = 1000;      // total values inspected per request (CPU bound)
-const MAX_KEYS = 200;        // per-object key fan-out cap
+const MAX_DEPTH = 20; // reject pathologically nested bodies
+const MAX_NODES = 1000; // total values inspected per request (CPU bound)
+const MAX_KEYS = 200; // per-object key fan-out cap
 
 @Injectable()
 export class AbuseDetectionGuard implements CanActivate {
@@ -52,7 +52,13 @@ export class AbuseDetectionGuard implements CanActivate {
     return true;
   }
 
-  private inspectObject(obj: any, path: string, request: any, depth: number, budget: { count: number }): void {
+  private inspectObject(
+    obj: any,
+    path: string,
+    request: any,
+    depth: number,
+    budget: { count: number },
+  ): void {
     if (obj === null || obj === undefined) return;
     // Bound total work per request (CPU DoS) and nesting depth (stack safety).
     if (depth > MAX_DEPTH || budget.count >= MAX_NODES) return;
@@ -75,14 +81,29 @@ export class AbuseDetectionGuard implements CanActivate {
       const keys = Object.keys(obj).slice(0, MAX_KEYS);
       for (const key of keys) {
         if (budget.count >= MAX_NODES) break;
-        this.inspectObject(obj[key], path ? `${path}.${key}` : key, request, depth + 1, budget);
+        this.inspectObject(
+          obj[key],
+          path ? `${path}.${key}` : key,
+          request,
+          depth + 1,
+          budget,
+        );
       }
     }
   }
 
   private inspectString(value: string, path: string, request: any): void {
     // Skip known safe fields that may legitimately contain long/complex content
-    const safeFields = ['password', 'currentPassword', 'newPassword', 'accessToken', 'refreshToken', 'inviteToken', 'token', 'layoutJson'];
+    const safeFields = [
+      'password',
+      'currentPassword',
+      'newPassword',
+      'accessToken',
+      'refreshToken',
+      'inviteToken',
+      'token',
+      'layoutJson',
+    ];
     const fieldName = path.split('.').pop() || path;
     if (safeFields.includes(fieldName)) return;
 
@@ -109,7 +130,12 @@ export class AbuseDetectionGuard implements CanActivate {
     }
   }
 
-  private logAttempt(type: string, field: string, sample: string, request: any): void {
+  private logAttempt(
+    type: string,
+    field: string,
+    sample: string,
+    request: any,
+  ): void {
     const ip = request.ip || request.connection?.remoteAddress || 'unknown';
     const userId = request.user?.id || 'anonymous';
     const url = request.originalUrl || request.url;

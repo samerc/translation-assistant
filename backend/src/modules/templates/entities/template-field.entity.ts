@@ -14,7 +14,9 @@ export class TemplateField {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Template, (template) => template.fields, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Template, (template) => template.fields, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'template_id' })
   template: Template;
 

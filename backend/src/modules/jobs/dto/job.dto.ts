@@ -1,7 +1,20 @@
 import {
-  IsString, IsOptional, IsInt, IsNumber, IsBoolean, IsIn, IsUUID,
-  IsDateString, IsArray, ValidateNested, MinLength, MaxLength, Min, Max,
-  ArrayMaxSize, Matches,
+  IsString,
+  IsOptional,
+  IsInt,
+  IsNumber,
+  IsBoolean,
+  IsIn,
+  IsUUID,
+  IsDateString,
+  IsArray,
+  ValidateNested,
+  MinLength,
+  MaxLength,
+  Min,
+  Max,
+  ArrayMaxSize,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -122,7 +135,16 @@ export class UpdateJobDto {
   contactId?: string;
 
   @IsOptional()
-  @IsIn(['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'lost', 'cancelled'])
+  @IsIn([
+    'quote',
+    'accepted',
+    'in_progress',
+    'delivered',
+    'invoiced',
+    'paid',
+    'lost',
+    'cancelled',
+  ])
   status?: string;
 
   @IsOptional()
@@ -146,7 +168,9 @@ export class UpdateJobDto {
   freeOfChargeReason?: string;
 
   @IsOptional()
-  @Matches(/^[A-Z]{3}$/, { message: 'paymentCurrency must be a 3-letter ISO code (e.g. USD)' })
+  @Matches(/^[A-Z]{3}$/, {
+    message: 'paymentCurrency must be a 3-letter ISO code (e.g. USD)',
+  })
   paymentCurrency?: string;
 
   @IsOptional()
@@ -165,7 +189,16 @@ export class UpdateJobDto {
 // ── DTOs for inline @Body() endpoints ──
 
 export class UpdateJobStatusDto {
-  @IsIn(['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'lost', 'cancelled'])
+  @IsIn([
+    'quote',
+    'accepted',
+    'in_progress',
+    'delivered',
+    'invoiced',
+    'paid',
+    'lost',
+    'cancelled',
+  ])
   status: string;
 }
 

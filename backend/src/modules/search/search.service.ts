@@ -55,14 +55,18 @@ export class SearchService {
       .addSelect(['client.name'])
       .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
     if (!isAdmin) {
-      jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
+      jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
+        userId,
+      });
     }
 
     const jobCountQb = this.jobRepository
       .createQueryBuilder('j')
       .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
     if (!isAdmin) {
-      jobCountQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
+      jobCountQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
+        userId,
+      });
     }
 
     // Templates - visible to all with templates:read permission (they need it to do their work)
@@ -108,23 +112,46 @@ export class SearchService {
       );
     }
 
-    const [clients, clientCount, jobs, jobCount, templates, templateCount, invoices, invoiceCount] =
-      await Promise.all([
-        clientQb.take(5).getMany(),
-        clientCountQb.getCount(),
-        jobQb.take(5).getMany(),
-        jobCountQb.getCount(),
-        templateQb.take(5).getMany(),
-        templateCountQb.getCount(),
-        invoiceQb.take(5).getMany(),
-        invoiceCountQb.getCount(),
-      ]);
+    const [
+      clients,
+      clientCount,
+      jobs,
+      jobCount,
+      templates,
+      templateCount,
+      invoices,
+      invoiceCount,
+    ] = await Promise.all([
+      clientQb.take(5).getMany(),
+      clientCountQb.getCount(),
+      jobQb.take(5).getMany(),
+      jobCountQb.getCount(),
+      templateQb.take(5).getMany(),
+      templateCountQb.getCount(),
+      invoiceQb.take(5).getMany(),
+      invoiceCountQb.getCount(),
+    ]);
 
     return {
       clients: clients.map((c) => ({ id: c.id, name: c.name, type: c.type })),
-      jobs: jobs.map((j) => ({ id: j.id, jobNumber: j.jobNumber, title: j.title, status: j.status, clientName: j.client?.name })),
-      templates: templates.map((t) => ({ id: t.id, name: t.name, type: t.type })),
-      invoices: invoices.map((inv) => ({ id: inv.id, invoiceNumber: inv.invoiceNumber, clientName: inv.client?.name, status: inv.status })),
+      jobs: jobs.map((j) => ({
+        id: j.id,
+        jobNumber: j.jobNumber,
+        title: j.title,
+        status: j.status,
+        clientName: j.client?.name,
+      })),
+      templates: templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        type: t.type,
+      })),
+      invoices: invoices.map((inv) => ({
+        id: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        clientName: inv.client?.name,
+        status: inv.status,
+      })),
       counts: {
         clients: clientCount,
         jobs: jobCount,

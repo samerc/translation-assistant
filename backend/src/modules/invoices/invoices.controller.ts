@@ -1,6 +1,17 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  UseGuards, Res, NotFoundException, BadRequestException, ParseUUIDPipe,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Res,
+  NotFoundException,
+  BadRequestException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream, existsSync, unlinkSync } from 'fs';
@@ -8,7 +19,13 @@ import { AuthGuard } from '@nestjs/passport';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceExportService } from './invoice-export.service.js';
 import { MailService } from '../mail/mail.service.js';
-import { CreateInvoiceDto, UpdateInvoiceDto, UpdateInvoiceStatusDto, RecordPaymentDto, SendInvoiceEmailDto } from './dto/invoice.dto.js';
+import {
+  CreateInvoiceDto,
+  UpdateInvoiceDto,
+  UpdateInvoiceStatusDto,
+  RecordPaymentDto,
+  SendInvoiceEmailDto,
+} from './dto/invoice.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -42,7 +59,10 @@ export class InvoicesController {
     @Query('limit') limit?: string,
   ) {
     return this.invoicesService.findAll({
-      search, status, sortBy, sortOrder,
+      search,
+      status,
+      sortBy,
+      sortOrder,
       clientId: clientId || undefined,
       from: from || undefined,
       to: to || undefined,
@@ -55,15 +75,29 @@ export class InvoicesController {
 
   @Get('by-job/:jobId')
   @RequirePermissions('invoices:read')
-  async findByJob(@Param('jobId', ParseUUIDPipe) jobId: string, @CurrentUser() user: User) {
-    await this.invoicesService.verifyJobAccess(jobId, user.id, this.isAdmin(user));
+  async findByJob(
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyJobAccess(
+      jobId,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.invoicesService.findByJob(jobId);
   }
 
   @Get(':id')
   @RequirePermissions('invoices:read')
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    return this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
   }
 
   @Post()
@@ -74,51 +108,110 @@ export class InvoicesController {
 
   @Patch(':id')
   @RequirePermissions('invoices:update')
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateInvoiceDto, @CurrentUser() user: User) {
-    await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateInvoiceDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.invoicesService.update(id, dto, user.id, this.isAdmin(user));
   }
 
   @Patch(':id/status')
   @RequirePermissions('invoices:update')
-  async updateStatus(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateInvoiceStatusDto, @CurrentUser() user: User) {
-    await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateInvoiceStatusDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.invoicesService.updateStatus(id, dto.status);
   }
 
   @Post(':id/record-payment')
   @RequirePermissions('invoices:update')
-  async recordPayment(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RecordPaymentDto, @CurrentUser() user: User) {
-    await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async recordPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RecordPaymentDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.invoicesService.recordPayment(id, dto);
   }
 
   @Post(':id/export-pdf')
   @RequirePermissions('invoices:read')
-  async exportPdf(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response, @CurrentUser() user: User) {
-    await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async exportPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     const { filePath, fileName } = await this.exportService.exportPdf(id);
-    if (!existsSync(filePath)) throw new NotFoundException('Export file not found');
+    if (!existsSync(filePath))
+      throw new NotFoundException('Export file not found');
     const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${safeFileName}"`,
+    );
     const stream = createReadStream(filePath);
     stream.pipe(res);
-    stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
+    stream.on('end', () => {
+      try {
+        unlinkSync(filePath);
+      } catch {}
+    });
   }
 
   @Post(':id/export-word')
   @RequirePermissions('invoices:read')
-  async exportWord(@Param('id', ParseUUIDPipe) id: string, @Res() res: Response, @CurrentUser() user: User) {
-    await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async exportWord(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Res() res: Response,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     const { filePath, fileName } = await this.exportService.exportWord(id);
-    if (!existsSync(filePath)) throw new NotFoundException('Export file not found');
+    if (!existsSync(filePath))
+      throw new NotFoundException('Export file not found');
     const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${safeFileName}"`,
+    );
     const stream = createReadStream(filePath);
     stream.pipe(res);
-    stream.on('end', () => { try { unlinkSync(filePath); } catch {} });
+    stream.on('end', () => {
+      try {
+        unlinkSync(filePath);
+      } catch {}
+    });
   }
 
   @Post(':id/email')
@@ -128,8 +221,13 @@ export class InvoicesController {
     @Body() dto: SendInvoiceEmailDto,
     @CurrentUser() user: User,
   ) {
-    const invoice = await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
-    const recipient = dto.email || (await this.invoicesService.getClientEmail(id));
+    const invoice = await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
+    const recipient =
+      dto.email || (await this.invoicesService.getClientEmail(id));
     if (!recipient) {
       throw new BadRequestException(
         'No recipient email — the client has no email on file. Provide one to send.',
@@ -137,17 +235,31 @@ export class InvoicesController {
     }
     const { filePath } = await this.exportService.exportPdf(id);
     try {
-      await this.mailService.sendInvoiceEmail(recipient, invoice.invoiceNumber, filePath, dto.message);
+      await this.mailService.sendInvoiceEmail(
+        recipient,
+        invoice.invoiceNumber,
+        filePath,
+        dto.message,
+      );
     } finally {
-      try { unlinkSync(filePath); } catch {}
+      try {
+        unlinkSync(filePath);
+      } catch {}
     }
     return { sent: true, to: recipient };
   }
 
   @Delete(':id')
   @RequirePermissions('invoices:delete')
-  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    await this.invoicesService.verifyInvoiceAccess(id, user.id, this.isAdmin(user));
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.invoicesService.remove(id);
   }
 }

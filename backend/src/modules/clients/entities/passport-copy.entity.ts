@@ -13,7 +13,9 @@ export class PassportCopy {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Client, (client) => client.passportCopies, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Client, (client) => client.passportCopies, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'client_id' })
   client: Client;
 

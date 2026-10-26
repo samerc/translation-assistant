@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
 import { Invoice } from './entities/invoice.entity.js';
@@ -8,7 +13,11 @@ import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
-import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto } from './dto/invoice.dto.js';
+import {
+  CreateInvoiceDto,
+  UpdateInvoiceDto,
+  RecordPaymentDto,
+} from './dto/invoice.dto.js';
 
 @Injectable()
 export class InvoicesService {
@@ -29,7 +38,11 @@ export class InvoicesService {
   ) {}
 
   // Verify user has access to this invoice (created it or has access to a linked job)
-  async verifyInvoiceAccess(invoiceId: string, userId: string, isAdmin: boolean): Promise<Invoice> {
+  async verifyInvoiceAccess(
+    invoiceId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<Invoice> {
     const invoice = await this.findOne(invoiceId);
     if (isAdmin) return invoice;
 
@@ -48,7 +61,11 @@ export class InvoicesService {
     throw new ForbiddenException('You do not have access to this invoice');
   }
 
-  async verifyJobAccess(jobId: string, userId: string, isAdmin: boolean): Promise<void> {
+  async verifyJobAccess(
+    jobId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<void> {
     if (isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
       where: { jobId, userId },
@@ -73,10 +90,13 @@ export class InvoicesService {
     // Even with concurrent requests, the unique constraint will catch duplicates
     const result = await this.invoiceRepository
       .createQueryBuilder('inv')
-      .select('MAX(CAST(SUBSTRING(inv.invoiceNumber, :prefixLen + 1) AS UNSIGNED))', 'maxNum')
+      .select(
+        'MAX(CAST(SUBSTRING(inv.invoiceNumber, :prefixLen + 1) AS UNSIGNED))',
+        'maxNum',
+      )
       .setParameter('prefixLen', prefix.length)
       .getRawOne();
-    const nextNum = (parseInt(result?.maxNum || '0', 10)) + 1;
+    const nextNum = parseInt(result?.maxNum || '0', 10) + 1;
     return `${prefix}${String(nextNum).padStart(4, '0')}`;
   }
 
@@ -84,11 +104,18 @@ export class InvoicesService {
     return Math.round((n + Number.EPSILON) * 100) / 100;
   }
 
-  private calculateTotals(items: { quantity: number; unitPrice: number }[], taxRate: number) {
+  private calculateTotals(
+    items: { quantity: number; unitPrice: number }[],
+    taxRate: number,
+  ) {
     // Round each line, then derive totals from rounded values so the stored
     // decimal(10,2) columns match what's displayed (no truncation drift).
     const subtotal = this.round2(
-      items.reduce((sum, item) => sum + this.round2(Number(item.quantity) * Number(item.unitPrice)), 0),
+      items.reduce(
+        (sum, item) =>
+          sum + this.round2(Number(item.quantity) * Number(item.unitPrice)),
+        0,
+      ),
     );
     const taxAmount = this.round2(subtotal * (Number(taxRate) / 100));
     const total = this.round2(subtotal + taxAmount);
@@ -108,7 +135,15 @@ export class InvoicesService {
     userId?: string;
     isAdmin?: boolean;
   }) {
-    const { search, status, clientId, from, to, sortBy = 'createdAt', sortOrder = 'DESC' } = query;
+    const {
+      search,
+      status,
+      clientId,
+      from,
+      to,
+      sortBy = 'createdAt',
+      sortOrder = 'DESC',
+    } = query;
     const page = Math.max(1, query.page || 1);
     const limit = Math.min(Math.max(1, query.limit || 25), 100);
 
@@ -129,7 +164,10 @@ export class InvoicesService {
     }
 
     if (search) {
-      qb.andWhere('(inv.invoiceNumber LIKE :search OR client.name LIKE :search)', { search: `%${search}%` });
+      qb.andWhere(
+        '(inv.invoiceNumber LIKE :search OR client.name LIKE :search)',
+        { search: `%${search}%` },
+      );
     }
     if (status) {
       qb.andWhere('inv.status = :status', { status });
@@ -144,13 +182,27 @@ export class InvoicesService {
       qb.andWhere('inv.issueDate <= :to', { to });
     }
 
-    const allowedSortFields = ['invoiceNumber', 'status', 'issueDate', 'dueDate', 'total', 'createdAt'];
-    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
+    const allowedSortFields = [
+      'invoiceNumber',
+      'status',
+      'issueDate',
+      'dueDate',
+      'total',
+      'createdAt',
+    ];
+    const safeSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : 'createdAt';
     qb.orderBy(`inv.${safeSortBy}`, sortOrder === 'ASC' ? 'ASC' : 'DESC');
     qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
-    await attachRelationCount(data, this.itemRepository, 'invoiceId', 'itemCount');
+    await attachRelationCount(
+      data,
+      this.itemRepository,
+      'invoiceId',
+      'itemCount',
+    );
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
@@ -182,8 +234,8 @@ export class InvoicesService {
       where: { id: invoiceId },
       relations: {
         client: {
-          emails: true
-        }
+          emails: true,
+        },
       },
     });
     const emails = invoice?.client?.emails || [];
@@ -191,12 +243,18 @@ export class InvoicesService {
     return chosen?.email || null;
   }
 
-  async create(dto: CreateInvoiceDto, userId: string, isAdmin = false): Promise<Invoice> {
+  async create(
+    dto: CreateInvoiceDto,
+    userId: string,
+    isAdmin = false,
+  ): Promise<Invoice> {
     // Validate all entities in parallel
     const jobIds = dto.items.filter((i) => i.jobId).map((i) => i.jobId!);
     const [client, jobs, settings] = await Promise.all([
       this.clientRepository.findOne({ where: { id: dto.clientId } }),
-      jobIds.length > 0 ? this.jobRepository.find({ where: { id: In(jobIds) } }) : Promise.resolve([]),
+      jobIds.length > 0
+        ? this.jobRepository.find({ where: { id: In(jobIds) } })
+        : Promise.resolve([]),
       this.settingsRepository.find(),
     ]);
 
@@ -206,9 +264,12 @@ export class InvoicesService {
     for (const item of dto.items) {
       if (item.jobId) {
         const job = jobMap.get(item.jobId);
-        if (!job) throw new BadRequestException('One of the linked jobs was not found');
+        if (!job)
+          throw new BadRequestException('One of the linked jobs was not found');
         if (job.clientId !== dto.clientId) {
-          throw new BadRequestException('One of the linked jobs does not belong to this client');
+          throw new BadRequestException(
+            'One of the linked jobs does not belong to this client',
+          );
         }
       }
     }
@@ -218,7 +279,10 @@ export class InvoicesService {
     }
     const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
-    const { subtotal, taxAmount, total } = this.calculateTotals(dto.items, taxRate);
+    const { subtotal, taxAmount, total } = this.calculateTotals(
+      dto.items,
+      taxRate,
+    );
 
     const invoiceNumber = await this.generateInvoiceNumber();
 
@@ -260,7 +324,12 @@ export class InvoicesService {
     return this.findOne(savedId);
   }
 
-  async update(id: string, dto: UpdateInvoiceDto, userId?: string, isAdmin = false): Promise<Invoice> {
+  async update(
+    id: string,
+    dto: UpdateInvoiceDto,
+    userId?: string,
+    isAdmin = false,
+  ): Promise<Invoice> {
     const invoice = await this.findOne(id);
     if (invoice.status !== 'draft') {
       throw new BadRequestException('Only draft invoices can be edited');
@@ -276,7 +345,9 @@ export class InvoicesService {
     if (dto.items) {
       // IDOR guard: verify access to every job linked by the new item set.
       if (userId) {
-        const jobIds = new Set(dto.items.filter((i) => i.jobId).map((i) => i.jobId!));
+        const jobIds = new Set(
+          dto.items.filter((i) => i.jobId).map((i) => i.jobId!),
+        );
         for (const jobId of jobIds) {
           await this.verifyJobAccess(jobId, userId, isAdmin);
         }
@@ -299,7 +370,10 @@ export class InvoicesService {
     // Recalculate totals
     const allItems = dto.items || invoice.items;
     const { subtotal, taxAmount, total } = this.calculateTotals(
-      allItems.map((i) => ({ quantity: Number(i.quantity), unitPrice: Number(i.unitPrice) })),
+      allItems.map((i) => ({
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+      })),
       Number(invoice.taxRate),
     );
     invoice.subtotal = subtotal;
@@ -344,7 +418,9 @@ export class InvoicesService {
   async recordPayment(id: string, dto: RecordPaymentDto): Promise<Invoice> {
     const invoice = await this.findOne(id);
     if (!['sent', 'overdue'].includes(invoice.status)) {
-      throw new BadRequestException('Can only record payment for sent or overdue invoices');
+      throw new BadRequestException(
+        'Can only record payment for sent or overdue invoices',
+      );
     }
 
     invoice.status = 'paid';

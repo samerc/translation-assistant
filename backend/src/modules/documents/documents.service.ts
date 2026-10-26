@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Document } from './entities/document.entity.js';
@@ -18,7 +22,11 @@ export class DocumentsService {
     private readonly jobUserRepository: Repository<JobUser>,
   ) {}
 
-  async verifyJobAccess(jobId: string, userId: string, isAdmin: boolean): Promise<void> {
+  async verifyJobAccess(
+    jobId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<void> {
     if (isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
       where: { jobId, userId },
@@ -28,7 +36,11 @@ export class DocumentsService {
     }
   }
 
-  async verifyDocumentAccess(documentId: string, userId: string, isAdmin: boolean): Promise<Document> {
+  async verifyDocumentAccess(
+    documentId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<Document> {
     const doc = await this.findOne(documentId);
     await this.verifyJobAccess(doc.jobId, userId, isAdmin);
     return doc;
@@ -42,7 +54,12 @@ export class DocumentsService {
       .where('doc.jobId = :jobId', { jobId })
       .orderBy('doc.createdAt', 'ASC')
       .getMany();
-    return attachRelationCount(docs, this.fieldValueRepository, 'documentId', 'fieldValueCount');
+    return attachRelationCount(
+      docs,
+      this.fieldValueRepository,
+      'documentId',
+      'fieldValueCount',
+    );
   }
 
   async findOne(id: string): Promise<Document> {
@@ -52,14 +69,14 @@ export class DocumentsService {
         template: {
           fields: {
             labels: {
-              language: true
-            }
-          }
+              language: true,
+            },
+          },
         },
 
         fieldValues: {
-          templateField: true
-        }
+          templateField: true,
+        },
       },
     });
     if (!doc) throw new NotFoundException('Document not found');
@@ -94,7 +111,10 @@ export class DocumentsService {
     return this.findOne(saved.id);
   }
 
-  async saveFieldValues(documentId: string, values: FieldValueDto[]): Promise<Document> {
+  async saveFieldValues(
+    documentId: string,
+    values: FieldValueDto[],
+  ): Promise<Document> {
     const doc = await this.findOne(documentId);
 
     // Delete existing values and replace with new ones
@@ -116,7 +136,10 @@ export class DocumentsService {
     return this.findOne(documentId);
   }
 
-  async updateStatus(id: string, status: 'draft' | 'completed'): Promise<Document> {
+  async updateStatus(
+    id: string,
+    status: 'draft' | 'completed',
+  ): Promise<Document> {
     const doc = await this.findOne(id);
     doc.status = status;
     await this.documentRepository.save(doc);
@@ -155,11 +178,18 @@ export class DocumentsService {
 
     // Non-admins can only see documents from their assigned jobs
     if (query.userId && !query.isAdmin) {
-      qb.innerJoin('job_users', 'ju', 'ju.job_id = job.id AND ju.user_id = :userId', { userId: query.userId });
+      qb.innerJoin(
+        'job_users',
+        'ju',
+        'ju.job_id = job.id AND ju.user_id = :userId',
+        { userId: query.userId },
+      );
     }
 
     if (query.templateId) {
-      qb.andWhere('doc.template_id = :templateId', { templateId: query.templateId });
+      qb.andWhere('doc.template_id = :templateId', {
+        templateId: query.templateId,
+      });
     }
 
     if (query.search) {

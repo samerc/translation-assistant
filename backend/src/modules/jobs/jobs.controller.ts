@@ -1,6 +1,16 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query,
-  UseGuards, UseInterceptors, UploadedFile, ParseUUIDPipe,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -9,9 +19,13 @@ import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { JobsService } from './jobs.service.js';
 import {
-  CreateJobDto, UpdateJobDto, UpdateJobStatusDto,
-  CreateJobLineItemDto, UpdateJobLineItemDto,
-  AssignJobUserDto, LinkFileDto,
+  CreateJobDto,
+  UpdateJobDto,
+  UpdateJobStatusDto,
+  CreateJobLineItemDto,
+  UpdateJobLineItemDto,
+  AssignJobUserDto,
+  LinkFileDto,
 } from './dto/job.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { JobAccessGuard } from '../../common/guards/job-access.guard.js';
@@ -46,7 +60,11 @@ export class JobsController {
     @Query('limit') limit?: string,
   ) {
     return this.jobsService.findAll({
-      search, status, type, sortBy, sortOrder,
+      search,
+      status,
+      type,
+      sortBy,
+      sortOrder,
       clientId: clientId || undefined,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
@@ -99,7 +117,10 @@ export class JobsController {
 
   @Post(':id/line-items')
   @RequirePermissions('jobs:update')
-  addLineItem(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateJobLineItemDto) {
+  addLineItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateJobLineItemDto,
+  ) {
     return this.jobsService.addLineItem(id, dto);
   }
 
@@ -153,7 +174,9 @@ export class JobsController {
     @UploadedFile(FileValidationPipe) file: Express.Multer.File,
     @CurrentUser() user: User,
   ) {
-    const validCategory = ['source', 'translated'].includes(category) ? category : 'source';
+    const validCategory = ['source', 'translated'].includes(category)
+      ? category
+      : 'source';
     return this.jobsService.uploadFile(id, validCategory, file, user.id);
   }
 
@@ -167,9 +190,14 @@ export class JobsController {
     // JobAccessGuard checks target job (:id). Also verify source job access.
     const isAdmin = user.role?.name === 'Admin';
     if (!isAdmin) {
-      const assignment = await this.jobsService.checkUserAssignment(dto.sourceJobId, user.id);
+      const assignment = await this.jobsService.checkUserAssignment(
+        dto.sourceJobId,
+        user.id,
+      );
       if (!assignment) {
-        throw new (await import('@nestjs/common')).ForbiddenException('You do not have access to the source job');
+        throw new (await import('@nestjs/common')).ForbiddenException(
+          'You do not have access to the source job',
+        );
       }
     }
     return this.jobsService.linkFile(id, dto.sourceJobId, dto.fileId);

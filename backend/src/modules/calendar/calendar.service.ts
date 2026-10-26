@@ -26,7 +26,12 @@ export class CalendarService {
     private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
-  async getEvents(userId: string, isAdmin: boolean, month: number, year: number): Promise<CalendarEvent[]> {
+  async getEvents(
+    userId: string,
+    isAdmin: boolean,
+    month: number,
+    year: number,
+  ): Promise<CalendarEvent[]> {
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -34,12 +39,25 @@ export class CalendarService {
     // Job deadlines
     const jobQb = this.jobRepository
       .createQueryBuilder('job')
-      .select(['job.id', 'job.jobNumber', 'job.title', 'job.deadline', 'job.status'])
-      .where('job.deadline BETWEEN :start AND :end', { start: startDate, end: endDate })
-      .andWhere('job.status NOT IN (:...excluded)', { excluded: ['paid', 'cancelled', 'lost'] });
+      .select([
+        'job.id',
+        'job.jobNumber',
+        'job.title',
+        'job.deadline',
+        'job.status',
+      ])
+      .where('job.deadline BETWEEN :start AND :end', {
+        start: startDate,
+        end: endDate,
+      })
+      .andWhere('job.status NOT IN (:...excluded)', {
+        excluded: ['paid', 'cancelled', 'lost'],
+      });
 
     if (!isAdmin) {
-      jobQb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', { userId });
+      jobQb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', {
+        userId,
+      });
     }
 
     // Invoice due dates
@@ -48,8 +66,13 @@ export class CalendarService {
       .select(['inv.id', 'inv.invoiceNumber', 'inv.dueDate', 'inv.status'])
       .leftJoin('inv.client', 'client')
       .addSelect(['client.name'])
-      .where('inv.dueDate BETWEEN :start AND :end', { start: startDate, end: endDate })
-      .andWhere('inv.status NOT IN (:...excluded)', { excluded: ['paid', 'cancelled'] });
+      .where('inv.dueDate BETWEEN :start AND :end', {
+        start: startDate,
+        end: endDate,
+      })
+      .andWhere('inv.status NOT IN (:...excluded)', {
+        excluded: ['paid', 'cancelled'],
+      });
 
     if (!isAdmin) {
       invQb.andWhere(
@@ -63,7 +86,10 @@ export class CalendarService {
     }
 
     // Run both queries in parallel
-    const [jobs, invoices] = await Promise.all([jobQb.getMany(), invQb.getMany()]);
+    const [jobs, invoices] = await Promise.all([
+      jobQb.getMany(),
+      invQb.getMany(),
+    ]);
 
     const jobEvents: CalendarEvent[] = jobs.map((job) => ({
       id: job.id,
@@ -85,6 +111,8 @@ export class CalendarService {
       link: `/invoices/${inv.id}`,
     }));
 
-    return [...jobEvents, ...invoiceEvents].sort((a, b) => a.date.localeCompare(b.date));
+    return [...jobEvents, ...invoiceEvents].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
   }
 }

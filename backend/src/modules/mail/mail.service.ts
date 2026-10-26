@@ -72,9 +72,14 @@ export class MailService {
       to,
       subject,
       html,
-      text: html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      text: html
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim(),
     });
-    this.logger.log(`[MAIL_SENT] to=${to} subject="${subject}" via ${cfg.host}:${cfg.port}`);
+    this.logger.log(
+      `[MAIL_SENT] to=${to} subject="${subject}" via ${cfg.host}:${cfg.port}`,
+    );
   }
 
   async sendPasswordReset(to: string, token: string): Promise<void> {
@@ -117,10 +122,16 @@ export class MailService {
       subject: `Invoice ${invoiceNumber}`,
       html: `${intro}<p>Thank you.</p>`,
       attachments: [
-        { filename: `${invoiceNumber}.pdf`, path: pdfPath, contentType: 'application/pdf' },
+        {
+          filename: `${invoiceNumber}.pdf`,
+          path: pdfPath,
+          contentType: 'application/pdf',
+        },
       ],
     });
-    this.logger.log(`[INVOICE_EMAIL_SENT] to=${to} invoice=${invoiceNumber} via ${cfg.host}:${cfg.port}`);
+    this.logger.log(
+      `[INVOICE_EMAIL_SENT] to=${to} invoice=${invoiceNumber} via ${cfg.host}:${cfg.port}`,
+    );
   }
 
   async sendTestEmail(to: string): Promise<void> {

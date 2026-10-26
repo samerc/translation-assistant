@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
@@ -64,9 +68,9 @@ export class TemplatesService {
       relations: {
         fields: {
           labels: {
-            language: true
-          }
-        }
+            language: true,
+          },
+        },
       },
       order: { fields: { sortOrder: 'ASC' } },
     });
@@ -104,7 +108,9 @@ export class TemplatesService {
   ): Promise<Template> {
     const template = await this.findOne(id);
     if (template.type !== 'word') {
-      throw new BadRequestException('This template is not a Word-based template');
+      throw new BadRequestException(
+        'This template is not a Word-based template',
+      );
     }
 
     // Scan for placeholders before accepting
@@ -114,7 +120,9 @@ export class TemplatesService {
     if (sniffType(buffer.subarray(0, 16)) !== 'zip') {
       const { unlinkSync } = await import('fs');
       unlinkSync(file.path);
-      throw new BadRequestException('The uploaded file is not a valid .docx document');
+      throw new BadRequestException(
+        'The uploaded file is not a valid .docx document',
+      );
     }
     const result = await mammoth.convertToHtml({ buffer });
     const rawText = result.value.replace(/<[^>]*>/g, '');
@@ -153,7 +161,11 @@ export class TemplatesService {
     }
 
     // Delete old word file if replacing
-    if (template.wordFilePath && template.wordFilePath !== file.path && existsSync(template.wordFilePath)) {
+    if (
+      template.wordFilePath &&
+      template.wordFilePath !== file.path &&
+      existsSync(template.wordFilePath)
+    ) {
       unlinkSync(template.wordFilePath);
     }
     template.wordFilePath = file.path;
@@ -202,7 +214,8 @@ export class TemplatesService {
       } else if (/^[0-9]/.test(inner)) {
         reason = 'Cannot start with a number';
       } else {
-        reason = 'Contains invalid characters — use only letters, numbers, and underscores';
+        reason =
+          'Contains invalid characters — use only letters, numbers, and underscores';
       }
 
       malformed.push({ text: `{${inner}}`, reason });
@@ -224,7 +237,12 @@ export class TemplatesService {
     const unlinked = foundValid.filter((p) => !fieldKeys.includes(p));
 
     const cleanHtml = sanitizeHtml(result.value, {
-      allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img', 'h1', 'h2', 'span']),
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+        'img',
+        'h1',
+        'h2',
+        'span',
+      ]),
       allowedAttributes: {
         ...sanitizeHtml.defaults.allowedAttributes,
         '*': ['style', 'class'],
@@ -260,7 +278,10 @@ export class TemplatesService {
 
   // ── Fields ──
 
-  async addField(templateId: string, dto: CreateTemplateFieldDto): Promise<TemplateField> {
+  async addField(
+    templateId: string,
+    dto: CreateTemplateFieldDto,
+  ): Promise<TemplateField> {
     await this.findOne(templateId);
 
     // Auto-set sortOrder if not provided
@@ -300,8 +321,8 @@ export class TemplatesService {
       where: { id: saved.id },
       relations: {
         labels: {
-          language: true
-        }
+          language: true,
+        },
       },
     }) as Promise<TemplateField>;
   }
@@ -314,7 +335,7 @@ export class TemplatesService {
     const field = await this.fieldRepository.findOne({
       where: { id: fieldId, templateId },
       relations: {
-        labels: true
+        labels: true,
       },
     });
     if (!field) throw new NotFoundException('Field not found');
@@ -346,8 +367,8 @@ export class TemplatesService {
       where: { id: fieldId },
       relations: {
         labels: {
-          language: true
-        }
+          language: true,
+        },
       },
     }) as Promise<TemplateField>;
   }
@@ -360,10 +381,7 @@ export class TemplatesService {
     await this.fieldRepository.remove(field);
   }
 
-  async reorderFields(
-    templateId: string,
-    fieldIds: string[],
-  ): Promise<void> {
+  async reorderFields(templateId: string, fieldIds: string[]): Promise<void> {
     await this.findOne(templateId);
     await Promise.all(
       fieldIds.map((id, i) =>

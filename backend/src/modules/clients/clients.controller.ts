@@ -85,8 +85,15 @@ export class ClientsController {
 
   @Get(':id')
   @RequirePermissions('clients:read')
-  async findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.findOne(id);
   }
 
@@ -98,15 +105,30 @@ export class ClientsController {
 
   @Patch(':id')
   @RequirePermissions('clients:update')
-  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateClientDto, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateClientDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.update(id, dto);
   }
 
   @Delete(':id')
   @RequirePermissions('clients:delete')
-  async remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.remove(id);
   }
 
@@ -114,8 +136,16 @@ export class ClientsController {
 
   @Post(':id/emails')
   @RequirePermissions('clients:update')
-  async addEmail(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateClientEmailDto, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async addEmail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateClientEmailDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.addEmail(id, dto);
   }
 
@@ -127,7 +157,11 @@ export class ClientsController {
     @Body() dto: CreateClientEmailDto,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.updateEmail(id, emailId, dto);
   }
 
@@ -138,7 +172,11 @@ export class ClientsController {
     @Param('emailId', ParseUUIDPipe) emailId: string,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.removeEmail(id, emailId);
   }
 
@@ -146,8 +184,16 @@ export class ClientsController {
 
   @Post(':id/phones')
   @RequirePermissions('clients:update')
-  async addPhone(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateClientPhoneDto, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async addPhone(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateClientPhoneDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.addPhone(id, dto);
   }
 
@@ -159,7 +205,11 @@ export class ClientsController {
     @Body() dto: CreateClientPhoneDto,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.updatePhone(id, phoneId, dto);
   }
 
@@ -170,7 +220,11 @@ export class ClientsController {
     @Param('phoneId', ParseUUIDPipe) phoneId: string,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.removePhone(id, phoneId);
   }
 
@@ -178,8 +232,16 @@ export class ClientsController {
 
   @Post(':id/addresses')
   @RequirePermissions('clients:update')
-  async addAddress(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateClientAddressDto, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async addAddress(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateClientAddressDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.addAddress(id, dto);
   }
 
@@ -191,7 +253,11 @@ export class ClientsController {
     @Body() dto: CreateClientAddressDto,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.updateAddress(id, addressId, dto);
   }
 
@@ -202,7 +268,11 @@ export class ClientsController {
     @Param('addressId', ParseUUIDPipe) addressId: string,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.removeAddress(id, addressId);
   }
 
@@ -210,15 +280,30 @@ export class ClientsController {
 
   @Get(':id/contacts')
   @RequirePermissions('clients:read')
-  async findContacts(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async findContacts(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.findContacts(id);
   }
 
   @Post(':id/contacts')
   @RequirePermissions('clients:create')
-  async createContact(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateContactDto, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async createContact(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateContactDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.createContact(id, dto);
   }
 
@@ -230,7 +315,11 @@ export class ClientsController {
     @Body() dto: UpdateContactDto,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.updateContact(id, contactId, dto);
   }
 
@@ -241,7 +330,11 @@ export class ClientsController {
     @Param('contactId', ParseUUIDPipe) contactId: string,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.removeContact(id, contactId);
   }
 
@@ -249,8 +342,15 @@ export class ClientsController {
 
   @Get(':id/passports')
   @RequirePermissions('clients:read')
-  async findPassportCopies(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+  async findPassportCopies(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.findPassportCopies(id);
   }
 
@@ -263,9 +363,18 @@ export class ClientsController {
     @UploadedFile(FileValidationPipe) file: Express.Multer.File,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
-    const safeLabel = typeof label === 'string' ? label.slice(0, 255) : 'Passport';
-    return this.clientsService.createPassportCopy(id, safeLabel || 'Passport', file);
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
+    const safeLabel =
+      typeof label === 'string' ? label.slice(0, 255) : 'Passport';
+    return this.clientsService.createPassportCopy(
+      id,
+      safeLabel || 'Passport',
+      file,
+    );
   }
 
   @Get(':id/passports/:copyId/file')
@@ -305,7 +414,12 @@ export class ClientsController {
       throw new NotFoundException('File not found on disk');
     }
     const allowedMimeTypes = [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/bmp',
+      'image/tiff',
       'application/pdf',
     ];
     const safeMimeType = allowedMimeTypes.includes(pc.mimeType)
@@ -326,7 +440,11 @@ export class ClientsController {
     @Param('copyId', ParseUUIDPipe) copyId: string,
     @CurrentUser() user: User,
   ) {
-    await this.clientsService.verifyClientAccess(id, user.id, this.isAdmin(user));
+    await this.clientsService.verifyClientAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+    );
     return this.clientsService.removePassportCopy(id, copyId);
   }
 }

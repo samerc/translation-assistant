@@ -2,7 +2,8 @@ import { IsString, MinLength, MaxLength, Matches } from 'class-validator';
 import { IsNotCommonPassword } from './is-not-common-password.js';
 
 // Requires at least one lowercase, one uppercase, one digit and one special char.
-const PASSWORD_COMPLEXITY = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
+const PASSWORD_COMPLEXITY =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
 
 /**
  * Single source of truth for the password policy (register, admin-create,

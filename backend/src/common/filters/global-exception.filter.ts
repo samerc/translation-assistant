@@ -35,7 +35,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     response.status(status).json(body);
   }
 
-  private buildResponse(exception: unknown, request: Request): { status: number; body: Record<string, unknown> } {
+  private buildResponse(
+    exception: unknown,
+    request: Request,
+  ): { status: number; body: Record<string, unknown> } {
     // NestJS HttpException (BadRequest, NotFound, Forbidden, Unauthorized, etc.)
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -58,7 +61,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         status,
         body: {
           statusCode: status,
-          message: typeof exceptionResponse === 'string' ? exceptionResponse : exception.message,
+          message:
+            typeof exceptionResponse === 'string'
+              ? exceptionResponse
+              : exception.message,
           error: HttpStatus[status],
         },
       };
@@ -68,7 +74,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (exception instanceof QueryFailedError) {
       // Check for unique constraint violation
       const message = (exception as any).message || '';
-      if (message.includes('Duplicate entry') || message.includes('UNIQUE constraint')) {
+      if (
+        message.includes('Duplicate entry') ||
+        message.includes('UNIQUE constraint')
+      ) {
         return {
           status: HttpStatus.CONFLICT,
           body: {
@@ -112,7 +121,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     };
   }
 
-  private logException(exception: unknown, request: Request, status: number): void {
+  private logException(
+    exception: unknown,
+    request: Request,
+    status: number,
+  ): void {
     const method = request.method;
     const url = request.originalUrl || request.url;
     const userId = (request as any).user?.id || 'anonymous';
@@ -130,7 +143,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     // 5xx errors — log full details for debugging
-    const stack = exception instanceof Error ? exception.stack : String(exception);
+    const stack =
+      exception instanceof Error ? exception.stack : String(exception);
     this.logger.error(
       `${method} ${url} → ${status} | user=${userId} ip=${ip}`,
       stack,

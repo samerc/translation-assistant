@@ -19,7 +19,10 @@ export class NotificationsService {
     private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
-  async findAll(userId: string, query: { isRead?: string; page?: number; limit?: number }) {
+  async findAll(
+    userId: string,
+    query: { isRead?: string; page?: number; limit?: number },
+  ) {
     const page = Math.max(1, query.page || 1);
     const limit = Math.min(Math.max(1, query.limit || 20), 100);
 
@@ -68,7 +71,9 @@ export class NotificationsService {
     newStatus: string,
     changedByUserId: string,
   ): Promise<void> {
-    const assignments = await this.jobUserRepository.find({ where: { jobId: job.id } });
+    const assignments = await this.jobUserRepository.find({
+      where: { jobId: job.id },
+    });
     const notifications = assignments
       .filter((a) => a.userId !== changedByUserId)
       .map((a) =>
@@ -151,13 +156,15 @@ export class NotificationsService {
         },
         select: {
           userId: true,
-          link: true
+          link: true,
         },
       }),
     ]);
 
     // Build set of already-notified user+job pairs
-    const notifiedSet = new Set(recentNotifications.map((n) => `${n.userId}:${n.link}`));
+    const notifiedSet = new Set(
+      recentNotifications.map((n) => `${n.userId}:${n.link}`),
+    );
 
     // Group assignments by job
     const assignmentsByJob = new Map<string, typeof allAssignments>();
@@ -200,7 +207,7 @@ export class NotificationsService {
       select: {
         id: true,
         invoiceNumber: true,
-        createdByUserId: true
+        createdByUserId: true,
       },
     });
 

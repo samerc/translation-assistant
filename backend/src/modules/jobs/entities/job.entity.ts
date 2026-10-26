@@ -62,7 +62,16 @@ export class Job {
 
   @Column({
     type: 'enum',
-    enum: ['quote', 'accepted', 'in_progress', 'delivered', 'invoiced', 'paid', 'lost', 'cancelled'],
+    enum: [
+      'quote',
+      'accepted',
+      'in_progress',
+      'delivered',
+      'invoiced',
+      'paid',
+      'lost',
+      'cancelled',
+    ],
     default: 'in_progress',
   })
   status: string;

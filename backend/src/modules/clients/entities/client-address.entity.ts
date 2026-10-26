@@ -12,7 +12,9 @@ export class ClientAddress {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Client, (client) => client.addresses, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Client, (client) => client.addresses, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'client_id' })
   client: Client;
 

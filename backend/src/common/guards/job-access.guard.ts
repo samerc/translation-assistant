@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobUser } from '../../modules/jobs/entities/job-user.entity.js';
@@ -35,7 +40,10 @@ export class JobAccessGuard implements CanActivate {
 
     // For edit operations, check permission level
     const method = request.method;
-    if (['PATCH', 'POST', 'DELETE'].includes(method) && assignment.permissionLevel === 'view') {
+    if (
+      ['PATCH', 'POST', 'DELETE'].includes(method) &&
+      assignment.permissionLevel === 'view'
+    ) {
       throw new ForbiddenException('You have view-only access to this job');
     }
 

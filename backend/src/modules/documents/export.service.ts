@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -17,7 +21,8 @@ import { Document } from './entities/document.entity.js';
 
 interface LayoutBlock {
   id: string;
-  type: 'header' | 'text' | 'field' | 'field-row' | 'divider' | 'footer' | 'date';
+  type:
+    'header' | 'text' | 'field' | 'field-row' | 'divider' | 'footer' | 'date';
   content?: string;
   fieldKey?: string;
   fieldKeys?: string[];
@@ -43,25 +48,27 @@ export class ExportService {
     private readonly documentRepository: Repository<Document>,
   ) {}
 
-  async exportDocument(documentId: string): Promise<{ filePath: string; fileName: string }> {
+  async exportDocument(
+    documentId: string,
+  ): Promise<{ filePath: string; fileName: string }> {
     const doc = await this.documentRepository.findOne({
       where: { id: documentId },
       relations: {
         template: {
           fields: {
             labels: {
-              language: true
-            }
-          }
+              language: true,
+            },
+          },
         },
 
         fieldValues: {
-          templateField: true
+          templateField: true,
         },
 
         job: {
-          targetLanguage: true
-        }
+          targetLanguage: true,
+        },
       },
     });
 
@@ -78,7 +85,9 @@ export class ExportService {
 
   // ── Word Template Export (replace placeholders in .docx) ──
 
-  private async exportWordTemplate(doc: Document): Promise<{ filePath: string; fileName: string }> {
+  private async exportWordTemplate(
+    doc: Document,
+  ): Promise<{ filePath: string; fileName: string }> {
     if (!doc.template.wordFilePath) {
       throw new BadRequestException('No Word file uploaded for this template');
     }
@@ -110,9 +119,16 @@ export class ExportService {
     } catch (err) {
       // docxtemplater throws on malformed/mismatched braces in the template.
       const detail =
-        (err as { properties?: { errors?: { properties?: { explanation?: string } }[] } })
-          ?.properties?.errors?.map((e) => e.properties?.explanation).filter(Boolean).join('; ') ||
-        (err as Error).message;
+        (
+          err as {
+            properties?: {
+              errors?: { properties?: { explanation?: string } }[];
+            };
+          }
+        )?.properties?.errors
+          ?.map((e) => e.properties?.explanation)
+          .filter(Boolean)
+          .join('; ') || (err as Error).message;
       throw new BadRequestException(
         `Failed to generate the document. The Word template has invalid placeholders: ${detail}`,
       );
@@ -131,7 +147,9 @@ export class ExportService {
 
   // ── Designer Template Export (generate .docx from layout blocks) ──
 
-  private async exportDesignerTemplate(doc: Document): Promise<{ filePath: string; fileName: string }> {
+  private async exportDesignerTemplate(
+    doc: Document,
+  ): Promise<{ filePath: string; fileName: string }> {
     const blocks = (doc.template.layoutJson as LayoutBlock[]) || [];
     // Render right-to-left when the job's target language is RTL (e.g. Arabic).
     const isRtl = doc.job?.targetLanguage?.direction === 'rtl';
@@ -151,46 +169,62 @@ export class ExportService {
       const color = block.color?.replace('#', '') || '000000';
 
       if (block.type === 'divider') {
-        paragraphs.push(new Paragraph({
-          bidirectional: isRtl,
-          border: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '999999' } },
-          spacing: { before: 100, after: 100 },
-        }));
+        paragraphs.push(
+          new Paragraph({
+            bidirectional: isRtl,
+            border: {
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: '999999' },
+            },
+            spacing: { before: 100, after: 100 },
+          }),
+        );
         continue;
       }
 
       if (block.type === 'header') {
-        paragraphs.push(new Paragraph({
-          alignment,
-          bidirectional: isRtl,
-          heading: HeadingLevel.HEADING_1,
-          children: [new TextRun({
-            text: block.content || '',
-            size: fontSize,
-            bold: block.bold !== false,
-            italics: block.italic,
-            color,
-          })],
-        }));
+        paragraphs.push(
+          new Paragraph({
+            alignment,
+            bidirectional: isRtl,
+            heading: HeadingLevel.HEADING_1,
+            children: [
+              new TextRun({
+                text: block.content || '',
+                size: fontSize,
+                bold: block.bold !== false,
+                italics: block.italic,
+                color,
+              }),
+            ],
+          }),
+        );
         continue;
       }
 
-      if (block.type === 'text' || block.type === 'footer' || block.type === 'date') {
+      if (
+        block.type === 'text' ||
+        block.type === 'footer' ||
+        block.type === 'date'
+      ) {
         let text = block.content || '';
         if (block.type === 'date') {
           text = text.replace('{date}', new Date().toLocaleDateString());
         }
-        paragraphs.push(new Paragraph({
-          alignment,
-          bidirectional: isRtl,
-          children: [new TextRun({
-            text,
-            size: fontSize,
-            bold: block.bold,
-            italics: block.italic || block.type === 'footer',
-            color,
-          })],
-        }));
+        paragraphs.push(
+          new Paragraph({
+            alignment,
+            bidirectional: isRtl,
+            children: [
+              new TextRun({
+                text,
+                size: fontSize,
+                bold: block.bold,
+                italics: block.italic || block.type === 'footer',
+                color,
+              }),
+            ],
+          }),
+        );
         continue;
       }
 
@@ -201,37 +235,53 @@ export class ExportService {
         if (block.showLabel !== false) {
           const label = block.labelText || block.fieldKey || '';
           const sep = block.separator || '';
-          runs.push(new TextRun({
-            text: `${label}${sep}`,
-            size: fontSize,
-            bold: block.labelBold !== false,
-            color,
-          }));
+          runs.push(
+            new TextRun({
+              text: `${label}${sep}`,
+              size: fontSize,
+              bold: block.labelBold !== false,
+              color,
+            }),
+          );
 
           if (block.labelPosition !== 'top') {
             runs.push(new TextRun({ text: '\t', size: fontSize }));
           } else {
-            paragraphs.push(new Paragraph({ alignment, bidirectional: isRtl, children: [...runs] }));
+            paragraphs.push(
+              new Paragraph({
+                alignment,
+                bidirectional: isRtl,
+                children: [...runs],
+              }),
+            );
             runs.length = 0;
           }
         }
 
-        runs.push(new TextRun({
-          text: value,
-          size: fontSize,
-          bold: block.bold,
-          italics: block.italic,
-          color,
-        }));
+        runs.push(
+          new TextRun({
+            text: value,
+            size: fontSize,
+            bold: block.bold,
+            italics: block.italic,
+            color,
+          }),
+        );
 
-        paragraphs.push(new Paragraph({
-          alignment: block.showLabel !== false && block.labelPosition !== 'top'
-            ? alignment
-            : this.getAlignment(block.valueAlignment || block.alignment, isRtl),
-          bidirectional: isRtl,
-          tabStops: [{ type: 'right' as any, position: 9000 }],
-          children: runs,
-        }));
+        paragraphs.push(
+          new Paragraph({
+            alignment:
+              block.showLabel !== false && block.labelPosition !== 'top'
+                ? alignment
+                : this.getAlignment(
+                    block.valueAlignment || block.alignment,
+                    isRtl,
+                  ),
+            bidirectional: isRtl,
+            tabStops: [{ type: 'right' as any, position: 9000 }],
+            children: runs,
+          }),
+        );
         continue;
       }
 
@@ -245,28 +295,34 @@ export class ExportService {
 
           if (block.showLabel !== false) {
             const sep = block.separator || '';
-            runs.push(new TextRun({
-              text: `${key}${sep} `,
-              size: fontSize,
-              bold: block.labelBold !== false,
-              color,
-            }));
+            runs.push(
+              new TextRun({
+                text: `${key}${sep} `,
+                size: fontSize,
+                bold: block.labelBold !== false,
+                color,
+              }),
+            );
           }
 
-          runs.push(new TextRun({
-            text: value,
-            size: fontSize,
-            bold: block.bold,
-            italics: block.italic,
-            color,
-          }));
+          runs.push(
+            new TextRun({
+              text: value,
+              size: fontSize,
+              bold: block.bold,
+              italics: block.italic,
+              color,
+            }),
+          );
 
           if (i < keys.length - 1) {
             runs.push(new TextRun({ text: '\t', size: fontSize }));
           }
         }
 
-        paragraphs.push(new Paragraph({ alignment, bidirectional: isRtl, children: runs }));
+        paragraphs.push(
+          new Paragraph({ alignment, bidirectional: isRtl, children: runs }),
+        );
         continue;
       }
     }
@@ -275,14 +331,20 @@ export class ExportService {
     if (blocks.length === 0) {
       for (const fv of doc.fieldValues) {
         if (fv.templateField) {
-          paragraphs.push(new Paragraph({
-            alignment: isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
-            bidirectional: isRtl,
-            children: [
-              new TextRun({ text: `${fv.templateField.fieldKey}: `, bold: true, size: 24 }),
-              new TextRun({ text: fv.value, size: 24 }),
-            ],
-          }));
+          paragraphs.push(
+            new Paragraph({
+              alignment: isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
+              bidirectional: isRtl,
+              children: [
+                new TextRun({
+                  text: `${fv.templateField.fieldKey}: `,
+                  bold: true,
+                  size: 24,
+                }),
+                new TextRun({ text: fv.value, size: 24 }),
+              ],
+            }),
+          );
         }
       }
     }
@@ -302,13 +364,20 @@ export class ExportService {
     return { filePath, fileName };
   }
 
-  private getAlignment(alignment?: string, isRtl = false): typeof AlignmentType[keyof typeof AlignmentType] {
+  private getAlignment(
+    alignment?: string,
+    isRtl = false,
+  ): (typeof AlignmentType)[keyof typeof AlignmentType] {
     switch (alignment) {
-      case 'center': return AlignmentType.CENTER;
-      case 'right': return AlignmentType.RIGHT;
-      case 'left': return AlignmentType.LEFT;
+      case 'center':
+        return AlignmentType.CENTER;
+      case 'right':
+        return AlignmentType.RIGHT;
+      case 'left':
+        return AlignmentType.LEFT;
       // No explicit alignment → follow the script direction (RTL reads right-aligned).
-      default: return isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT;
+      default:
+        return isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT;
     }
   }
 }

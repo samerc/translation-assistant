@@ -1,4 +1,8 @@
-const jwtSecret = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? '' : 'dev-only-secret-not-for-production');
+const jwtSecret =
+  process.env.JWT_SECRET ||
+  (process.env.NODE_ENV === 'production'
+    ? ''
+    : 'dev-only-secret-not-for-production');
 if (!jwtSecret) {
   throw new Error('JWT_SECRET environment variable is required in production');
 }

@@ -59,9 +59,18 @@ export async function seed(dataSource: DataSource) {
     const translatorRole = roleRepo.create({
       name: 'Translator',
       description: 'Can manage jobs, documents, and clients',
-      permissions: allPermissions.filter((p) =>
-        ['clients', 'jobs', 'documents', 'templates', 'files', 'calendar', 'notifications'].includes(p.resource) &&
-        ['create', 'read', 'update'].includes(p.action),
+      permissions: allPermissions.filter(
+        (p) =>
+          [
+            'clients',
+            'jobs',
+            'documents',
+            'templates',
+            'files',
+            'calendar',
+            'notifications',
+          ].includes(p.resource) &&
+          ['create', 'read', 'update'].includes(p.action),
       ),
     });
     await roleRepo.save(translatorRole);
@@ -81,7 +90,8 @@ export async function seed(dataSource: DataSource) {
   if (existingUsers === 0) {
     const adminRole = await roleRepo.findOne({ where: { name: 'Admin' } });
     if (adminRole) {
-      const adminEmail = process.env.ADMIN_INITIAL_EMAIL || 'admin@translation-assistant.com';
+      const adminEmail =
+        process.env.ADMIN_INITIAL_EMAIL || 'admin@translation-assistant.com';
       // Prefer an env-provided initial password; fall back to the documented default.
       const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || 'admin123!';
       const usingDefault = !process.env.ADMIN_INITIAL_PASSWORD;
@@ -98,10 +108,12 @@ export async function seed(dataSource: DataSource) {
       if (usingDefault) {
         console.warn(
           `[SECURITY] Seeded admin ${adminEmail} with the DEFAULT password "admin123!". ` +
-          `Change it immediately, or set ADMIN_INITIAL_PASSWORD before first boot.`,
+            `Change it immediately, or set ADMIN_INITIAL_PASSWORD before first boot.`,
         );
       } else {
-        console.log(`Seeded admin user: ${adminEmail} (password from ADMIN_INITIAL_PASSWORD)`);
+        console.log(
+          `Seeded admin user: ${adminEmail} (password from ADMIN_INITIAL_PASSWORD)`,
+        );
       }
     }
   }

@@ -19,7 +19,11 @@ import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { InviteDto } from './dto/invite.dto.js';
-import { ForgotPasswordDto, ResetPasswordDto, VerifyResetTokenDto } from './dto/password-reset.dto.js';
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyResetTokenDto,
+} from './dto/password-reset.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -60,8 +64,16 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 15, ttl: 60000 } })
-  async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.login(dto, this.getIp(req), this.getUA(req));
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(
+      dto,
+      this.getIp(req),
+      this.getUA(req),
+    );
     this.setRefreshCookie(res, result.refreshToken);
     // Return accessToken in body (stored in localStorage by frontend).
     // refreshToken is in httpOnly cookie only — don't expose in response body.
@@ -70,8 +82,16 @@ export class AuthController {
 
   @Post('register')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async register(@Body() dto: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await this.authService.register(dto, this.getIp(req), this.getUA(req));
+  async register(
+    @Body() dto: RegisterDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.register(
+      dto,
+      this.getIp(req),
+      this.getUA(req),
+    );
     this.setRefreshCookie(res, result.refreshToken);
     return { user: result.user, accessToken: result.accessToken };
   }
@@ -104,7 +124,10 @@ export class AuthController {
   @Post('logout-everywhere')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
-  async logoutEverywhere(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+  async logoutEverywhere(
+    @Req() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.logoutEverywhere(req.user.id);
     this.clearRefreshCookie(res);
     return { message: `Logged out of all devices`, ...result };
@@ -118,7 +141,10 @@ export class AuthController {
 
   @Delete('sessions/:sessionId')
   @UseGuards(AuthGuard('jwt'))
-  async revokeSession(@Req() req: any, @Param('sessionId', ParseUUIDPipe) sessionId: string) {
+  async revokeSession(
+    @Req() req: any,
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
     await this.authService.revokeSession(req.user.id, sessionId);
     return { message: 'Session revoked' };
   }

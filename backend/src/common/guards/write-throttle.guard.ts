@@ -13,7 +13,7 @@ interface BucketEntry {
 }
 
 const WINDOW_MS = 60_000; // 1 minute
-const MAX_WRITES = 120;   // 120 write operations per window
+const MAX_WRITES = 120; // 120 write operations per window
 
 /**
  * Rate-limits write operations (POST/PATCH/PUT/DELETE) to 10 per minute

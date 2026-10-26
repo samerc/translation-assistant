@@ -67,8 +67,8 @@ export class AuthService {
       where: { email: dto.email },
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
 
@@ -93,7 +93,11 @@ export class AuthService {
 
     // Generate new tokens and create a fresh session (session fixation prevention)
     const accessToken = await this.generateAccessToken(user);
-    const { refreshToken, session } = await this.createSession(user, ip, userAgent);
+    const { refreshToken, session } = await this.createSession(
+      user,
+      ip,
+      userAgent,
+    );
 
     return {
       user: this.sanitizeUser(user),
@@ -107,13 +111,21 @@ export class AuthService {
 
   async register(dto: RegisterDto, ip: string, userAgent: string) {
     const invite = await this.inviteTokenRepository.findOne({
-      where: { token: dto.inviteToken, used: false, expiresAt: MoreThan(new Date()) },
+      where: {
+        token: dto.inviteToken,
+        used: false,
+        expiresAt: MoreThan(new Date()),
+      },
     });
 
-    if (!invite) throw new BadRequestException('Invalid or expired invite token');
-    if (invite.email !== dto.email) throw new BadRequestException('Email does not match the invite');
+    if (!invite)
+      throw new BadRequestException('Invalid or expired invite token');
+    if (invite.email !== dto.email)
+      throw new BadRequestException('Email does not match the invite');
 
-    const existingUser = await this.userRepository.findOne({ where: { email: dto.email } });
+    const existingUser = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
     if (existingUser) throw new BadRequestException('Email already registered');
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
@@ -134,13 +146,17 @@ export class AuthService {
       where: { id: savedUser.id },
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
 
     const accessToken = await this.generateAccessToken(fullUser!);
-    const { refreshToken, session } = await this.createSession(fullUser!, ip, userAgent);
+    const { refreshToken, session } = await this.createSession(
+      fullUser!,
+      ip,
+      userAgent,
+    );
 
     return {
       user: this.sanitizeUser(fullUser!),
@@ -152,13 +168,18 @@ export class AuthService {
 
   // ── Refresh ──
 
-  async refreshTokens(userId: string, refreshToken: string, ip: string, userAgent: string) {
+  async refreshTokens(
+    userId: string,
+    refreshToken: string,
+    ip: string,
+    userAgent: string,
+  ) {
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
 
@@ -180,16 +201,21 @@ export class AuthService {
 
     // Check IP/UA binding — flag suspicious changes
     const currentUAHash = this.hashUserAgent(userAgent);
-    if (matchedSession.ipAddress !== ip || matchedSession.userAgentHash !== currentUAHash) {
+    if (
+      matchedSession.ipAddress !== ip ||
+      matchedSession.userAgentHash !== currentUAHash
+    ) {
       this.logger.warn(
         `[SESSION_FINGERPRINT_MISMATCH] sessionId=${matchedSession.id} userId=${user.id} ` +
-        `storedIp=${matchedSession.ipAddress} currentIp=${ip} ` +
-        `uaMatch=${matchedSession.userAgentHash === currentUAHash}`,
+          `storedIp=${matchedSession.ipAddress} currentIp=${ip} ` +
+          `uaMatch=${matchedSession.userAgentHash === currentUAHash}`,
       );
       // Revoke the suspicious session
       matchedSession.revoked = true;
       await this.sessionRepository.save(matchedSession);
-      throw new ForbiddenException('Session invalidated due to suspicious activity. Please log in again.');
+      throw new ForbiddenException(
+        'Session invalidated due to suspicious activity. Please log in again.',
+      );
     }
 
     // Rotate: generate new tokens, update session
@@ -210,7 +236,11 @@ export class AuthService {
     if (refreshToken) {
       // Revoke the specific session for this token
       await this.sessionRepository.update(
-        { userId, refreshTokenHash: this.hashRefreshToken(refreshToken), revoked: false },
+        {
+          userId,
+          refreshTokenHash: this.hashRefreshToken(refreshToken),
+          revoked: false,
+        },
         { revoked: true },
       );
     }
@@ -224,7 +254,9 @@ export class AuthService {
       { revoked: true },
     );
     await this.userRepository.update(userId, { refreshToken: '' });
-    this.logger.log(`[LOGOUT_EVERYWHERE] userId=${userId} revoked=${result.affected}`);
+    this.logger.log(
+      `[LOGOUT_EVERYWHERE] userId=${userId} revoked=${result.affected}`,
+    );
     return { revokedCount: result.affected || 0 };
   }
 
@@ -261,8 +293,8 @@ export class AuthService {
       where: { id: userId },
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
     if (!user) throw new UnauthorizedException();
@@ -271,7 +303,10 @@ export class AuthService {
 
   // ── Invite ──
 
-  async createInvite(email: string, roleId?: string): Promise<{ token: string; expiresAt: Date }> {
+  async createInvite(
+    email: string,
+    roleId?: string,
+  ): Promise<{ token: string; expiresAt: Date }> {
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -281,7 +316,9 @@ export class AuthService {
     // Email the invite link (best-effort — the token is also returned so an admin can
     // copy the link manually if SMTP isn't configured yet).
     this.mailService.sendInvite(email, token).catch((err) => {
-      this.logger.error(`[INVITE_EMAIL_FAILED] email=${email}: ${err?.message}`);
+      this.logger.error(
+        `[INVITE_EMAIL_FAILED] email=${email}: ${err?.message}`,
+      );
     });
     return { token, expiresAt };
   }
@@ -289,11 +326,15 @@ export class AuthService {
   // ── Password Reset ──
 
   async requestPasswordReset(email: string): Promise<{ message: string }> {
-    const message = 'If an account with that email exists, a reset link has been generated.';
+    const message =
+      'If an account with that email exists, a reset link has been generated.';
     const user = await this.userRepository.findOne({ where: { email } });
     if (!user || !user.isActive) return { message };
 
-    await this.resetTokenRepository.update({ userId: user.id, used: false }, { used: true });
+    await this.resetTokenRepository.update(
+      { userId: user.id, used: false },
+      { used: true },
+    );
 
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date();
@@ -305,7 +346,9 @@ export class AuthService {
 
     // Deliver the reset link by email (best-effort — never block/leak on SMTP failure).
     this.mailService.sendPasswordReset(user.email, token).catch((err) => {
-      this.logger.error(`[PASSWORD_RESET_EMAIL_FAILED] userId=${user.id}: ${err?.message}`);
+      this.logger.error(
+        `[PASSWORD_RESET_EMAIL_FAILED] userId=${user.id}: ${err?.message}`,
+      );
     });
 
     // SECURITY: never return the raw reset token in the response outside development.
@@ -316,49 +359,75 @@ export class AuthService {
     return { message };
   }
 
-  async verifyResetToken(token: string): Promise<{ valid: boolean; email?: string }> {
+  async verifyResetToken(
+    token: string,
+  ): Promise<{ valid: boolean; email?: string }> {
     const rt = await this.resetTokenRepository.findOne({
       where: { token, used: false, expiresAt: MoreThan(new Date()) },
     });
     if (!rt) return { valid: false };
-    const user = await this.userRepository.findOne({ where: { id: rt.userId } });
-    const email = user ? user.email.replace(/^(.{2})(.*)(@.*)$/, '$1***$3') : undefined;
+    const user = await this.userRepository.findOne({
+      where: { id: rt.userId },
+    });
+    const email = user
+      ? user.email.replace(/^(.{2})(.*)(@.*)$/, '$1***$3')
+      : undefined;
     return { valid: true, email };
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  async resetPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
     const rt = await this.resetTokenRepository.findOne({
       where: { token, used: false, expiresAt: MoreThan(new Date()) },
     });
     if (!rt) throw new BadRequestException('Invalid or expired reset token');
 
-    const user = await this.userRepository.findOne({ where: { id: rt.userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: rt.userId },
+    });
     if (!user) throw new BadRequestException('Invalid or expired reset token');
 
     const hashedPassword = await bcrypt.hash(newPassword, 12);
-    await this.userRepository.update(user.id, { password: hashedPassword, refreshToken: '' });
+    await this.userRepository.update(user.id, {
+      password: hashedPassword,
+      refreshToken: '',
+    });
 
     // Revoke all sessions (log out everywhere on password reset)
-    await this.sessionRepository.update({ userId: user.id, revoked: false }, { revoked: true });
+    await this.sessionRepository.update(
+      { userId: user.id, revoked: false },
+      { revoked: true },
+    );
 
     rt.used = true;
     await this.resetTokenRepository.save(rt);
-    await this.resetTokenRepository.update({ userId: user.id, used: false }, { used: true });
+    await this.resetTokenRepository.update(
+      { userId: user.id, used: false },
+      { used: true },
+    );
 
     this.logger.log(`[PASSWORD_RESET_COMPLETED] userId=${user.id}`);
-    return { message: 'Password has been reset. Please log in with your new password.' };
+    return {
+      message: 'Password has been reset. Please log in with your new password.',
+    };
   }
 
   // ── File Tokens ──
 
   generateFileToken(userId: string): string {
-    return this.jwtService.sign({ sub: userId, purpose: 'file-access' }, { expiresIn: 300 });
+    return this.jwtService.sign(
+      { sub: userId, purpose: 'file-access' },
+      { expiresIn: 300 },
+    );
   }
 
   verifyFileToken(token: string): string {
     try {
       const payload = this.jwtService.verify(token);
-      if (payload.purpose !== 'file-access') throw new Error('Invalid token purpose');
+      if (payload.purpose !== 'file-access')
+        throw new Error('Invalid token purpose');
       return payload.sub;
     } catch {
       throw new UnauthorizedException('Invalid or expired file token');
@@ -391,7 +460,10 @@ export class AuthService {
   }
 
   private hashUserAgent(ua: string): string {
-    return createHash('sha256').update(ua || '').digest('hex').slice(0, 64);
+    return createHash('sha256')
+      .update(ua || '')
+      .digest('hex')
+      .slice(0, 64);
   }
 
   // Refresh tokens are high-entropy signed JWTs — store a fast SHA-256 digest
@@ -401,7 +473,11 @@ export class AuthService {
   }
 
   private async generateAccessToken(user: User): Promise<string> {
-    const payload: JwtPayload = { sub: user.id, email: user.email, type: 'access' };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      type: 'access',
+    };
     return this.jwtService.signAsync(payload, {
       expiresIn: this.configService.get<number>('jwt.accessTokenTtl'),
     });
@@ -421,7 +497,9 @@ export class AuthService {
     if (!attempt) return;
     if (attempt.lockedUntil && Date.now() < attempt.lockedUntil) {
       const remaining = Math.ceil((attempt.lockedUntil - Date.now()) / 1000);
-      this.logger.warn(`[ACCOUNT_LOCKED] email=${email} remaining=${remaining}s`);
+      this.logger.warn(
+        `[ACCOUNT_LOCKED] email=${email} remaining=${remaining}s`,
+      );
       throw new ForbiddenException(
         `Account temporarily locked due to too many failed attempts. Try again in ${remaining} seconds.`,
       );
@@ -435,21 +513,30 @@ export class AuthService {
     const now = Date.now();
     const attempt = this.loginAttempts.get(email);
     if (!attempt || now - attempt.lastAttempt > ATTEMPT_WINDOW_MS) {
-      this.loginAttempts.set(email, { failures: 1, lockedUntil: null, lastAttempt: now });
+      this.loginAttempts.set(email, {
+        failures: 1,
+        lockedUntil: null,
+        lastAttempt: now,
+      });
       return;
     }
     attempt.failures++;
     attempt.lastAttempt = now;
     if (attempt.failures >= MAX_FAILURES) {
       attempt.lockedUntil = now + LOCKOUT_DURATION_MS;
-      this.logger.warn(`[ACCOUNT_LOCKOUT] email=${email} failures=${attempt.failures}`);
+      this.logger.warn(
+        `[ACCOUNT_LOCKOUT] email=${email} failures=${attempt.failures}`,
+      );
     }
   }
 
   private cleanupAttempts(): void {
     const now = Date.now();
     for (const [key, attempt] of this.loginAttempts) {
-      if ((attempt.lockedUntil && now >= attempt.lockedUntil) || now - attempt.lastAttempt > LOCKOUT_DURATION_MS) {
+      if (
+        (attempt.lockedUntil && now >= attempt.lockedUntil) ||
+        now - attempt.lastAttempt > LOCKOUT_DURATION_MS
+      ) {
         this.loginAttempts.delete(key);
       }
     }
@@ -470,7 +557,9 @@ export class AuthService {
       role: {
         id: user.role.id,
         name: user.role.name,
-        permissions: user.role.permissions.map((p) => `${p.resource}:${p.action}`),
+        permissions: user.role.permissions.map(
+          (p) => `${p.resource}:${p.action}`,
+        ),
       },
     };
   }

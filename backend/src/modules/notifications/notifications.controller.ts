@@ -1,5 +1,12 @@
 import {
-  Controller, Get, Patch, Post, Param, Query, UseGuards, ParseUUIDPipe,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Param,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { NotificationsService } from './notifications.service.js';
@@ -36,7 +43,10 @@ export class NotificationsController {
 
   @Patch(':id/read')
   @RequirePermissions('notifications:update')
-  markAsRead(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+  markAsRead(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
     return this.notificationsService.markAsRead(id, user.id);
   }
 
