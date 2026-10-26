@@ -85,6 +85,37 @@ export class InvoicesService {
     }
   }
 
+  /** Linked jobs must exist, belong to the invoice's client, and be editable by the caller. */
+  private async validateLinkedJobs(
+    items: { jobId?: string }[],
+    clientId: string,
+    userId: string | undefined,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const jobIds = [
+      ...new Set(items.filter((i) => i.jobId).map((i) => i.jobId!)),
+    ];
+    if (jobIds.length === 0) return;
+    const jobs = await this.jobRepository.find({ where: { id: In(jobIds) } });
+    const jobMap = new Map(jobs.map((j) => [j.id, j]));
+    for (const jobId of jobIds) {
+      const job = jobMap.get(jobId);
+      if (!job)
+        throw new BadRequestException('One of the linked jobs was not found');
+      if (job.clientId !== clientId) {
+        throw new BadRequestException(
+          'One of the linked jobs does not belong to this client',
+        );
+      }
+    }
+    // IDOR guard: the caller must be able to edit every job they link.
+    if (userId) {
+      for (const jobId of jobIds) {
+        await this.verifyJobAccess(jobId, userId, isAdmin, 'edit');
+      }
+    }
+  }
+
   private static readonly VALID_TRANSITIONS: Record<string, string[]> = {
     draft: ['sent', 'cancelled'],
     sent: ['paid', 'overdue', 'cancelled'],
@@ -258,35 +289,13 @@ export class InvoicesService {
     userId: string,
     isAdmin = false,
   ): Promise<Invoice> {
-    // Validate all entities in parallel
-    const jobIds = dto.items.filter((i) => i.jobId).map((i) => i.jobId!);
-    const [client, jobs, settings] = await Promise.all([
+    // Validate the client and every linked job before writing anything
+    const [client, settings] = await Promise.all([
       this.clientRepository.findOne({ where: { id: dto.clientId } }),
-      jobIds.length > 0
-        ? this.jobRepository.find({ where: { id: In(jobIds) } })
-        : Promise.resolve([]),
       this.settingsRepository.find(),
     ]);
-
     if (!client) throw new BadRequestException('Client not found');
-
-    const jobMap = new Map(jobs.map((j) => [j.id, j]));
-    for (const item of dto.items) {
-      if (item.jobId) {
-        const job = jobMap.get(item.jobId);
-        if (!job)
-          throw new BadRequestException('One of the linked jobs was not found');
-        if (job.clientId !== dto.clientId) {
-          throw new BadRequestException(
-            'One of the linked jobs does not belong to this client',
-          );
-        }
-      }
-    }
-    // IDOR guard: the caller must be able to access every job they link.
-    for (const jobId of new Set(jobIds)) {
-      await this.verifyJobAccess(jobId, userId, isAdmin, 'edit');
-    }
+    await this.validateLinkedJobs(dto.items, dto.clientId, userId, isAdmin);
     const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
     const { subtotal, taxAmount, total } = this.calculateTotals(
@@ -351,30 +360,16 @@ export class InvoicesService {
     if (dto.currency) invoice.currency = dto.currency;
     if (dto.taxRate !== undefined) invoice.taxRate = dto.taxRate;
 
-    // Replace items if provided
     if (dto.items) {
-      // IDOR guard: verify access to every job linked by the new item set.
-      if (userId) {
-        const jobIds = new Set(
-          dto.items.filter((i) => i.jobId).map((i) => i.jobId!),
-        );
-        for (const jobId of jobIds) {
-          await this.verifyJobAccess(jobId, userId, isAdmin, 'edit');
-        }
+      if (dto.items.length === 0) {
+        throw new BadRequestException('Invoice must have at least one item');
       }
-      await this.itemRepository.delete({ invoiceId: id });
-      const items = dto.items.map((item, i) =>
-        this.itemRepository.create({
-          invoiceId: id,
-          jobId: item.jobId,
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          lineTotal: Number(item.quantity) * Number(item.unitPrice),
-          sortOrder: i,
-        }),
+      await this.validateLinkedJobs(
+        dto.items,
+        invoice.clientId,
+        userId,
+        isAdmin,
       );
-      await this.itemRepository.save(items);
     }
 
     // Recalculate totals
@@ -386,11 +381,37 @@ export class InvoicesService {
       })),
       Number(invoice.taxRate),
     );
-    invoice.subtotal = subtotal;
-    invoice.taxAmount = taxAmount;
-    invoice.total = total;
 
-    await this.invoiceRepository.save(invoice);
+    await this.dataSource.transaction(async (manager) => {
+      if (dto.items) {
+        await manager.delete(InvoiceItem, { invoiceId: id });
+        await manager.save(
+          dto.items.map((item, i) =>
+            manager.create(InvoiceItem, {
+              invoiceId: id,
+              jobId: item.jobId,
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              lineTotal: Number(item.quantity) * Number(item.unitPrice),
+              sortOrder: i,
+            }),
+          ),
+        );
+      }
+      // update(), not save(): `invoice.items` still holds the old rows and the
+      // relation cascades, so save() would write them back.
+      await manager.update(Invoice, id, {
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        notes: invoice.notes,
+        currency: invoice.currency,
+        taxRate: invoice.taxRate,
+        subtotal,
+        taxAmount,
+        total,
+      });
+    });
     return this.findOne(id);
   }
 

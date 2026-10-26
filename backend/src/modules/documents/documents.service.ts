@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -121,23 +122,33 @@ export class DocumentsService {
     documentId: string,
     values: FieldValueDto[],
   ): Promise<Document> {
-    await this.findOne(documentId); // 404 if the document does not exist
+    const doc = await this.findOne(documentId); // 404 if the document does not exist
 
-    // Delete existing values and replace with new ones
-    await this.fieldValueRepository.delete({ documentId });
-
-    if (values.length > 0) {
-      const fieldValues = values.map((v) =>
-        this.fieldValueRepository.create({
-          documentId,
-          templateFieldId: v.templateFieldId,
-          pageNumber: v.pageNumber || 1,
-          entryIndex: v.entryIndex,
-          value: v.value,
-        }),
+    // Values may only target this document's own template fields.
+    const fieldIds = new Set((doc.template?.fields ?? []).map((f) => f.id));
+    if (values.some((v) => !fieldIds.has(v.templateFieldId))) {
+      throw new BadRequestException(
+        "Some values do not belong to this document's template",
       );
-      await this.fieldValueRepository.save(fieldValues);
     }
+
+    // Replace all values atomically — a failed insert must not leave the document empty.
+    await this.fieldValueRepository.manager.transaction(async (manager) => {
+      await manager.delete(DocumentFieldValue, { documentId });
+      if (values.length > 0) {
+        await manager.save(
+          values.map((v) =>
+            manager.create(DocumentFieldValue, {
+              documentId,
+              templateFieldId: v.templateFieldId,
+              pageNumber: v.pageNumber || 1,
+              entryIndex: v.entryIndex,
+              value: v.value,
+            }),
+          ),
+        );
+      }
+    });
 
     return this.findOne(documentId);
   }

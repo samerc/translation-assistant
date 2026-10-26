@@ -12,6 +12,7 @@ import { Client } from './entities/client.entity.js';
 import { Contact } from './entities/contact.entity.js';
 import { PassportCopy } from './entities/passport-copy.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
+import { Invoice } from '../invoices/entities/invoice.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
@@ -162,14 +163,22 @@ export class ClientsService {
         'Cannot delete this client because jobs are linked to it',
       );
     }
-    // Delete passport files from disk before cascade-deleting DB records
+    const invoiceCount = await this.clientRepository.manager.count(Invoice, {
+      where: { clientId: id },
+    });
+    if (invoiceCount > 0) {
+      throw new BadRequestException(
+        'Cannot delete this client because invoices are linked to it',
+      );
+    }
     const passports = await this.passportCopyRepository.find({
       where: { clientId: id },
     });
+    await this.clientRepository.remove(client);
+    // Passport rows cascade with the client; delete their files only after that succeeded.
     for (const pc of passports) {
       if (pc.filePath && existsSync(pc.filePath)) unlinkSync(pc.filePath);
     }
-    await this.clientRepository.remove(client);
   }
 
   // ── Emails ──
@@ -362,7 +371,8 @@ export class ClientsService {
       where: { id: copyId, clientId },
     });
     if (!pc) throw new NotFoundException('Passport copy not found');
-    if (pc.filePath && existsSync(pc.filePath)) unlinkSync(pc.filePath);
+    const { filePath } = pc;
     await this.passportCopyRepository.remove(pc);
+    if (filePath && existsSync(filePath)) unlinkSync(filePath);
   }
 }
