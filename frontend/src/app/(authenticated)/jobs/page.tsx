@@ -5,9 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
 import { useAuth } from '@/lib/auth-context';
-import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
+import { JOB_STATUS_BADGE, JOB_TYPE_BADGE, isJobOverdue } from '@/lib/status';
+import { useNow } from '@/lib/use-now';
 import { useSettings } from '@/lib/settings-context';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, todayLocal } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { SearchInput, Select } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -51,6 +52,7 @@ export default function JobsPage() {
   const { baseCurrency } = useSettings();
   const { hasPermission } = useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const today = todayLocal(useNow());
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -180,7 +182,11 @@ export default function JobsPage() {
                 <td><Badge dot tone={badge.color}>{badge.label}</Badge></td>
                 <td className="text-right tabular-nums">{job.lineItemCount || 0}</td>
                 <td className="text-right tabular-nums font-medium text-text whitespace-nowrap">{getPrice(job)}</td>
-                <td className="tabular-nums whitespace-nowrap">{formatDate(job.deadline)}</td>
+                <td className="tabular-nums whitespace-nowrap">
+                  {isJobOverdue(job, today)
+                    ? <span className="text-danger font-semibold" title="Past the deadline">{formatDate(job.deadline)} · Overdue</span>
+                    : formatDate(job.deadline)}
+                </td>
                 <td className="tabular-nums whitespace-nowrap">{formatDate(job.createdAt)}</td>
                 <RowChevron />
               </tr>

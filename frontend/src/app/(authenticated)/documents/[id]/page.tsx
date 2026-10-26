@@ -6,6 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import { useUnsavedChangesGuard, confirmLeave } from '@/lib/unsaved-changes';
 import { logger } from '@/lib/logger';
 import { useAuth } from '@/lib/auth-context';
+import { toast } from '@/lib/toast';
 import { humanize } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -85,7 +86,11 @@ export default function DocumentFillPage() {
         counts[gk] = Math.max(max + 1, 1);
       });
       setGroupEntries(counts);
-    }).catch((err) => { logger.error('Failed to load document', err, 'documents'); router.push('/jobs'); });
+    }).catch((err) => {
+      logger.error('Failed to load document', err, 'documents');
+      toast.error(err instanceof ApiError && err.status === 403 ? "You don't have access to that document." : "Couldn't open that document.");
+      router.push('/jobs');
+    });
   }, [id]);
 
   if (!doc || !job) {
@@ -126,7 +131,7 @@ export default function DocumentFillPage() {
       : field.labels[0]?.label;
     const sourceLabel = field.labels.find((l) => l.languageId === sourceLang.id)?.label;
     return {
-      target: targetLabel || field.fieldKey,
+      target: targetLabel || humanize(field.fieldKey),
       source: sourceLabel || '',
     };
   };

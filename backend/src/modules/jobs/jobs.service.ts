@@ -109,6 +109,7 @@ export class JobsService {
     status?: string;
     clientId?: string;
     type?: string;
+    hasDeadline?: boolean;
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
@@ -149,8 +150,13 @@ export class JobsService {
         { search: `%${search}%` },
       );
     }
-    if (status) {
-      qb.andWhere('job.status = :status', { status });
+    // One status, or several comma-separated ("quote,accepted,in_progress")
+    const statuses = (status ?? '').split(',').filter(Boolean).slice(0, 8);
+    if (statuses.length) {
+      qb.andWhere('job.status IN (:...statuses)', { statuses });
+    }
+    if (query.hasDeadline) {
+      qb.andWhere('job.deadline IS NOT NULL');
     }
     if (clientId) {
       qb.andWhere('job.client_id = :clientId', { clientId });

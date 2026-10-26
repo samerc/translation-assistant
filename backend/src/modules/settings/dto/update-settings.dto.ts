@@ -29,7 +29,7 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @Matches(/^[A-Z]{3}$/, {
-    message: 'baseCurrency must be a 3-letter ISO code (e.g. USD)',
+    message: 'Base currency must be a 3-letter code, like USD, EUR or AED',
   })
   baseCurrency?: string;
 

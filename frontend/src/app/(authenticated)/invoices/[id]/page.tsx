@@ -9,6 +9,7 @@ import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { formatDate, todayLocal } from '@/lib/format';
 import { useNow } from '@/lib/use-now';
+import { RequirePermission } from '@/components/RequirePermission';
 
 interface InvoiceItem {
   id: string;
@@ -71,7 +72,7 @@ function balanceDue(invoice: Invoice): number {
   return Math.max(0, Math.round(owed * 100) / 100);
 }
 
-export default function InvoiceDetailPage() {
+function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -560,4 +561,8 @@ function ExportIcon({ className }: { className?: string }) {
       <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
     </svg>
   );
+}
+
+export default function InvoiceDetailPageGate() {
+  return <RequirePermission permission="invoices:read"><InvoiceDetailPage /></RequirePermission>;
 }

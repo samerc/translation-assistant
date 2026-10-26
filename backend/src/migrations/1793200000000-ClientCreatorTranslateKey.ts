@@ -4,6 +4,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * - `clients.created_by_user_id`: non-admins see the clients they created
  *   (existing clients stay null — visible to admins and via jobs, as before).
  * - `app_settings.googleTranslateApiKey`: admin-set key for the GT helper.
+ * - `users.mustChangePassword`: the seeded admin is nagged off the default password.
  * Prod runs synchronize, which adds both columns on its own.
  */
 export class ClientCreatorTranslateKey1793200000000 implements MigrationInterface {
@@ -16,9 +17,15 @@ export class ClientCreatorTranslateKey1793200000000 implements MigrationInterfac
     await queryRunner.query(
       `ALTER TABLE \`app_settings\` ADD \`googleTranslateApiKey\` varchar(255) NULL`,
     );
+    await queryRunner.query(
+      `ALTER TABLE \`users\` ADD \`mustChangePassword\` tinyint NOT NULL DEFAULT 0`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE \`users\` DROP COLUMN \`mustChangePassword\``,
+    );
     await queryRunner.query(
       `ALTER TABLE \`app_settings\` DROP COLUMN \`googleTranslateApiKey\``,
     );

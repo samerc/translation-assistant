@@ -58,14 +58,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         };
       }
 
+      let message =
+        typeof exceptionResponse === 'string'
+          ? exceptionResponse
+          : exception.message;
+      // The throttler's own text is "ThrottlerException: Too Many Requests".
+      if (message.startsWith('ThrottlerException')) {
+        message = 'Too many requests. Please wait a minute and try again.';
+      }
       return {
         status,
         body: {
           statusCode: status,
-          message:
-            typeof exceptionResponse === 'string'
-              ? exceptionResponse
-              : exception.message,
+          message,
           error: HttpStatus[status],
         },
       };
@@ -79,11 +84,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message.includes('Duplicate entry') ||
         message.includes('UNIQUE constraint')
       ) {
+        // MariaDB: "Duplicate entry 'en' for key '...'" — the value is the
+        // caller's own input, so naming it is safe and far more useful.
+        const dup = /Duplicate entry '(.{1,60}?)' for key/.exec(message)?.[1];
         return {
           status: HttpStatus.CONFLICT,
           body: {
             statusCode: HttpStatus.CONFLICT,
-            message: 'A record with this value already exists',
+            message: dup
+              ? `"${dup}" is already in use. Please choose a different value.`
+              : 'A record with this value already exists',
             error: 'Conflict',
           },
         };

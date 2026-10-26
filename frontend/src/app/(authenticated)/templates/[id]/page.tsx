@@ -268,7 +268,9 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   };
 
   const cellClass = "px-3 py-2 text-sm";
-  const inputClass = "w-full px-2 py-1.5 bg-bg border border-border rounded text-text text-xs focus:outline-none focus:ring-2 focus:ring-primary";
+  const inputClass = "input h-8 px-2 text-xs";
+  // Keys double as Word placeholders: letters, digits, underscores ("holder name" → "holder_name").
+  const toKey = (v: string) => v.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
 
   return (
     <div>
@@ -353,7 +355,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                   </td>
                   <td className={cellClass}>
                     {isEditing ? (
-                      <input value={data!.fieldKey} onChange={(e) => setEditForm({ ...editForm, fieldKey: e.target.value })} className={inputClass} />
+                      <input value={data!.fieldKey} onChange={(e) => setEditForm({ ...editForm, fieldKey: toKey(e.target.value) })} className={inputClass} />
                     ) : (
                       <span className="font-medium text-text">{field.fieldKey}</span>
                     )}
@@ -379,7 +381,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                   </td>
                   <td className={cellClass}>
                     {isEditing ? (
-                      <input value={data!.groupKey} onChange={(e) => setEditForm({ ...editForm, groupKey: e.target.value })}
+                      <input value={data!.groupKey} onChange={(e) => setEditForm({ ...editForm, groupKey: toKey(e.target.value) })}
                         list="edit-group-options" placeholder="None" className={inputClass} />
                     ) : (
                       field.groupKey && <span className="px-2 py-0.5 tone tone-accent rounded text-xs font-medium">{field.groupKey}</span>
@@ -424,8 +426,8 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
               <tr className="bg-success-light/30 border-b border-border">
                 <td className={cellClass}></td>
                 <td className={cellClass}>
-                  <input value={newRow.fieldKey} onChange={(e) => setNewRow({ ...newRow, fieldKey: e.target.value })}
-                    placeholder="field_key" autoFocus className={inputClass}
+                  <input value={newRow.fieldKey} onChange={(e) => setNewRow({ ...newRow, fieldKey: toKey(e.target.value) })}
+                    placeholder="e.g. holder_name" title="Letters, numbers and underscores" autoFocus className={inputClass}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveNewRow(); } }} />
                 </td>
                 <td className={cellClass}>
@@ -438,7 +440,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                     className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
                 </td>
                 <td className={cellClass}>
-                  <input value={newRow.groupKey} onChange={(e) => setNewRow({ ...newRow, groupKey: e.target.value })}
+                  <input value={newRow.groupKey} onChange={(e) => setNewRow({ ...newRow, groupKey: toKey(e.target.value) })}
                     list="new-group-options" placeholder="None" className={inputClass} />
                 </td>
                 {languages.map((l) => (

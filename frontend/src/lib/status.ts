@@ -34,3 +34,11 @@ export const JOB_TYPE_BADGE: Record<string, string> = {
 export function badgeClass(map: Record<string, string>, key: string): string {
   return map[key] || 'tone tone-neutral';
 }
+
+/** Job statuses still being worked on — the ones a deadline matters for. */
+export const OPEN_JOB_STATUSES = ['quote', 'accepted', 'in_progress'];
+
+/** An open job whose deadline (YYYY-MM-DD) is before `today` (from `todayLocal(useNow())`). */
+export function isJobOverdue(job: { status: string; deadline: string | null }, today: string): boolean {
+  return Boolean(job.deadline && OPEN_JOB_STATUSES.includes(job.status) && job.deadline.slice(0, 10) < today);
+}

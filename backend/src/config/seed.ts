@@ -4,6 +4,7 @@ import { Permission } from '../modules/roles/entities/permission.entity.js';
 import { Role } from '../modules/roles/entities/role.entity.js';
 import { User } from '../modules/users/entities/user.entity.js';
 import { LabelOption } from '../modules/settings/entities/label-option.entity.js';
+import { Language } from '../modules/settings/entities/language.entity.js';
 
 const RESOURCES = [
   'users',
@@ -105,6 +106,7 @@ export async function seed(dataSource: DataSource) {
         lastName: 'User',
         roleId: adminRole.id,
         isActive: true,
+        mustChangePassword: usingDefault,
       });
       await userRepo.save(admin);
       if (usingDefault) {
@@ -118,6 +120,18 @@ export async function seed(dataSource: DataSource) {
         );
       }
     }
+  }
+
+  // A fresh install gets a few common languages so jobs can be created
+  // straight away (admins add/disable more in Settings > Languages).
+  const languageRepo = dataSource.getRepository(Language);
+  if ((await languageRepo.count()) === 0) {
+    await languageRepo.save([
+      { code: 'en', name: 'English', direction: 'ltr' as const },
+      { code: 'ar', name: 'Arabic', direction: 'rtl' as const },
+      { code: 'fr', name: 'French', direction: 'ltr' as const },
+    ]);
+    console.log('Seeded default languages: English, Arabic, French');
   }
 
   // Seed default label options

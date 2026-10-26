@@ -12,8 +12,10 @@ import {
   Min,
   Max,
   ArrayMaxSize,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { FIELD_KEY_PATTERN } from './template-field.dto.js';
 
 export class CreateTemplateDto {
   @IsOptional()
@@ -95,6 +97,7 @@ export class WordPlaceholderItemDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(FIELD_KEY_PATTERN)
   fieldKey: string;
 }
 
