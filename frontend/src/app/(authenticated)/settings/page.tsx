@@ -38,13 +38,19 @@ type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'secu
 export default function SettingsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role?.name === 'Admin';
-  const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [selectedTab, setActiveTab] = useState<Tab | null>(null);
 
+  // App-administration tabs (their writes are @AdminOnly server-side) are admin-only;
+  // everyone keeps the personal tabs.
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'general', label: 'General' },
-    { id: 'languages', label: 'Languages' },
-    { id: 'labels', label: 'Labels' },
-    { id: 'uploads', label: 'File Uploads' },
+    ...(isAdmin
+      ? [
+          { id: 'general' as Tab, label: 'General' },
+          { id: 'languages' as Tab, label: 'Languages' },
+          { id: 'labels' as Tab, label: 'Labels' },
+          { id: 'uploads' as Tab, label: 'File Uploads' },
+        ]
+      : []),
     { id: 'appearance', label: 'Appearance' },
     { id: 'business', label: 'My Business' },
     { id: 'security', label: 'Security' },
@@ -57,6 +63,8 @@ export default function SettingsPage() {
         ]
       : []),
   ];
+  // Derived so the active tab is always one this user can see (first tab by default).
+  const activeTab = tabs.some((t) => t.id === selectedTab) ? selectedTab : tabs[0].id;
 
   return (
     <div>
@@ -79,10 +87,10 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {activeTab === 'general' && <GeneralSettings />}
-      {activeTab === 'languages' && <LanguagesSettings />}
-      {activeTab === 'labels' && <LabelsSettings />}
-      {activeTab === 'uploads' && <UploadSettings />}
+      {activeTab === 'general' && isAdmin && <GeneralSettings />}
+      {activeTab === 'languages' && isAdmin && <LanguagesSettings />}
+      {activeTab === 'labels' && isAdmin && <LabelsSettings />}
+      {activeTab === 'uploads' && isAdmin && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
       {activeTab === 'business' && <BusinessSettings />}
       {activeTab === 'security' && <SecuritySettings />}
@@ -1195,7 +1203,7 @@ function RolesSettings() {
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true); setError(null);
-    const body = { name, description: description || undefined, permissionIds: Array.from(picked) };
+    const body = { name, description, permissionIds: Array.from(picked) };
     try {
       if (editing === 'new') await api.post('/roles', body);
       else if (editing) await api.patch(`/roles/${editing.id}`, body);
@@ -1460,7 +1468,7 @@ function FreeformTypesSettings() {
     setError('');
     const payload = {
       name: form.name.trim(),
-      description: form.description.trim() || undefined,
+      description: form.description.trim(), // "" clears it
       pricePerPage: form.pricePerPage ? Number(form.pricePerPage) : 0,
       discountedPricePerPage: form.discountedPricePerPage ? Number(form.discountedPricePerPage) : undefined,
     };

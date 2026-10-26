@@ -15,10 +15,30 @@ export function formatCurrency(
   }
 }
 
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Bare `YYYY-MM-DD` strings are calendar dates: parse them as local midnight (not UTC) so they don't shift a day. */
+function parseDate(value: string | Date): Date {
+  if (value instanceof Date) return value;
+  const m = DATE_ONLY.exec(value);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+}
+
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
-  const d = value instanceof Date ? value : new Date(value);
+  const d = parseDate(value);
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+}
+
+/** A Date's local calendar date as `YYYY-MM-DD` (unlike `toISOString()`, which is UTC). */
+export function localDateString(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Today's local date as `YYYY-MM-DD`. In render, pass `now` from `useNow()` instead of relying on the default. */
+export function todayLocal(now: number = Date.now()): string {
+  return localDateString(new Date(now));
 }
 
 /** "just now" / "5m ago" / "3h ago" / "2d ago", then a plain date after a week. Pass `now` from `useNow()`. */

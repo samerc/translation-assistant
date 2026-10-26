@@ -210,7 +210,9 @@ export class ExportService {
     for (const block of blocks) {
       const alignment = this.getAlignment(block.alignment, isRtl);
       const fontSize = (block.fontSize || 12) * 2; // docx uses half-points
-      const color = block.color?.replace('#', '') || '000000';
+      // docx throws on anything but 6-digit hex — fall back instead of a 500
+      const hex = block.color?.replace('#', '') ?? '';
+      const color = /^[0-9a-f]{6}$/i.test(hex) ? hex : '000000';
 
       if (block.type === 'divider') {
         paragraphs.push(

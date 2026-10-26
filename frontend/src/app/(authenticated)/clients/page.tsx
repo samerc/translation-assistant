@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { useDebounce } from '@/lib/use-debounce';
 import { toast } from '@/lib/toast';
 import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
@@ -39,6 +40,7 @@ export default function ClientsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [typeFilter, setTypeFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
@@ -46,9 +48,11 @@ export default function ClientsPage() {
   const [form, setForm] = useState({ type: 'company' as 'company' | 'person', name: '', taxId: '', notes: '' });
   const router = useRouter();
 
+  // Returns a cancel fn: the effect uses it so only the latest request's response is applied.
   const loadClients = () => {
+    let ignore = false;
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (typeFilter) params.set('type', typeFilter);
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
@@ -56,14 +60,16 @@ export default function ClientsPage() {
     params.set('limit', '25');
 
     api.get<ClientsResponse>(`/clients?${params}`).then((res) => {
+      if (ignore) return;
       setLoadError(false);
       setClients(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    }).catch(() => setLoadError(true));
+    }).catch(() => { if (!ignore) setLoadError(true); });
+    return () => { ignore = true; };
   };
 
-  useEffect(() => { loadClients(); }, [search, typeFilter, sortBy, sortOrder, page]);
+  useEffect(() => loadClients(), [debouncedSearch, typeFilter, sortBy, sortOrder, page]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {

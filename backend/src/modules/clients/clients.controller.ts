@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
+import { pipeline } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -437,8 +438,10 @@ export class ClientsController {
     res.setHeader('Content-Type', safeMimeType);
     res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    const stream = createReadStream(pc.filePath);
-    stream.pipe(res);
+    // pipeline handles a read error or client abort instead of an unhandled 'error'
+    pipeline(createReadStream(pc.filePath), res, () => {
+      /* nothing to clean up — the file stays */
+    });
   }
 
   @Delete(':id/passports/:copyId')

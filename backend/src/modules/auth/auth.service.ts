@@ -144,10 +144,26 @@ export class AuthService {
       roleId: invite.roleId,
     });
 
-    const savedUser = await this.userRepository.save(user);
-    invite.used = true;
-    invite.usedByUserId = savedUser.id;
-    await this.inviteTokenRepository.save(invite);
+    // Single use: claim the invite with a conditional UPDATE (concurrent
+    // registrations with one token — only one gets affected = 1).
+    const claim = await this.inviteTokenRepository.update(
+      { id: invite.id, used: false },
+      { used: true },
+    );
+    if (!claim.affected) {
+      throw new BadRequestException('Invalid or expired invite token');
+    }
+    let savedUser: User;
+    try {
+      savedUser = await this.userRepository.save(user);
+    } catch (err) {
+      // e.g. the email was registered concurrently — give the invite back
+      await this.inviteTokenRepository.update(invite.id, { used: false });
+      throw err;
+    }
+    await this.inviteTokenRepository.update(invite.id, {
+      usedByUserId: savedUser.id,
+    });
 
     const fullUser = await this.userRepository.findOne({
       where: { id: savedUser.id },
@@ -414,6 +430,16 @@ export class AuthService {
     });
     if (!rt) throw new BadRequestException('Invalid or expired reset token');
 
+    // Single use: claim it with a conditional UPDATE. Of two concurrent resets
+    // with the same token only one sees affected = 1.
+    const claim = await this.resetTokenRepository.update(
+      { id: rt.id, used: false },
+      { used: true },
+    );
+    if (!claim.affected) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: rt.userId },
     });
@@ -431,8 +457,7 @@ export class AuthService {
       { revoked: true },
     );
 
-    rt.used = true;
-    await this.resetTokenRepository.save(rt);
+    // Any other outstanding reset tokens for this user die with this one.
     await this.resetTokenRepository.update(
       { userId: user.id, used: false },
       { used: true },

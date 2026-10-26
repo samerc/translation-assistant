@@ -7,7 +7,8 @@ import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
-import { formatDate } from '@/lib/format';
+import { formatDate, todayLocal } from '@/lib/format';
+import { useNow } from '@/lib/use-now';
 
 interface InvoiceItem {
   id: string;
@@ -78,7 +79,8 @@ export default function InvoiceDetailPage() {
   const [error, setError] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentDate, setPaymentDate] = useState(() => todayLocal());
+  const now = useNow();
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -107,6 +109,7 @@ export default function InvoiceDetailPage() {
     setPaymentAmount(balanceDue(invoice).toFixed(2));
     setPaymentMethod('');
     setPaymentNote('');
+    setPaymentDate(todayLocal());
     setShowPaymentModal(true);
   };
 
@@ -228,7 +231,7 @@ export default function InvoiceDetailPage() {
         dueDate: editForm.dueDate,
         taxRate: editForm.taxRate,
         currency: editForm.currency,
-        notes: editForm.notes || undefined,
+        notes: editForm.notes,
       });
       setEditing(false);
       toast.success('Changes saved');
@@ -250,7 +253,8 @@ export default function InvoiceDetailPage() {
     return <div className="text-center py-12 text-text-muted">Invoice not found</div>;
   }
 
-  const isOverdue = invoice.status === 'sent' && new Date(invoice.dueDate) < new Date();
+  // Overdue only once the local date is past the due date (due dates are YYYY-MM-DD).
+  const isOverdue = invoice.status === 'sent' && invoice.dueDate.slice(0, 10) < todayLocal(now);
   const effectiveStatus = isOverdue ? 'overdue' : invoice.status;
   const found = STATUSES.find((s) => s.value === effectiveStatus) || { label: invoice.status, color: 'bg-bg text-text-secondary' };
   const balance = balanceDue(invoice);

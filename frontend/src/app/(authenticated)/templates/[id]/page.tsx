@@ -1113,7 +1113,7 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
     try {
       await api.patch(`/templates/${template.id}`, {
         name: form.name,
-        description: form.description || undefined,
+        description: form.description,
         pricePerPage: parseFloat(form.pricePerPage) || 0,
         discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : null,
         isActive: form.isActive,

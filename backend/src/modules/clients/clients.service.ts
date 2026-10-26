@@ -56,14 +56,13 @@ export class ClientsService {
     userId?: string;
     isAdmin?: boolean;
   }) {
-    const {
-      search,
-      type,
-      sortBy = 'name',
-      sortOrder = 'ASC',
-      page = Math.max(1, query.page || 1),
-    } = query;
-    const limit = Math.min(Math.max(1, query.limit || 25), 100);
+    const { search, type, sortBy = 'name', sortOrder = 'ASC' } = query;
+    // Default params only apply to undefined — clamp explicitly (page=0, -1, NaN).
+    const page = Math.max(1, Math.floor(Number(query.page)) || 1);
+    const limit = Math.min(
+      Math.max(1, Math.floor(Number(query.limit)) || 25),
+      100,
+    );
 
     const qb = this.clientRepository
       .createQueryBuilder('client')

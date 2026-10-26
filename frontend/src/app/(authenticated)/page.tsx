@@ -28,7 +28,6 @@ export default function Dashboard() {
   }, [canSeeStats]);
 
   const currency = stats?.currency || 'USD';
-  const canSeeFinancials = hasPermission('reports:read');
 
   return (
     <div>
@@ -37,37 +36,15 @@ export default function Dashboard() {
       </h1>
       <p className="text-text-secondary mb-6">Here&apos;s your overview</p>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard
-          title="Active Jobs"
-          value={loading ? '' : stats ? String(stats.activeJobs) : '0'}
-          loading={loading}
-          icon={<JobIcon />}
-        />
-        {canSeeFinancials && (
-          <SummaryCard
-            title="Revenue (Month)"
-            value={loading ? '' : formatCurrency(stats?.monthlyRevenue ?? 0, currency)}
-            loading={loading}
-            icon={<RevenueIcon />}
-          />
-        )}
-        {canSeeFinancials && (
-          <SummaryCard
-            title="Pending Invoices"
-            value={loading ? '' : stats ? String(stats.pendingInvoices) : '0'}
-            loading={loading}
-            icon={<InvoiceIcon />}
-          />
-        )}
-        <SummaryCard
-          title="Due This Week"
-          value={loading ? '' : stats ? String(stats.dueThisWeek) : '0'}
-          loading={loading}
-          icon={<ClockIcon />}
-        />
-      </div>
+      {/* Summary cards — all come from /reports/dashboard-stats, so hidden without reports:read */}
+      {canSeeStats && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard title="Active Jobs" value={loading ? '' : stats ? String(stats.activeJobs) : '0'} loading={loading} icon={<JobIcon />} />
+          <SummaryCard title="Revenue (Month)" value={loading ? '' : formatCurrency(stats?.monthlyRevenue ?? 0, currency)} loading={loading} icon={<RevenueIcon />} />
+          <SummaryCard title="Pending Invoices" value={loading ? '' : stats ? String(stats.pendingInvoices) : '0'} loading={loading} icon={<InvoiceIcon />} />
+          <SummaryCard title="Due This Week" value={loading ? '' : stats ? String(stats.dueThisWeek) : '0'} loading={loading} icon={<ClockIcon />} />
+        </div>
+      )}
     </div>
   );
 }

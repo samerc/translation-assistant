@@ -79,6 +79,8 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
 
     await this.userRepository.update(id, dto);
+    // Deactivating cuts off existing sessions immediately, whichever endpoint did it.
+    if (dto.isActive === false) await this.revokeAllSessions(id);
     return this.findOne(id);
   }
 
@@ -112,10 +114,7 @@ export class UsersService {
   }
 
   async deactivate(id: string): Promise<Partial<User>> {
-    const result = await this.update(id, { isActive: false });
-    // Cut off existing sessions immediately, not just at token expiry.
-    await this.revokeAllSessions(id);
-    return result;
+    return this.update(id, { isActive: false }); // also revokes sessions
   }
 
   async activate(id: string): Promise<Partial<User>> {

@@ -132,6 +132,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const userId = request.user?.id || 'anonymous';
     const ip = request.ip || 'unknown';
 
+    // A database error mapped to 400 (FK violation, data too long, deadlock…) is
+    // a server-side problem the client can't see — always log it. Duplicate-key
+    // 409s are ordinary conflicts.
+    if (
+      exception instanceof QueryFailedError &&
+      status !== Number(HttpStatus.CONFLICT)
+    ) {
+      this.logger.error(
+        `${method} ${url} → ${status} (database) | user=${userId} ip=${ip} | ${exception.message}`,
+      );
+      return;
+    }
+
     // Don't log 4xx client errors at error level (they're expected)
     if (status < 500) {
       // Only log 4xx at debug level, skip validation errors entirely
