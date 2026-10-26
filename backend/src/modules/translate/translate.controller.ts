@@ -2,16 +2,21 @@ import {
   Controller,
   Post,
   Body,
+  Get,
   UseGuards,
   BadRequestException,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
+  BadGatewayException,
+  GatewayTimeoutException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle } from '@nestjs/throttler';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { SettingsService } from '../settings/settings.service.js';
 
 class TranslateDto {
   @IsString()
@@ -40,6 +45,16 @@ const usage = new Map<string, { chars: number; resetAt: number }>();
 @Controller('translate')
 @UseGuards(AuthGuard('jwt'))
 export class TranslateController {
+  constructor(private readonly settingsService: SettingsService) {}
+
+  /** Whether a Google Translate key is set — the document page shows a banner when not. */
+  @Get('status')
+  async status() {
+    return {
+      configured: Boolean(await this.settingsService.getTranslateApiKey()),
+    };
+  }
+
   @Post()
   @Throttle({ default: { ttl: 60000, limit: 30 } })
   async translate(@Body() body: TranslateDto, @CurrentUser() user: User) {
@@ -47,6 +62,13 @@ export class TranslateController {
     const langPattern = /^[a-z]{2,3}(-[A-Z]{2})?$/;
     if (!langPattern.test(body.from) || !langPattern.test(body.to)) {
       throw new BadRequestException('Invalid language code format');
+    }
+
+    const apiKey = await this.settingsService.getTranslateApiKey();
+    if (!apiKey) {
+      throw new ServiceUnavailableException(
+        'Google Translate is not set up. An admin can add an API key in Settings.',
+      );
     }
 
     // Enforce the per-user daily character budget.
@@ -64,21 +86,12 @@ export class TranslateController {
       entry.chars += body.text.length;
     }
 
-    const apiKey = process.env.GOOGLE_TRANSLATE_API_KEY;
-
-    if (!apiKey || apiKey === 'your-google-translate-api-key') {
-      return {
-        translatedText: `[GT: ${body.text}]`,
-        note: 'Translation service is not configured',
-      };
-    }
-
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let res: Response;
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const res = await fetch(
-        `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`,
+      res = await fetch(
+        `https://translation.googleapis.com/language/translate/v2?key=${encodeURIComponent(apiKey)}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -91,20 +104,30 @@ export class TranslateController {
           signal: controller.signal,
         },
       );
-
-      clearTimeout(timeoutId);
-
-      const data = (await res.json()) as {
-        data?: { translations?: { translatedText?: string }[] };
-      };
-      const translatedText =
-        data?.data?.translations?.[0]?.translatedText || body.text;
-      return { translatedText };
     } catch {
-      return {
-        translatedText: body.text,
-        error: 'Translation service unavailable',
-      };
+      throw controller.signal.aborted
+        ? new GatewayTimeoutException(
+            'Google Translate took too long to answer',
+          )
+        : new BadGatewayException('Google Translate could not be reached');
+    } finally {
+      clearTimeout(timeoutId);
     }
+
+    const data = (await res.json().catch(() => null)) as {
+      data?: { translations?: { translatedText?: string }[] };
+      error?: { status?: string };
+    } | null;
+    const translatedText = data?.data?.translations?.[0]?.translatedText;
+    if (!res.ok || !translatedText) {
+      // 400/403 from Google almost always mean a bad or restricted key.
+      const keyProblem = res.status === 400 || res.status === 403;
+      throw new BadGatewayException(
+        keyProblem
+          ? 'Google Translate rejected the API key. Check it in Settings.'
+          : 'Google Translate returned an error. Please try again.',
+      );
+    }
+    return { translatedText };
   }
 }

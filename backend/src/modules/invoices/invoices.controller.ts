@@ -32,6 +32,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -187,12 +188,8 @@ export class InvoicesController {
     const { filePath, fileName } = await this.exportService.exportPdf(id);
     if (!existsSync(filePath))
       throw new NotFoundException('Export file not found');
-    const safeFileName = fileName.replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${safeFileName}"`,
-    );
+    res.setHeader('Content-Disposition', contentDisposition(fileName));
     streamThenDelete(filePath, res);
   }
 
@@ -211,15 +208,11 @@ export class InvoicesController {
     const { filePath, fileName } = await this.exportService.exportWord(id);
     if (!existsSync(filePath))
       throw new NotFoundException('Export file not found');
-    const safeFileName = fileName.replace(/[^\w.-]/g, '_');
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${safeFileName}"`,
-    );
+    res.setHeader('Content-Disposition', contentDisposition(fileName));
     streamThenDelete(filePath, res);
   }
 

@@ -7,6 +7,10 @@ import { uid } from '@/lib/uid';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency } from '@/lib/format';
 import { useClientOptions } from '@/lib/use-client-options';
+import { useAuth } from '@/lib/auth-context';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, Select, Textarea } from '@/components/ui/Field';
+import { Alert } from '@/components/ui/Alert';
 
 interface Client { id: string; name: string; type: string; }
 interface Contact { id: string; firstName: string; lastName: string; }
@@ -34,6 +38,10 @@ export default function NewJobPage() {
   const [freeformTypes, setFreeformTypes] = useState<FreeformJobType[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { hasPermission } = useAuth();
+  // Inline "new client" — create one without leaving the job form
+  const [newClient, setNewClient] = useState<{ type: 'company' | 'person'; name: string } | null>(null);
+  const [creatingClient, setCreatingClient] = useState(false);
 
   const preselectedClientId = searchParams.get('clientId');
 
@@ -148,9 +156,43 @@ export default function NewJobPage() {
 
   const grandTotal = lineItems.reduce((sum, li) => sum + getLineTotal(li), 0);
 
+  const handleCreateClient = async () => {
+    if (!newClient?.name.trim()) return;
+    setCreatingClient(true);
+    try {
+      const created = await api.post<Client>('/clients', { type: newClient.type, name: newClient.name.trim() });
+      setForm((f) => ({ ...f, clientId: created.id, contactId: '' }));
+      setNewClient(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to create client.');
+    } finally {
+      setCreatingClient(false);
+    }
+  };
+
+  // Rows nobody filled in would be saved as "Untitled" at 0 — say so instead.
+  const lineItemProblem = (): string | null => {
+    if (form.type === 'template' && lineItems.some((li) => !li.templateId)) {
+      return 'Pick a template for every row, or remove the empty ones.';
+    }
+    if (form.type === 'freeform' && lineItems.some((li) => !li.description.trim() && !li.templateId)) {
+      return 'Give every document row a description or type, or remove the empty ones.';
+    }
+    return null;
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    if (newClient) {
+      setError('Finish creating the new client (or cancel it) first.');
+      return;
+    }
+    const problem = lineItemProblem();
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setSaving(true);
 
     try {
@@ -162,7 +204,7 @@ export default function NewJobPage() {
         status: form.status,
         isFreeOfCharge: form.isFreeOfCharge,
         lineItems: lineItems.map((li) => ({
-          description: li.description || 'Untitled',
+          description: li.description.trim(),
           templateId: li.templateId || undefined,
           pageCount: Number(li.pageCount) || 1,
           pricePerPage: Number(li.pricePerPage) || 0,
@@ -187,44 +229,38 @@ export default function NewJobPage() {
     }
   };
 
-  const inputClass = "w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary";
-
   return (
     <div>
       <button onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Jobs</button>
       <h1 className="text-2xl font-bold tracking-tight text-text mb-6">New Job</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
-        {error && <div className="p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
+        {error && <Alert>{error}</Alert>}
 
         {/* Basic info */}
         <div className="card p-6 space-y-4">
           <h3 className="font-semibold text-text">Job Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Type</label>
-              <select value={form.type} onChange={(e) => { setForm({ ...form, type: e.target.value as 'template' | 'freeform' }); setLineItems([]); }} className={inputClass}>
+            <Field label="Type" htmlFor="job-type">
+              <Select id="job-type" value={form.type} onChange={(e) => { setForm({ ...form, type: e.target.value as 'template' | 'freeform' }); setLineItems([]); }}>
                 <option value="template">Template-based</option>
                 <option value="freeform">Free-form</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Status</label>
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inputClass}>
+              </Select>
+            </Field>
+            <Field label="Status" htmlFor="job-status">
+              <Select id="job-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 <option value="quote">Quote</option>
                 <option value="accepted">Accepted</option>
                 <option value="in_progress">In Progress</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-text mb-1.5">Title *</label>
-            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required className={inputClass} />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-text mb-1.5">Description</label>
-            <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className={`${inputClass} resize-none`} />
-          </div>
+          <Field label="Title" htmlFor="job-title" required>
+            <Input id="job-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required maxLength={255} />
+          </Field>
+          <Field label="Description" htmlFor="job-description">
+            <Textarea id="job-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
+          </Field>
         </div>
 
         {/* Client & Language */}
@@ -232,52 +268,81 @@ export default function NewJobPage() {
           <h3 className="font-semibold text-text">Client & Languages</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Client *</label>
-              <select value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value, contactId: '' })} required className={inputClass}>
-                <option value="">Select client...</option>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <label htmlFor="job-client" className="text-sm font-semibold text-text">Client<span className="text-danger ml-0.5" aria-hidden="true">*</span></label>
+                {hasPermission('clients:create') && !newClient && (
+                  <button type="button" onClick={() => setNewClient({ type: 'person', name: '' })} className="text-xs font-medium text-primary-text hover:underline">
+                    + New client
+                  </button>
+                )}
+              </div>
+              <Select id="job-client" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value, contactId: '' })} required disabled={Boolean(newClient)}>
+                <option value="">{clients.length === 0 ? 'No clients yet — add one' : 'Select client...'}</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </Select>
             </div>
             {isCompany && contacts.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-text mb-1.5">Contact Person</label>
-                <select value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })} className={inputClass}>
+              <Field label="Contact Person" htmlFor="job-contact">
+                <Select id="job-contact" value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })}>
                   <option value="">None</option>
                   {contacts.map((c) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
-                </select>
-              </div>
+                </Select>
+              </Field>
             )}
           </div>
+          {newClient && (
+            <div className="rounded-lg border border-border bg-sunken p-4 space-y-3">
+              <div className="text-sm font-semibold text-text">New client</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Field label="Type" htmlFor="new-client-type">
+                  <Select id="new-client-type" value={newClient.type} onChange={(e) => setNewClient({ ...newClient, type: e.target.value as 'company' | 'person' })}>
+                    <option value="person">Person</option>
+                    <option value="company">Company</option>
+                  </Select>
+                </Field>
+                <Field label="Name" htmlFor="new-client-name" required className="sm:col-span-2">
+                  <Input id="new-client-name" autoFocus value={newClient.name} maxLength={255}
+                    onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleCreateClient(); } }} />
+                </Field>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="primary" onClick={handleCreateClient} disabled={creatingClient || !newClient.name.trim()}>
+                  {creatingClient ? 'Creating…' : 'Create client'}
+                </Button>
+                <Button size="sm" onClick={() => setNewClient(null)}>Cancel</Button>
+              </div>
+              <p className="text-xs text-text-muted">Add emails, phones and addresses later from the client&apos;s page.</p>
+            </div>
+          )}
           <label className="flex items-center gap-2 text-sm text-text cursor-pointer mb-2">
             <input type="checkbox" checked={form.isTranslation}
               onChange={(e) => setForm({ ...form, isTranslation: e.target.checked, targetLanguageId: '' })}
               className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
             Translation job (has a target language)
           </label>
-          <div className={`grid gap-4 ${form.isTranslation ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">
-                {form.isTranslation ? 'Source Language *' : 'Language *'}
-              </label>
-              <select value={form.sourceLanguageId} onChange={(e) => setForm({ ...form, sourceLanguageId: e.target.value })} required className={inputClass}>
+          <div className={`grid gap-4 ${form.isTranslation ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+            <Field label={form.isTranslation ? 'Source Language' : 'Language'} htmlFor="job-source" required>
+              <Select id="job-source" value={form.sourceLanguageId} onChange={(e) => setForm({ ...form, sourceLanguageId: e.target.value })} required>
                 <option value="">Select...</option>
                 {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
             {form.isTranslation && (
-              <div>
-                <label className="block text-sm font-medium text-text mb-1.5">Target Language *</label>
-                <select value={form.targetLanguageId} onChange={(e) => setForm({ ...form, targetLanguageId: e.target.value })} required className={inputClass}>
+              <Field label="Target Language" htmlFor="job-target" required>
+                <Select id="job-target" value={form.targetLanguageId} onChange={(e) => setForm({ ...form, targetLanguageId: e.target.value })} required>
                   <option value="">Select...</option>
                   {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
-                </select>
-              </div>
+                </Select>
+              </Field>
             )}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-text mb-1.5">Deadline</label>
-            <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className={inputClass} />
-          </div>
+          {languages.length === 0 && (
+            <Alert tone="warning">No languages are set up yet. An admin can add them in Settings &gt; Languages.</Alert>
+          )}
+          <Field label="Deadline" htmlFor="job-deadline">
+            <Input id="job-deadline" type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+          </Field>
         </div>
 
         {/* Line Items */}
@@ -286,10 +351,9 @@ export default function NewJobPage() {
             <h3 className="font-semibold text-text">
               {form.type === 'template' ? 'Templates' : 'Documents'}
             </h3>
-            <button type="button" onClick={addLineItem}
-              className="btn btn-primary btn-sm">
+            <Button size="sm" onClick={addLineItem}>
               + Add {form.type === 'template' ? 'Template' : 'Document'}
-            </button>
+            </Button>
           </div>
 
           {lineItems.length === 0 && (
@@ -300,7 +364,7 @@ export default function NewJobPage() {
 
           <div className="space-y-3">
             {lineItems.map((li) => (
-              <div key={li.key} className="border border-border rounded-lg p-4 bg-bg">
+              <div key={li.key} className="border border-border rounded-lg p-4 bg-sunken">
                 {/* Free-form rows get an editable description (manual or type-prefilled) */}
                 {form.type === 'freeform' && (
                   <div className="mb-3">
@@ -381,7 +445,7 @@ export default function NewJobPage() {
                   {/* Line total + delete */}
                   <div className="col-span-2 flex items-center justify-between pb-1">
                     <span className="text-sm font-semibold text-text">{formatCurrency(getLineTotal(li), baseCurrency)}</span>
-                    <button type="button" onClick={() => removeLineItem(li.key)} className="text-xs text-danger hover:text-danger/80">Remove</button>
+                    <button type="button" onClick={() => removeLineItem(li.key)} className="text-xs font-medium text-danger hover:underline">Remove</button>
                   </div>
                 </div>
               </div>
@@ -407,24 +471,24 @@ export default function NewJobPage() {
             Free of charge (pro bono)
           </label>
           {form.isFreeOfCharge && (
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Reason</label>
-              <input value={form.freeOfChargeReason} onChange={(e) => setForm({ ...form, freeOfChargeReason: e.target.value })} placeholder="Optional" className={inputClass} />
-            </div>
+            <Field label="Reason" htmlFor="job-foc-reason">
+              <Input id="job-foc-reason" value={form.freeOfChargeReason} onChange={(e) => setForm({ ...form, freeOfChargeReason: e.target.value })} placeholder="Optional" />
+            </Field>
           )}
         </div>
 
         {/* Notes */}
         <div className="card p-6">
-          <label className="block text-sm font-medium text-text mb-1.5">Notes</label>
-          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} className={`${inputClass} resize-none`} />
+          <Field label="Notes" htmlFor="job-notes">
+            <Textarea id="job-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} />
+          </Field>
         </div>
 
         <div className="flex gap-3">
-          <button type="submit" disabled={saving} className="btn btn-primary">
+          <Button type="submit" variant="primary" disabled={saving}>
             {saving ? 'Creating...' : 'Create Job'}
-          </button>
-          <button type="button" onClick={() => router.push('/jobs')} className="btn btn-secondary">Cancel</button>
+          </Button>
+          <Button onClick={() => router.push('/jobs')}>Cancel</Button>
         </div>
       </form>
     </div>

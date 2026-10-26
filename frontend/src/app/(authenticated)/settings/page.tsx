@@ -11,6 +11,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { CheckIcon, MoonIcon, SunIcon } from '@/components/ui/icons';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
+import { TranslateKeyForm } from '@/components/TranslateKeyForm';
 
 interface AppSettings {
   id: string;
@@ -21,6 +22,7 @@ interface AppSettings {
   invoicePrefix: string | null;
   maxUploadSizeMb: number;
   allowedFileTypes: string[] | null;
+  googleTranslateKeySet?: boolean;
 }
 
 interface Language {
@@ -145,46 +147,58 @@ function GeneralSettings() {
   if (!settings) return loadError ? <div className="max-w-4xl p-3 tone tone-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-4xl">
-      <div className="card p-6 space-y-5">
-        <InputField
-          label="Company Name"
-          value={settings.companyName}
-          onChange={(v) => setSettings({ ...settings, companyName: v })}
-        />
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">Company Address</label>
-          <textarea
-            value={settings.companyAddress || ''}
-            onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
-            rows={3}
-            className="input w-full resize-none"
+    <div className="max-w-4xl">
+      <form onSubmit={handleSubmit}>
+        <div className="card p-6 space-y-5">
+          <InputField
+            label="Company Name"
+            value={settings.companyName}
+            onChange={(v) => setSettings({ ...settings, companyName: v })}
+          />
+          <div>
+            <label className="block text-sm font-medium text-text mb-1.5">Company Address</label>
+            <textarea
+              value={settings.companyAddress || ''}
+              onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
+              rows={3}
+              className="input w-full resize-none"
+            />
+          </div>
+          <InputField
+            label="Base Currency"
+            value={settings.baseCurrency}
+            onChange={(v) => setSettings({ ...settings, baseCurrency: v })}
+            placeholder="USD"
+          />
+          <InputField
+            label="Invoice Prefix"
+            value={settings.invoicePrefix || ''}
+            onChange={(v) => setSettings({ ...settings, invoicePrefix: v })}
+            placeholder="INV-"
           />
         </div>
-        <InputField
-          label="Base Currency"
-          value={settings.baseCurrency}
-          onChange={(v) => setSettings({ ...settings, baseCurrency: v })}
-          placeholder="USD"
-        />
-        <InputField
-          label="Invoice Prefix"
-          value={settings.invoicePrefix || ''}
-          onChange={(v) => setSettings({ ...settings, invoicePrefix: v })}
-          placeholder="INV-"
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn btn-primary"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+          {message && <span className="text-sm text-success">{message}</span>}
+        </div>
+      </form>
+      <div className="card p-6 mt-6">
+        <h3 className="font-semibold text-text mb-1">Google Translate</h3>
+        <p className="text-sm text-text-secondary mb-4">
+          Powers the GT helper on document pages. {settings.googleTranslateKeySet ? 'A key is saved.' : 'No key is set, so the GT helper is off.'}
+        </p>
+        <TranslateKeyForm
+          keySet={Boolean(settings.googleTranslateKeySet)}
+          onSaved={(keySet) => setSettings({ ...settings, googleTranslateKeySet: keySet })}
         />
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn btn-primary"
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-        {message && <span className="text-sm text-success">{message}</span>}
-      </div>
-    </form>
+    </div>
   );
 }
 

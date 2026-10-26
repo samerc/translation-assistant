@@ -86,7 +86,7 @@ export class ExportService {
 
   async exportDocument(
     documentId: string,
-  ): Promise<{ filePath: string; fileName: string }> {
+  ): Promise<{ filePath: string; fileName: string; downloadName: string }> {
     const doc = await this.documentRepository.findOne({
       where: { id: documentId },
       relations: {
@@ -110,10 +110,12 @@ export class ExportService {
 
     if (!doc) throw new NotFoundException('Document not found');
 
+    // What the user's browser saves it as, e.g. "JOB-0001 Birth Certificate.docx"
+    const downloadName = `${doc.job.jobNumber} ${doc.template.name}.docx`;
     if (doc.template.type === 'word') {
-      return this.exportWordTemplate(doc);
+      return { ...(await this.exportWordTemplate(doc)), downloadName };
     } else if (doc.template.type === 'designer') {
-      return this.exportDesignerTemplate(doc);
+      return { ...(await this.exportDesignerTemplate(doc)), downloadName };
     } else {
       throw new BadRequestException('Simple templates cannot be exported');
     }

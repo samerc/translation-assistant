@@ -21,6 +21,7 @@ import { InvoiceItem } from '../invoices/entities/invoice-item.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
+import { clientVisibleSql } from '../clients/client-access.js';
 
 @Injectable()
 export class JobsService {
@@ -211,7 +212,11 @@ export class JobsService {
     return job;
   }
 
-  async create(dto: CreateJobDto, userId: string): Promise<Job> {
+  async create(
+    dto: CreateJobDto,
+    userId: string,
+    isAdmin = false,
+  ): Promise<Job> {
     // Validate referenced entities in parallel
     const templateIds = (dto.lineItems || [])
       .map((li) => li.templateId)
@@ -231,6 +236,16 @@ export class JobsService {
     ]);
 
     if (!client) throw new BadRequestException('Client not found');
+    // A non-admin can only open jobs for clients they can already see —
+    // otherwise any client id would grant access to that client.
+    if (!isAdmin) {
+      const visible = await this.clientRepository
+        .createQueryBuilder('client')
+        .where('client.id = :clientId', { clientId: dto.clientId })
+        .andWhere(clientVisibleSql('client'), { accessUserId: userId })
+        .getCount();
+      if (!visible) throw new BadRequestException('Client not found');
+    }
     if (!sourceLang) throw new BadRequestException('Source language not found');
     if (!sourceLang.isActive)
       throw new BadRequestException('Source language is not active');

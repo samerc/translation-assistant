@@ -50,8 +50,23 @@ export class SettingsService {
     if (patch.smtpPass === '' || patch.smtpPass === undefined) {
       delete patch.smtpPass;
     }
+    if (patch.googleTranslateApiKey === '') {
+      delete patch.googleTranslateApiKey;
+    } else if (typeof patch.googleTranslateApiKey === 'string') {
+      patch.googleTranslateApiKey = patch.googleTranslateApiKey.trim();
+    }
     Object.assign(settings, patch);
     return this.settingsRepository.save(settings);
+  }
+
+  /** The Google Translate key in effect: the stored one, else the env var. */
+  async getTranslateApiKey(): Promise<string | null> {
+    const settings = await this.getSettings();
+    const env = process.env.GOOGLE_TRANSLATE_API_KEY;
+    const key =
+      settings.googleTranslateApiKey ||
+      (env && env !== 'your-google-translate-api-key' ? env : '');
+    return key || null;
   }
 
   // ── Languages ──

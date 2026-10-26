@@ -14,6 +14,7 @@ import { PassportCopy } from './entities/passport-copy.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
+import { clientVisibleSql } from './client-access.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
 import { ClientAddress } from './entities/client-address.entity.js';
@@ -69,16 +70,9 @@ export class ClientsService {
       .leftJoinAndSelect('client.emails', 'emails')
       .leftJoinAndSelect('client.phones', 'phones');
 
-    // Non-admins only see clients they have jobs with
+    // Non-admins see clients they created or have jobs with
     if (!query.isAdmin && query.userId) {
-      qb.andWhere(
-        `client.id IN (
-          SELECT j.client_id FROM jobs j
-          INNER JOIN job_users ju ON ju.job_id = j.id
-          WHERE ju.user_id = :accessUserId
-        )`,
-        { accessUserId: query.userId },
-      );
+      qb.andWhere(clientVisibleSql('client'), { accessUserId: query.userId });
     }
 
     if (search) {
@@ -114,10 +108,10 @@ export class ClientsService {
     isAdmin: boolean,
   ): Promise<void> {
     if (isAdmin) return;
-    const hasAccess = await this.jobRepository
-      .createQueryBuilder('j')
-      .innerJoin('j.assignedUsers', 'ju', 'ju.userId = :userId', { userId })
-      .where('j.client_id = :clientId', { clientId })
+    const hasAccess = await this.clientRepository
+      .createQueryBuilder('client')
+      .where('client.id = :clientId', { clientId })
+      .andWhere(clientVisibleSql('client'), { accessUserId: userId })
       .getCount();
     if (hasAccess === 0) {
       throw new ForbiddenException('You do not have access to this client');
@@ -139,8 +133,11 @@ export class ClientsService {
     return client;
   }
 
-  async create(dto: CreateClientDto): Promise<Client> {
-    const client = this.clientRepository.create(dto);
+  async create(dto: CreateClientDto, userId: string): Promise<Client> {
+    const client = this.clientRepository.create({
+      ...dto,
+      createdByUserId: userId,
+    });
     const saved = await this.clientRepository.save(client);
     return this.findOne(saved.id);
   }

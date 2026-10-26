@@ -140,12 +140,26 @@ async function upload<T>(endpoint: string, formData: FormData, method = 'PATCH')
   return parseBody<T>(res);
 }
 
+// The UTF-8 `filename*` (keeps Arabic etc.) wins over the ASCII `filename` fallback.
+function fileNameFrom(header: string | null): string | null {
+  if (!header) return null;
+  const encoded = header.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      /* malformed — fall through to the plain name */
+    }
+  }
+  return header.match(/filename="([^"]+)"/)?.[1] ?? null;
+}
+
 // Fetch a generated file (PDF/DOCX export) and hand it to the browser as a download.
 async function download(endpoint: string, fallbackName: string, method = 'POST'): Promise<void> {
   const res = await authedFetch(endpoint, { method });
   if (!res.ok) throw await toApiError(res, 'Download failed');
   const blob = await res.blob();
-  const fileName = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || fallbackName;
+  const fileName = fileNameFrom(res.headers.get('Content-Disposition')) || fallbackName;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

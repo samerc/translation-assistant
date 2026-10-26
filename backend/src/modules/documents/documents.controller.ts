@@ -28,6 +28,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -169,21 +170,18 @@ export class DocumentsController {
       user.id,
       this.isAdmin(user),
     );
-    const { filePath, fileName } = await this.exportService.exportDocument(id);
+    const { filePath, downloadName } =
+      await this.exportService.exportDocument(id);
 
     if (!existsSync(filePath)) {
       throw new NotFoundException('Export file not found');
     }
 
-    const safeFileName = fileName.replace(/[^\w.-]/g, '_');
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${safeFileName}"`,
-    );
+    res.setHeader('Content-Disposition', contentDisposition(downloadName));
     res.setHeader('X-Content-Type-Options', 'nosniff');
     streamThenDelete(filePath, res);
   }

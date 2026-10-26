@@ -87,4 +87,10 @@ export class UpdateSettingsDto {
   @IsString()
   @MaxLength(255)
   appBaseUrl?: string;
+
+  // '' = leave unchanged (GET never returns it); null = remove the stored key.
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  googleTranslateApiKey?: string | null;
 }
