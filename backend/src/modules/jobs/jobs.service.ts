@@ -17,6 +17,7 @@ import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { Language } from '../settings/entities/language.entity.js';
 import { User } from '../users/entities/user.entity.js';
+import { InvoiceItem } from '../invoices/entities/invoice-item.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
@@ -330,13 +331,34 @@ export class JobsService {
 
   async remove(id: string): Promise<void> {
     const job = await this.findOne(id);
-    // Delete physical files before cascade-deleting DB records
-    // Skip linked files — the physical file belongs to the source job
-    for (const file of job.files || []) {
-      if (!file.linkedFromJobId && file.filePath && existsSync(file.filePath))
-        unlinkSync(file.filePath);
+    // invoice_items.job_id has no cascade — say why instead of a generic FK error.
+    const invoiced = await this.dataSource
+      .getRepository(InvoiceItem)
+      .count({ where: { jobId: id } });
+    if (invoiced > 0) {
+      throw new BadRequestException(
+        'This job is on an invoice. Remove it from the invoice before deleting the job.',
+      );
     }
+    const paths = (job.files || []).map((f) => f.filePath);
     await this.jobRepository.remove(job);
+    // Files go only after the DB delete succeeded, and only if no other job links them.
+    await this.unlinkUnreferencedFiles(paths);
+  }
+
+  /** Delete physical files that no JobFile row points at any more (linked
+   *  copies share the original's path, so a file lives while any row uses it). */
+  private async unlinkUnreferencedFiles(paths: string[]): Promise<void> {
+    const candidates = [...new Set(paths.filter(Boolean))];
+    if (candidates.length === 0) return;
+    const stillUsed = await this.jobFileRepository.find({
+      where: { filePath: In(candidates) },
+      select: { id: true, filePath: true },
+    });
+    const used = new Set(stillUsed.map((f) => f.filePath));
+    for (const p of candidates) {
+      if (!used.has(p) && existsSync(p)) unlinkSync(p);
+    }
   }
 
   // ── Line Items ──
@@ -569,9 +591,8 @@ export class JobsService {
       where: { id: fileId, jobId },
     });
     if (!jf) throw new NotFoundException('File not found');
-    // Only delete physical file if it's not linked from another job
-    if (!jf.linkedFromJobId && jf.filePath && existsSync(jf.filePath))
-      unlinkSync(jf.filePath);
+    const { filePath } = jf;
     await this.jobFileRepository.remove(jf);
+    await this.unlinkUnreferencedFiles([filePath]);
   }
 }

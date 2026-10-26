@@ -830,3 +830,103 @@ describe('UploadCleanupInterceptor', () => {
     expect(existsSync(path)).toBe(true);
   });
 });
+
+describe('Data integrity (Batch B)', () => {
+  it('saveFieldValues refuses values for another template and writes nothing', async () => {
+    const transaction = jest.fn();
+    const svc = new DocumentsService(
+      {} as any,
+      { manager: { transaction } } as any,
+      {} as any,
+    );
+    jest.spyOn(svc, 'findOne').mockResolvedValue({
+      template: { fields: [{ id: 'f-own' }] },
+    } as any);
+    await expect(
+      svc.saveFieldValues('doc-1', [
+        { templateFieldId: 'f-own', value: 'a' },
+        { templateFieldId: 'f-foreign', value: 'b' },
+      ] as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('saveFieldValues replaces values inside one transaction', async () => {
+    const manager = {
+      delete: jest.fn(),
+      save: jest.fn(),
+      create: (_e: unknown, o: unknown) => o,
+    };
+    const svc = new DocumentsService(
+      {} as any,
+      { manager: { transaction: (fn: any) => fn(manager) } } as any,
+      {} as any,
+    );
+    jest.spyOn(svc, 'findOne').mockResolvedValue({
+      template: { fields: [{ id: 'f-own' }] },
+    } as any);
+    await svc.saveFieldValues('doc-1', [
+      { templateFieldId: 'f-own', value: 'a' },
+    ]);
+    expect(manager.delete).toHaveBeenCalled();
+    expect(manager.save).toHaveBeenCalledWith([
+      expect.objectContaining({ documentId: 'doc-1', value: 'a' }),
+    ]);
+  });
+
+  it('invoice update writes scalars with update(), never save() (cascade re-inserts old items)', async () => {
+    const manager = {
+      delete: jest.fn(),
+      save: jest.fn(),
+      create: (_e: unknown, o: unknown) => o,
+      update: jest.fn(),
+    };
+    const invoiceRepo = { save: jest.fn() };
+    const svc = new InvoicesService(
+      invoiceRepo as any,
+      {} as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      { transaction: (fn: any) => fn(manager) } as any,
+    );
+    jest.spyOn(svc, 'findOne').mockResolvedValue({
+      id: 'inv-1',
+      status: 'draft',
+      clientId: 'C',
+      taxRate: 0,
+      items: [{ description: 'old', quantity: 1, unitPrice: 1 }],
+    } as any);
+    await svc.update(
+      'inv-1',
+      { items: [{ description: 'new', quantity: 2, unitPrice: 3 }] },
+      'user-1',
+      true,
+    );
+    expect(invoiceRepo.save).not.toHaveBeenCalled();
+    expect(manager.update).toHaveBeenCalledWith(
+      expect.anything(),
+      'inv-1',
+      expect.objectContaining({ subtotal: 6, total: 6 }),
+    );
+  });
+
+  it('invoice update refuses an empty item list', async () => {
+    const svc = new InvoicesService(
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    jest
+      .spyOn(svc, 'findOne')
+      .mockResolvedValue({ status: 'draft', items: [] } as any);
+    await expect(
+      svc.update('inv-1', { items: [] } as any, 'user-1', true),
+    ).rejects.toThrow(BadRequestException);
+  });
+});

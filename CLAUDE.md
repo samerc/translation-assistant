@@ -90,7 +90,7 @@ translation-assistant/
 - Filenames sanitized in Content-Disposition headers (`replace(/[^\w.\-]/g, '_')`)
 - JWT token for file viewing passed via query param (not stored in URLs)
 - Pagination limits enforced server-side (max 100)
-- Client deletion prevented when jobs are linked
+- Deletes blocked by a non-cascading FK are refused up front with a clear 400 (no generic FK error): client with jobs or invoices, job on an invoice, template used by documents, template field with document values
 - Job creation validates all referenced entities (client, language, template) exist
 - Job user assignment validates user exists before creating assignment
 - Invoice creation requires at least 1 line item
@@ -117,7 +117,8 @@ translation-assistant/
   - **Prod cutover runbook** (one-time — the prod DB predates the `sessions`/`password_reset_tokens` tables): (1) deploy once with `DB_SYNCHRONIZE=true` to create the two new tables, OR create them manually; (2) create a `migrations` table and insert the baseline row `(timestamp, name)` so `migrationsRun` treats the baseline as already applied; (3) set `DB_SYNCHRONIZE=false` (or `NODE_ENV=production`) for subsequent deploys. A fresh/empty DB instead just runs the baseline migration on first boot.
 - Connection pool: 20 max, 10s connect timeout, 30s idle timeout (configurable via env)
 - Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
-- Transactions: job creation and invoice creation wrapped in `dataSource.transaction()`
+- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction
+- Never `save()` an entity loaded with a `cascade: true` relation after replacing that relation's rows separately — TypeORM writes the stale loaded rows back. Use `update()` for the scalars (see `InvoicesService.update`)
 - No eager loading on entities — all relations loaded explicitly per query
 - List endpoints use `attachRelationCount()` for counts (not full relation joins)
 - N+1 eliminated: batch `IN()` queries, `Promise.all` for parallel validation
@@ -126,10 +127,11 @@ translation-assistant/
 - Overdue invoice check: single batch `UPDATE` (not N individual saves)
 
 ## File Management
-- Physical files deleted on entity removal (job files, passport copies, templates)
-- Linked files (`linkedFromJobId`) skipped during deletion (shared with source job)
+- Physical files deleted on entity removal (job files, passport copies, templates) — always **after** the DB delete succeeds, never before
+- Linked job files share the original's `filePath`; `unlinkUnreferencedFiles()` (jobs.service) deletes a file only when no `JobFile` row references it any more
 - Export files (PDF/DOCX) deleted from disk after streaming to client
-- Old word template files deleted when replaced with new upload
+- Old word template files deleted when replaced with new upload (after the new path is saved)
+- Document save-values only accepts field ids from the document's own template
 
 ## Deployment
 - Server: `translate.fancyshark.com` (144.91.89.20)

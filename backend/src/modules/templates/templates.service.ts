@@ -12,6 +12,8 @@ import { sniffType } from '../../common/utils/file-signature.js';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
+import { Document } from '../documents/entities/document.entity.js';
+import { DocumentFieldValue } from '../documents/entities/document-field-value.entity.js';
 import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto.js';
 import {
   CreateTemplateFieldDto,
@@ -93,11 +95,19 @@ export class TemplatesService {
 
   async remove(id: string): Promise<void> {
     const template = await this.findOne(id);
-    // Delete word file from disk if present
-    if (template.wordFilePath && existsSync(template.wordFilePath)) {
-      unlinkSync(template.wordFilePath);
+    // documents.template_id has no cascade — explain instead of a generic FK error.
+    const used = await this.templateRepository.manager.count(Document, {
+      where: { templateId: id },
+    });
+    if (used > 0) {
+      throw new BadRequestException(
+        `This template is used by ${used} document${used === 1 ? '' : 's'}. Deactivate it instead of deleting it.`,
+      );
     }
+    const { wordFilePath } = template;
     await this.templateRepository.remove(template);
+    // Delete the Word file only once the template row is gone.
+    if (wordFilePath && existsSync(wordFilePath)) unlinkSync(wordFilePath);
   }
 
   // ── Word Template ──
@@ -375,6 +385,14 @@ export class TemplatesService {
       where: { id: fieldId, templateId },
     });
     if (!field) throw new NotFoundException('Field not found');
+    const used = await this.fieldRepository.manager.count(DocumentFieldValue, {
+      where: { templateFieldId: fieldId },
+    });
+    if (used > 0) {
+      throw new BadRequestException(
+        'This field already has values in documents, so it cannot be deleted.',
+      );
+    }
     await this.fieldRepository.remove(field);
   }
 
