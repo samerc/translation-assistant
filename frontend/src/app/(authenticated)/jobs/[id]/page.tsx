@@ -185,8 +185,8 @@ export default function JobDetailPage() {
 
       {activeTab === 'details' && <DetailsTab job={job} locked={isLocked} onUpdate={loadJob} />}
       {activeTab === 'documents' && <DocumentsTab job={job} />}
-      {activeTab === 'source-files' && <FilesTab job={job} category="source" files={sourceFiles} onUpdate={loadJob} />}
-      {activeTab === 'translated-files' && <FilesTab job={job} category="translated" files={translatedFiles} onUpdate={loadJob} />}
+      {activeTab === 'source-files' && <FilesTab job={job} category="source" files={sourceFiles} locked={isLocked} onUpdate={loadJob} />}
+      {activeTab === 'translated-files' && <FilesTab job={job} category="translated" files={translatedFiles} locked={isLocked} onUpdate={loadJob} />}
     </div>
   );
 }
@@ -578,9 +578,19 @@ function DocumentsTab({ job }: { job: Job }) {
 
 // ── Files Tab ──
 
-function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'source' | 'translated'; files: JobFile[]; onUpdate: () => void }) {
+function FilesTab({ job, category, files, locked, onUpdate }: { job: Job; category: 'source' | 'translated'; files: JobFile[]; locked: boolean; onUpdate: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleDownload = async (file: JobFile) => {
+    setError('');
+    try {
+      await api.download(`/jobs/${job.id}/files/${file.id}/download`, file.fileName, 'GET');
+    } catch (err) {
+      logger.error('File download failed', err, 'jobs');
+      setError(err instanceof ApiError ? err.message : 'Failed to download file.');
+    }
+  };
 
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault();
@@ -626,6 +636,12 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
 
   return (
     <div className="max-w-2xl">
+      {locked ? (
+        <div className="bg-surface border border-border rounded-xl p-4 mb-4 text-sm text-text-secondary">
+          This job is locked — reopen it to add or remove files.
+          {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+        </div>
+      ) : (
       <form onSubmit={handleUpload} className="bg-surface border border-border rounded-xl p-5 mb-4">
         <div className="flex gap-4 items-end">
           <div className="flex-1">
@@ -639,6 +655,7 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
         </div>
         {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
       </form>
+      )}
 
       {files.length === 0 && (
         <div className="bg-surface border border-border rounded-xl p-8 text-center text-text-muted">No {category} files yet.</div>
@@ -653,7 +670,10 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
                 {f.linkedFromJobId && <span className="ml-2 text-primary">(linked from job #{f.linkedFromJobId})</span>}
               </div>
             </div>
-            <button onClick={() => handleDelete(f.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+            <div className="flex gap-4 flex-shrink-0">
+              <button onClick={() => handleDownload(f)} className="text-xs text-primary hover:underline">Download</button>
+              {!locked && <button onClick={() => handleDelete(f.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>}
+            </div>
           </div>
         ))}
       </div>

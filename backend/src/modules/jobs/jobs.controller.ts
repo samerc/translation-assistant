@@ -11,7 +11,11 @@ import {
   UseInterceptors,
   UploadedFile,
   ParseUUIDPipe,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { createReadStream } from 'fs';
+import { pipeline } from 'stream';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -209,6 +213,27 @@ export class JobsController {
       }
     }
     return this.jobsService.linkFile(id, dto.sourceJobId, dto.fileId);
+  }
+
+  // Download a source/translated file. JobAccessGuard (class-level) has already
+  // checked the caller's assignment; view-only assignees may download.
+  @Get(':id/files/:fileId/download')
+  @RequirePermissions('jobs:read')
+  async downloadFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+    @Res() res: Response,
+  ) {
+    const file = await this.jobsService.getFileForDownload(id, fileId);
+    const safeName = file.fileName.replace(/[^\w.-]/g, '_');
+    // Always an attachment with a generic type: uploaded content is never
+    // rendered inline by the browser.
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    pipeline(createReadStream(file.filePath), res, () => {
+      /* client aborted or file vanished mid-stream — nothing to clean up */
+    });
   }
 
   @Delete(':id/files/:fileId')

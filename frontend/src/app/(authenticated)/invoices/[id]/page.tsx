@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog } from '@/lib/confirm';
@@ -17,6 +17,14 @@ interface InvoiceItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+}
+
+interface Payment {
+  id: string;
+  amount: number;
+  paidAt: string;
+  method: string | null;
+  note: string | null;
 }
 
 interface Invoice {
@@ -35,6 +43,7 @@ interface Invoice {
   paidAt: string | null;
   paidAmount: number | null;
   items: InvoiceItem[];
+  payments: Payment[];
   createdAt: string;
 }
 
@@ -48,11 +57,18 @@ const STATUSES = [
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   draft: ['sent', 'cancelled'],
-  sent: ['paid', 'overdue', 'cancelled'],
-  overdue: ['paid', 'cancelled'],
+  // 'paid' is reached by recording payments, not picked here
+  sent: ['overdue', 'cancelled'],
+  overdue: ['cancelled'],
   paid: [],
   cancelled: ['draft'],
 };
+
+/** Still owed after payments so far. */
+function balanceDue(invoice: Invoice): number {
+  const owed = Number(invoice.total) - Number(invoice.paidAmount ?? 0);
+  return Math.max(0, Math.round(owed * 100) / 100);
+}
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +79,8 @@ export default function InvoiceDetailPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ issueDate: '', dueDate: '', taxRate: 0, currency: '', notes: '' });
@@ -84,12 +102,29 @@ export default function InvoiceDetailPage() {
 
   useEffect(() => { loadInvoice(); }, [id]);
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (newStatus === 'paid') {
-      setPaymentAmount(String(invoice?.total || 0));
-      setShowPaymentModal(true);
-      return;
+  const openPaymentModal = () => {
+    if (!invoice) return;
+    setPaymentAmount(balanceDue(invoice).toFixed(2));
+    setPaymentMethod('');
+    setPaymentNote('');
+    setShowPaymentModal(true);
+  };
+
+  const handleDeletePayment = async (payment: Payment) => {
+    if (!invoice) return;
+    const ok = await confirmDialog(`Delete the payment of ${invoice.currency} ${Number(payment.amount).toFixed(2)} from ${formatDate(payment.paidAt)}?`);
+    if (!ok) return;
+    try {
+      await api.delete(`/invoices/${id}/payments/${payment.id}`);
+      toast.success('Payment deleted');
+      loadInvoice();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete payment');
+      logger.error('Failed to delete payment', err, 'invoices');
     }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
     try {
       await api.patch(`/invoices/${id}/status`, { status: newStatus });
       toast.success(`Invoice marked ${newStatus}`);
@@ -112,6 +147,8 @@ export default function InvoiceDetailPage() {
       await api.post(`/invoices/${id}/record-payment`, {
         paidAmount: amount,
         paidAt: paymentDate,
+        method: paymentMethod.trim() || undefined,
+        note: paymentNote.trim() || undefined,
       });
       setShowPaymentModal(false);
       toast.success('Payment recorded');
@@ -215,7 +252,11 @@ export default function InvoiceDetailPage() {
 
   const isOverdue = invoice.status === 'sent' && new Date(invoice.dueDate) < new Date();
   const effectiveStatus = isOverdue ? 'overdue' : invoice.status;
-  const badge = STATUSES.find((s) => s.value === effectiveStatus) || { label: invoice.status, color: 'bg-bg text-text-secondary' };
+  const found = STATUSES.find((s) => s.value === effectiveStatus) || { label: invoice.status, color: 'bg-bg text-text-secondary' };
+  const balance = balanceDue(invoice);
+  const canPay = ['sent', 'overdue'].includes(invoice.status);
+  const partlyPaid = canPay && Number(invoice.paidAmount) > 0;
+  const badge = partlyPaid ? { ...found, label: `${found.label} · partially paid` } : found;
   const nextStatuses = VALID_TRANSITIONS[invoice.status] || [];
 
   return (
@@ -250,6 +291,12 @@ export default function InvoiceDetailPage() {
             <button onClick={startEditing}
               className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
               Edit
+            </button>
+          )}
+          {canPay && (
+            <button onClick={openPaymentModal}
+              className="px-3 py-1.5 bg-success text-white rounded-lg text-sm font-medium hover:opacity-90">
+              Record Payment
             </button>
           )}
           {nextStatuses.length > 0 && (
@@ -334,12 +381,36 @@ export default function InvoiceDetailPage() {
             {invoice.paidAmount !== null && (
               <>
                 <div className="flex justify-between text-success"><span>Paid</span><span>{invoice.currency} {Number(invoice.paidAmount).toFixed(2)}</span></div>
+                {balance > 0 && (
+                  <div className="flex justify-between font-semibold text-danger"><span>Balance due</span><span>{invoice.currency} {balance.toFixed(2)}</span></div>
+                )}
                 {invoice.paidAt && (
-                  <div className="flex justify-between"><span className="text-text-muted">Paid on</span><span className="text-text">{formatDate(invoice.paidAt)}</span></div>
+                  <div className="flex justify-between"><span className="text-text-muted">Paid in full on</span><span className="text-text">{formatDate(invoice.paidAt)}</span></div>
                 )}
               </>
             )}
           </div>
+          {invoice.payments?.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border">
+              <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2">Payments</h4>
+              <ul className="space-y-2 text-sm">
+                {invoice.payments.map((p) => (
+                  <li key={p.id} className="flex justify-between items-start gap-3">
+                    <div>
+                      <div className="text-text">{formatDate(p.paidAt)}{p.method && <span className="text-text-muted"> · {p.method}</span>}</div>
+                      {p.note && <div className="text-xs text-text-muted">{p.note}</div>}
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-text">{invoice.currency} {Number(p.amount).toFixed(2)}</span>
+                      {invoice.status !== 'cancelled' && (
+                        <button onClick={() => handleDeletePayment(p)} className="text-xs text-danger hover:underline">Delete</button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
@@ -391,11 +462,12 @@ export default function InvoiceDetailPage() {
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface border border-border rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-text mb-4">Record Payment</h3>
+            <h3 className="text-lg font-semibold text-text mb-1">Record Payment</h3>
+            <p className="text-sm text-text-muted mb-4">Balance due: {invoice.currency} {balance.toFixed(2)} — record the full amount or part of it.</p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
-                <input type="number" step="0.01" min="0" value={paymentAmount}
+                <input type="number" step="0.01" min="0.01" max={balance} value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
                   className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
@@ -403,6 +475,18 @@ export default function InvoiceDetailPage() {
                 <label className="block text-sm font-medium text-text-secondary mb-1">Payment Date</label>
                 <input type="date" value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Method <span className="text-text-muted font-normal">(optional)</span></label>
+                <input type="text" maxLength={50} value={paymentMethod} placeholder="Bank transfer, cash, card…"
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Note <span className="text-text-muted font-normal">(optional)</span></label>
+                <input type="text" maxLength={255} value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
                   className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
               </div>
             </div>

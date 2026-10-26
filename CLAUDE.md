@@ -14,7 +14,7 @@ Internal multi-user web application for freelance translators. Two core modules:
 - **Auth:** JWT + refresh tokens, RBAC
 - **File uploads:** Local disk, validated by magic bytes (no image compression)
 - **Word export:** `docx` npm library
-- **PDF export:** `pdfkit` library (invoice export)
+- **PDF export:** `pdfkit` library (invoice export). Text goes through `PdfText` (`invoices/pdf-text.ts`): embedded Noto Sans + Noto Sans Arabic (npm `@expo-google-fonts/*`, OFL), own line wrapping, and Unicode bidi via `bidi-js` — each line is drawn as direction runs on one alphabetic baseline (fontkit shapes Arabic but does no bidi, and pdfkit wrapping drops spaces between Arabic words). Never use `doc.text` / Helvetica directly for user data. Rows are measured, pages break with a repeated table header, totals stay together, page numbers when >1 page. Not covered: CJK, Hebrew, Thai, Devanagari; `→`-style symbols missing from Noto Sans
 - **Translation helper:** Google Cloud Translation API
 - **Charts:** `recharts` (reporting page)
 - **Scheduling:** `@nestjs/schedule` (notification cron jobs)
@@ -192,6 +192,8 @@ Light + dark mode supported (separate toggle from palette).
 - **Template** — type (designer/word/simple), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive
   - **Designer type**: layout built with block-based designer, stored in layoutJson
   - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
+    - Repeatable groups: `{#group_key}` … `{/group_key}` repeats the enclosed paragraphs/table row once per entry (no nesting). One scanner (`templates/word-placeholders.ts`) validates upload + preview; "Create Fields for All" puts fields found inside a loop into that group; preview warns when a loop field has a different `groupKey`. A group field used outside any loop exports its first entry
+  - **Designer type** export: `field`/`field-row` blocks showing group fields repeat once per entry (`collectFieldValues()` in export.service)
   - **Simple type**: pricing only, no fields or layout (used for freeform jobs)
 - **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey
   - Fields with same `groupKey` form a repeatable set (e.g., family extract rows)
@@ -214,8 +216,11 @@ Light + dark mode supported (separate toggle from palette).
 ### Invoices
 - **Invoice** — invoiceNumber (auto: INV-0001), clientId, status (draft/sent/paid/overdue/cancelled), issueDate, dueDate, subtotal, taxRate, taxAmount, total, notes, currency, paidAt, paidAmount, createdByUserId
   - Status flow: draft → sent → paid (or overdue → paid). Any → cancelled. Cancelled → draft.
-  - Sending invoice transitions linked jobs to 'invoiced'. Payment transitions to 'paid'.
+  - **'paid' is never set by hand** — only by recording payments. Partial payments keep the invoice sent/overdue (UI: "partially paid") until the balance is 0; then paid, paidAt = last payment date. Deleting a payment reopens a paid invoice (sent, or overdue past due date). Can't cancel an invoice with payments.
+  - Sending invoice transitions linked jobs to 'invoiced'. Paid in full → jobs 'paid'; reopened → back to 'invoiced'.
+  - paidAmount = sum of payments (null when none); paidAt = date fully paid (null otherwise)
 - **InvoiceItem** — invoiceId, jobId (optional link), description, quantity, unitPrice, lineTotal, sortOrder
+- **InvoicePayment** — invoiceId (cascade), amount, paidAt (date), method, note, createdByUserId. Recorded in a transaction with a row lock on the invoice (no overpayment races); amounts above the balance are refused
 
 ### Notifications
 - **Notification** — userId, type (job_status_change/deadline_approaching/invoice_overdue/job_assigned), title, message, link, isRead
@@ -276,6 +281,7 @@ Light + dark mode supported (separate toggle from palette).
 - `POST/DELETE /:id/users/:userId` — Assign/remove users
 - `POST/PATCH/DELETE /:id/line-items/:itemId` — Job line items
 - `POST /:id/files` — Upload source/translated files (with FileValidationPipe)
+- `GET /:id/files/:fileId/download` — Download a job file (attachment, `application/octet-stream`; view-only assignees allowed)
 - `POST /:id/files/link` — Link file from another job
 - `DELETE /:id/files/:fileId` — Remove file
 
@@ -297,7 +303,8 @@ Light + dark mode supported (separate toggle from palette).
 - Full CRUD with search, status/client/date filters, sort, pagination
 - `GET /by-job/:jobId` — List invoices linked to a job
 - `PATCH /:id/status` — Update invoice status (validated transitions)
-- `POST /:id/record-payment` — Record payment (sets paidAmount, paidAt, transitions to paid)
+- `POST /:id/record-payment` — Record a (partial) payment: `paidAmount`, optional `paidAt`, `method`, `note`; ≤ balance due
+- `DELETE /:id/payments/:paymentId` — Delete a payment (recomputes paidAmount/status)
 - `POST /:id/export-pdf` — Export invoice as PDF
 - `POST /:id/export-word` — Export invoice as Word (.docx)
 
@@ -312,7 +319,7 @@ Light + dark mode supported (separate toggle from palette).
 
 ### Reports (`/api/reports`)
 - `GET /dashboard-stats` — Active jobs, monthly revenue, pending invoices, due this week
-- `GET /revenue?period=monthly&from=2026-01&to=2026-05` — Revenue over time
+- `GET /revenue?period=monthly&from=2026-01&to=2026-05` — Revenue over time (sum of payments by payment date — partial payments count when received)
 - `GET /by-client` — Revenue per client
 - `GET /job-status` — Jobs by status breakdown
 
@@ -334,7 +341,7 @@ Light + dark mode supported (separate toggle from palette).
 - `/documents/:id` — Document fill page (template fields, GT popup, save/complete/export)
 - `/invoices` — Invoice list with search, status/client filters, sort, pagination
 - `/invoices/new` — Create invoice form (client, dates, tax rate, line items with job linking). Supports `?jobId=` query param for pre-fill from job detail page
-- `/invoices/:id` — Invoice detail (status workflow, edit mode for drafts, payment recording modal, line items with job links, PDF/Word export buttons)
+- `/invoices/:id` — Invoice detail (status workflow, edit mode for drafts, Record Payment modal for partial/full payments, payments list with delete, balance due, line items with job links, PDF/Word export buttons)
 - `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
 - `/notifications` — Full notifications list with read/unread filter
 - `/reports` — Reports page (Revenue line chart, By Client bar chart, Job Status donut chart via recharts)

@@ -7,6 +7,25 @@ place and no-ops safely until these are done.
 
 ---
 
+## 0. Next deploy — one-off data steps
+
+Prod runs `synchronize`, which applies schema changes but never data migrations.
+Run these against the prod DB **after** deploying the code (back up first; each
+is idempotent):
+
+- **Translator `settings:read`** — the SQL in
+  `backend/src/migrations/1793100000000-TranslatorSettingsRead.ts` (`up()`). Without
+  it translators can't load languages/labels and can't create jobs. A backup of
+  `roles`/`role_permissions` taken before this change is at
+  `C:\apps\translation-assistant\backup-role-permissions-2026-10-26.sql`.
+- **Invoice payments backfill** — after the deploy has created `invoice_payments`
+  (synchronize does that on boot), run `INVOICE_PAYMENTS_BACKFILL` from
+  `backend/src/migrations/1793015124357-InvoicePayments.ts`. It turns each
+  already-paid invoice into one payment row; without it, revenue reports (now summed
+  from payments) drop every invoice paid before this change.
+
+---
+
 ## 1. Email (SMTP) — makes password reset & invites actually send
 
 The code is ready (`MailService`, Settings → Email tab, `POST /api/mail/test`). In

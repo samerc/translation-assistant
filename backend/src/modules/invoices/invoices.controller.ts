@@ -153,7 +153,23 @@ export class InvoicesController {
       this.isAdmin(user),
       'edit',
     );
-    return this.invoicesService.recordPayment(id, dto);
+    return this.invoicesService.recordPayment(id, dto, user.id);
+  }
+
+  @Delete(':id/payments/:paymentId')
+  @RequirePermissions('invoices:update')
+  async removePayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @CurrentUser() user: User,
+  ) {
+    await this.invoicesService.verifyInvoiceAccess(
+      id,
+      user.id,
+      this.isAdmin(user),
+      'edit',
+    );
+    return this.invoicesService.removePayment(id, paymentId);
   }
 
   @Post(':id/export-pdf')

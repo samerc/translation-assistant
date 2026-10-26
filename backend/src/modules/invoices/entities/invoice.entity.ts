@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Client } from '../../clients/entities/client.entity.js';
 import { InvoiceItem } from './invoice-item.entity.js';
+import { InvoicePayment } from './invoice-payment.entity.js';
 
 @Entity('invoices')
 export class Invoice {
@@ -57,17 +58,22 @@ export class Invoice {
   @Column({ length: 10, default: 'USD' })
   currency: string;
 
+  /** When the invoice became fully paid (null while a balance remains). */
   @Column({ type: 'datetime', nullable: true })
-  paidAt: Date;
+  paidAt: Date | null;
 
+  /** Sum of payments received (null when none) — see InvoicePayment. */
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  paidAmount: number;
+  paidAmount: number | null;
 
   @Column({ name: 'created_by_user_id', nullable: true })
   createdByUserId: string;
 
   @OneToMany(() => InvoiceItem, (item) => item.invoice, { cascade: true })
   items: InvoiceItem[];
+
+  @OneToMany(() => InvoicePayment, (p) => p.invoice)
+  payments: InvoicePayment[];
 
   @CreateDateColumn()
   createdAt: Date;

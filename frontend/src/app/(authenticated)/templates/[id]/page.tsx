@@ -987,6 +987,8 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
         <p className="text-xs text-text-muted mt-3">
           Use placeholders like <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{field_name}'}</code> in your Word document.
           Use only letters, numbers, and underscores. No spaces.
+          For a repeatable group, wrap its fields in <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{#group_key}'}</code> … <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{/group_key}'}</code> — the
+          enclosed paragraphs or table row repeat once per entry.
         </p>
       </form>
 
