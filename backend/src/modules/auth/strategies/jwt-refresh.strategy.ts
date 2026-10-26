@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { JwtPayload } from './jwt.strategy.js';
+import { getRefreshCookie } from '../../../common/types/authenticated-request.js';
 
 /**
  * Extracts the refresh token exclusively from the httpOnly 'refresh_token' cookie.
@@ -11,7 +12,7 @@ import { JwtPayload } from './jwt.strategy.js';
  * leaked into a Bearer-bearing context must not be replayable.)
  */
 function extractRefreshToken(req: Request): string | null {
-  return req.cookies?.refresh_token || null;
+  return getRefreshCookie(req) || null;
 }
 
 @Injectable()
@@ -32,7 +33,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
     });
   }
 
-  async validate(req: Request, payload: JwtPayload) {
+  validate(req: Request, payload: JwtPayload) {
     // Only genuine refresh tokens may be used here (not access tokens).
     if (payload.type !== 'refresh') {
       throw new UnauthorizedException('Invalid refresh token');

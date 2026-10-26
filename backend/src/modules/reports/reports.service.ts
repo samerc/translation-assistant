@@ -52,7 +52,9 @@ export class ReportsService {
     if (!isAdmin) {
       revenueQb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
-    const revenueResult = await revenueQb.getRawOne();
+    const revenueResult = await revenueQb.getRawOne<{
+      revenue: string | number | null;
+    }>();
     const monthlyRevenue = Number(revenueResult?.revenue || 0);
 
     // Pending invoices
@@ -91,7 +93,7 @@ export class ReportsService {
       .createQueryBuilder('inv')
       .select('inv.currency', 'currency')
       .limit(1)
-      .getRawOne();
+      .getRawOne<{ currency: string | null }>();
 
     return {
       activeJobs,
@@ -132,7 +134,10 @@ export class ReportsService {
         .orderBy('period', 'ASC');
     }
 
-    const results = await qb.getRawMany();
+    const results = await qb.getRawMany<{
+      period: string;
+      revenue: string | null;
+    }>();
     return results.map((r) => ({
       period: r.period,
       revenue: Number(r.revenue || 0),
@@ -159,7 +164,12 @@ export class ReportsService {
       qb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
 
-    const results = await qb.getRawMany();
+    const results = await qb.getRawMany<{
+      clientId: string;
+      clientName: string;
+      invoiceCount: string | number;
+      totalRevenue: string | number;
+    }>();
     return results.map((r) => ({
       clientId: r.clientId,
       clientName: r.clientName,
@@ -181,7 +191,10 @@ export class ReportsService {
       });
     }
 
-    const results = await qb.getRawMany();
+    const results = await qb.getRawMany<{
+      status: string;
+      count: string | number;
+    }>();
     return results.map((r) => ({
       status: r.status,
       count: Number(r.count),

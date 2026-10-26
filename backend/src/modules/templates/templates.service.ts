@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'fs';
+import { readFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
@@ -206,7 +206,7 @@ export class TemplatesService {
       const inner = match[1];
       if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(inner)) continue; // valid, skip
 
-      let reason = '';
+      let reason: string;
       if (!inner.trim()) {
         reason = 'Empty placeholder';
       } else if (/\s/.test(inner)) {
@@ -290,8 +290,8 @@ export class TemplatesService {
         .createQueryBuilder('f')
         .where('f.template_id = :templateId', { templateId })
         .select('MAX(f.sortOrder)', 'max')
-        .getRawOne();
-      dto.sortOrder = (maxSort?.max ?? -1) + 1;
+        .getRawOne<{ max: string | number | null }>();
+      dto.sortOrder = Number(maxSort?.max ?? -1) + 1;
     }
 
     const field = this.fieldRepository.create({

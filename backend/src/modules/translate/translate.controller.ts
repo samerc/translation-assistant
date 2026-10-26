@@ -94,7 +94,9 @@ export class TranslateController {
 
       clearTimeout(timeoutId);
 
-      const data = await res.json();
+      const data = (await res.json()) as {
+        data?: { translations?: { translatedText?: string }[] };
+      };
       const translatedText =
         data?.data?.translations?.[0]?.translatedText || body.text;
       return { translatedText };

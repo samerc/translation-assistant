@@ -13,8 +13,9 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { createReadStream, existsSync, unlinkSync } from 'fs';
+import { existsSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
+import { streamThenDelete } from '../../common/utils/stream-then-delete.js';
 import { DocumentsService } from './documents.service.js';
 import { ExportService } from './export.service.js';
 import {
@@ -170,7 +171,7 @@ export class DocumentsController {
       throw new NotFoundException('Export file not found');
     }
 
-    const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
+    const safeFileName = fileName.replace(/[^\w.-]/g, '_');
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -180,13 +181,7 @@ export class DocumentsController {
       `attachment; filename="${safeFileName}"`,
     );
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    const stream = createReadStream(filePath);
-    stream.pipe(res);
-    stream.on('end', () => {
-      try {
-        unlinkSync(filePath);
-      } catch {}
-    });
+    streamThenDelete(filePath, res);
   }
 
   @Delete(':id')

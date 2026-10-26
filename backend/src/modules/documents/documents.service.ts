@@ -115,7 +115,7 @@ export class DocumentsService {
     documentId: string,
     values: FieldValueDto[],
   ): Promise<Document> {
-    const doc = await this.findOne(documentId);
+    await this.findOne(documentId); // 404 if the document does not exist
 
     // Delete existing values and replace with new ones
     await this.fieldValueRepository.delete({ documentId });

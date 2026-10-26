@@ -86,7 +86,7 @@ export class UsersService {
   async setLogo(id: string, logo: string | null): Promise<Partial<User>> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
-    await this.userRepository.update(id, { logo: logo as any });
+    await this.userRepository.update(id, { logo });
     return this.findOne(id);
   }
 

@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import type { Request } from 'express';
 
 /**
  * Rejects requests where a hidden honeypot field is filled.
@@ -19,7 +20,7 @@ export class HoneypotGuard implements CanActivate {
   private readonly logger = new Logger('Honeypot');
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<Request>();
     const method = request.method;
 
     // Only check write operations
@@ -32,17 +33,17 @@ export class HoneypotGuard implements CanActivate {
       return true;
     }
 
-    const body = request.body;
+    const body = request.body as Record<string, unknown> | undefined;
     if (!body || typeof body !== 'object') {
       return true;
     }
 
     // Check for filled honeypot field
     if (body._hp !== undefined && body._hp !== '' && body._hp !== null) {
-      const ip = request.ip || request.connection?.remoteAddress || 'unknown';
+      const ip = request.ip || request.socket?.remoteAddress || 'unknown';
       const url = request.originalUrl || request.url;
       this.logger.warn(
-        `[BOT_DETECTED] ip=${ip} url=${url} honeypot_value="${String(body._hp).slice(0, 100)}"`,
+        `[BOT_DETECTED] ip=${ip} url=${url} honeypot_value="${(typeof body._hp === 'string' ? body._hp : JSON.stringify(body._hp)).slice(0, 100)}"`,
       );
       throw new BadRequestException('Request rejected');
     }

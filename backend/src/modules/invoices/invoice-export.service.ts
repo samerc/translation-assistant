@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { writeFileSync, mkdirSync, existsSync, createReadStream } from 'fs';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import {
@@ -17,7 +17,6 @@ import {
   BorderStyle,
   VerticalAlign,
   ImageRun,
-  HeadingLevel,
 } from 'docx';
 import PDFDocument from 'pdfkit';
 import { Invoice } from './entities/invoice.entity.js';

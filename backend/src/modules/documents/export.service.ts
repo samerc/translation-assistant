@@ -16,6 +16,7 @@ import {
   AlignmentType,
   BorderStyle,
   HeadingLevel,
+  TabStopType,
 } from 'docx';
 import { Document } from './entities/document.entity.js';
 
@@ -278,7 +279,7 @@ export class ExportService {
                     isRtl,
                   ),
             bidirectional: isRtl,
-            tabStops: [{ type: 'right' as any, position: 9000 }],
+            tabStops: [{ type: TabStopType.RIGHT, position: 9000 }],
             children: runs,
           }),
         );

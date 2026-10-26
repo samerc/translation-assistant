@@ -425,7 +425,7 @@ export class ClientsController {
     const safeMimeType = allowedMimeTypes.includes(pc.mimeType)
       ? pc.mimeType
       : 'application/octet-stream';
-    const safeName = basename(pc.originalName).replace(/[^\w.\-]/g, '_');
+    const safeName = basename(pc.originalName).replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', safeMimeType);
     res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');

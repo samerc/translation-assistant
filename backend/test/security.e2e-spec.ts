@@ -50,7 +50,7 @@ const jwtService = new JwtService({ secret: TEST_SECRET });
 function matches(entity: any, where: any): boolean {
   return Object.entries(where).every(([k, cond]) => {
     if (cond instanceof FindOperator) {
-      if (cond.type === 'moreThan') return entity[k] > (cond.value as any);
+      if (cond.type === 'moreThan') return entity[k] > cond.value;
       return false;
     }
     return entity[k] === cond;
@@ -287,22 +287,22 @@ describe('Token-type enforcement (passport strategies)', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('JwtRefreshStrategy refuses an access-type token', async () => {
+  it('JwtRefreshStrategy refuses an access-type token', () => {
     const req = {
       cookies: { refresh_token: 'x' },
       get: () => undefined,
     } as any;
-    await expect(
+    expect(() =>
       refreshStrategy.validate(req, { sub: 'user-1', type: 'access' }),
-    ).rejects.toThrow(UnauthorizedException);
+    ).toThrow(UnauthorizedException);
   });
 
-  it('JwtRefreshStrategy accepts a refresh token and surfaces it from the cookie', async () => {
+  it('JwtRefreshStrategy accepts a refresh token and surfaces it from the cookie', () => {
     const req = {
       cookies: { refresh_token: 'cookie-token' },
       get: () => undefined,
     } as any;
-    const result = await refreshStrategy.validate(req, {
+    const result = refreshStrategy.validate(req, {
       sub: 'user-1',
       type: 'refresh',
     });

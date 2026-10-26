@@ -6,7 +6,6 @@ import {
   IsIn,
   IsArray,
   IsUUID,
-  IsObject,
   ValidateNested,
   MinLength,
   MaxLength,

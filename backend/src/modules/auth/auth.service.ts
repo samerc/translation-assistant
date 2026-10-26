@@ -315,9 +315,9 @@ export class AuthService {
     );
     // Email the invite link (best-effort — the token is also returned so an admin can
     // copy the link manually if SMTP isn't configured yet).
-    this.mailService.sendInvite(email, token).catch((err) => {
+    this.mailService.sendInvite(email, token).catch((err: unknown) => {
       this.logger.error(
-        `[INVITE_EMAIL_FAILED] email=${email}: ${err?.message}`,
+        `[INVITE_EMAIL_FAILED] email=${email}: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
     return { token, expiresAt };
@@ -325,7 +325,9 @@ export class AuthService {
 
   // ── Password Reset ──
 
-  async requestPasswordReset(email: string): Promise<{ message: string }> {
+  async requestPasswordReset(
+    email: string,
+  ): Promise<{ message: string; token?: string; expiresAt?: Date }> {
     const message =
       'If an account with that email exists, a reset link has been generated.';
     const user = await this.userRepository.findOne({ where: { email } });
@@ -345,16 +347,18 @@ export class AuthService {
     this.logger.log(`[PASSWORD_RESET_REQUESTED] userId=${user.id}`);
 
     // Deliver the reset link by email (best-effort — never block/leak on SMTP failure).
-    this.mailService.sendPasswordReset(user.email, token).catch((err) => {
-      this.logger.error(
-        `[PASSWORD_RESET_EMAIL_FAILED] userId=${user.id}: ${err?.message}`,
-      );
-    });
+    this.mailService
+      .sendPasswordReset(user.email, token)
+      .catch((err: unknown) => {
+        this.logger.error(
+          `[PASSWORD_RESET_EMAIL_FAILED] userId=${user.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
 
     // SECURITY: never return the raw reset token in the response outside development.
     // In production the token is delivered only via email (above).
     if (process.env.NODE_ENV !== 'production') {
-      return { message, token, expiresAt } as any;
+      return { message, token, expiresAt };
     }
     return { message };
   }
@@ -425,7 +429,9 @@ export class AuthService {
 
   verifyFileToken(token: string): string {
     try {
-      const payload = this.jwtService.verify(token);
+      const payload = this.jwtService.verify<{ sub: string; purpose?: string }>(
+        token,
+      );
       if (payload.purpose !== 'file-access')
         throw new Error('Invalid token purpose');
       return payload.sub;

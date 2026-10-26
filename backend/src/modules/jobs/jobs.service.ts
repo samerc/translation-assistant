@@ -73,8 +73,8 @@ export class JobsService {
     const result = await this.jobRepository
       .createQueryBuilder('job')
       .select('MAX(CAST(SUBSTRING(job.jobNumber, 5) AS UNSIGNED))', 'maxNum')
-      .getRawOne();
-    const nextNum = parseInt(result?.maxNum || '0', 10) + 1;
+      .getRawOne<{ maxNum: string | number | null }>();
+    const nextNum = Number(result?.maxNum ?? 0) + 1;
     return `JOB-${String(nextNum).padStart(4, '0')}`;
   }
 
@@ -359,7 +359,7 @@ export class JobsService {
       .createQueryBuilder('li')
       .where('li.job_id = :jobId', { jobId })
       .select('MAX(li.sortOrder)', 'max')
-      .getRawOne();
+      .getRawOne<{ max: string | number | null }>();
 
     const lineTotal = this.calculateLineTotal(item);
     const li = await this.lineItemRepository.save(
@@ -367,7 +367,7 @@ export class JobsService {
         jobId,
         ...item,
         lineTotal,
-        sortOrder: (maxSort?.max ?? -1) + 1,
+        sortOrder: Number(maxSort?.max ?? -1) + 1,
       }),
     );
 
@@ -418,7 +418,7 @@ export class JobsService {
       .createQueryBuilder('li')
       .select('COALESCE(SUM(li.lineTotal), 0)', 'total')
       .where('li.job_id = :jobId', { jobId })
-      .getRawOne();
+      .getRawOne<{ total: string | number | null }>();
     await this.jobRepository.update(jobId, {
       calculatedTotal: Number(result?.total || 0),
     });

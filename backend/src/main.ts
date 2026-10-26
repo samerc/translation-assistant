@@ -62,4 +62,5 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`Backend running on http://localhost:${port}/api`);
 }
-bootstrap();
+// Unhandled rejection still crashes the process (intended: fail fast on boot errors).
+void bootstrap();

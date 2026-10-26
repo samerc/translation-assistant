@@ -14,8 +14,9 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { createReadStream, existsSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
+import { streamThenDelete } from '../../common/utils/stream-then-delete.js';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceExportService } from './invoice-export.service.js';
 import { MailService } from '../mail/mail.service.js';
@@ -166,19 +167,13 @@ export class InvoicesController {
     const { filePath, fileName } = await this.exportService.exportPdf(id);
     if (!existsSync(filePath))
       throw new NotFoundException('Export file not found');
-    const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
+    const safeFileName = fileName.replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${safeFileName}"`,
     );
-    const stream = createReadStream(filePath);
-    stream.pipe(res);
-    stream.on('end', () => {
-      try {
-        unlinkSync(filePath);
-      } catch {}
-    });
+    streamThenDelete(filePath, res);
   }
 
   @Post(':id/export-word')
@@ -196,7 +191,7 @@ export class InvoicesController {
     const { filePath, fileName } = await this.exportService.exportWord(id);
     if (!existsSync(filePath))
       throw new NotFoundException('Export file not found');
-    const safeFileName = fileName.replace(/[^\w.\-]/g, '_');
+    const safeFileName = fileName.replace(/[^\w.-]/g, '_');
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -205,13 +200,7 @@ export class InvoicesController {
       'Content-Disposition',
       `attachment; filename="${safeFileName}"`,
     );
-    const stream = createReadStream(filePath);
-    stream.pipe(res);
-    stream.on('end', () => {
-      try {
-        unlinkSync(filePath);
-      } catch {}
-    });
+    streamThenDelete(filePath, res);
   }
 
   @Post(':id/email')
@@ -244,7 +233,9 @@ export class InvoicesController {
     } finally {
       try {
         unlinkSync(filePath);
-      } catch {}
+      } catch {
+        // temp file already removed
+      }
     }
     return { sent: true, to: recipient };
   }

@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
 // NOTE: This guard is a low-signal *tripwire*, NOT the app's SQLi/XSS defense.
 // SQL injection is prevented by TypeORM parameterized queries; XSS by React output
@@ -35,7 +36,9 @@ export class AbuseDetectionGuard implements CanActivate {
   private readonly logger = new Logger('AbuseDetection');
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<MaybeAuthenticatedRequest>();
     const method = request.method;
 
     // Only inspect write operations
@@ -43,7 +46,7 @@ export class AbuseDetectionGuard implements CanActivate {
       return true;
     }
 
-    const body = request.body;
+    const body: unknown = request.body;
     if (!body || typeof body !== 'object') {
       return true;
     }
@@ -53,9 +56,9 @@ export class AbuseDetectionGuard implements CanActivate {
   }
 
   private inspectObject(
-    obj: any,
+    obj: unknown,
     path: string,
-    request: any,
+    request: MaybeAuthenticatedRequest,
     depth: number,
     budget: { count: number },
   ): void {
@@ -78,11 +81,12 @@ export class AbuseDetectionGuard implements CanActivate {
     }
 
     if (typeof obj === 'object') {
-      const keys = Object.keys(obj).slice(0, MAX_KEYS);
+      const record = obj as Record<string, unknown>;
+      const keys = Object.keys(record).slice(0, MAX_KEYS);
       for (const key of keys) {
         if (budget.count >= MAX_NODES) break;
         this.inspectObject(
-          obj[key],
+          record[key],
           path ? `${path}.${key}` : key,
           request,
           depth + 1,
@@ -92,7 +96,11 @@ export class AbuseDetectionGuard implements CanActivate {
     }
   }
 
-  private inspectString(value: string, path: string, request: any): void {
+  private inspectString(
+    value: string,
+    path: string,
+    request: MaybeAuthenticatedRequest,
+  ): void {
     // Skip known safe fields that may legitimately contain long/complex content
     const safeFields = [
       'password',
@@ -134,9 +142,9 @@ export class AbuseDetectionGuard implements CanActivate {
     type: string,
     field: string,
     sample: string,
-    request: any,
+    request: MaybeAuthenticatedRequest,
   ): void {
-    const ip = request.ip || request.connection?.remoteAddress || 'unknown';
+    const ip = request.ip || request.socket?.remoteAddress || 'unknown';
     const userId = request.user?.id || 'anonymous';
     const url = request.originalUrl || request.url;
     this.logger.warn(

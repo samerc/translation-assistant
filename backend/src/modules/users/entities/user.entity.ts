@@ -50,7 +50,7 @@ export class User {
   // Logo stored inline as a `data:image/...;base64,` URL (PNG/JPEG only) so it
   // embeds straight into PDF/Word exports and the UI with no file-serving layer.
   @Column({ type: 'mediumtext', nullable: true })
-  logo: string;
+  logo: string | null;
 
   @ManyToOne(() => Role, (role) => role.users, { eager: true })
   @JoinColumn({ name: 'role_id' })

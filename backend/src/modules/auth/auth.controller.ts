@@ -28,6 +28,11 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
+import {
+  getRefreshCookie,
+  type AuthenticatedRequest,
+  type RefreshRequest,
+} from '../../common/types/authenticated-request.js';
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -100,7 +105,10 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt-refresh'))
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
-  async refresh(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+  async refresh(
+    @Req() req: RefreshRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const tokens = await this.authService.refreshTokens(
       req.user.sub,
       req.user.refreshToken,
@@ -114,8 +122,11 @@ export class AuthController {
   @Post('logout')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
-  async logout(@Req() req: any, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies?.refresh_token;
+  async logout(
+    @Req() req: AuthenticatedRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = getRefreshCookie(req);
     await this.authService.logout(req.user.id, refreshToken);
     this.clearRefreshCookie(res);
     return { message: 'Logged out' };
@@ -125,7 +136,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
   async logoutEverywhere(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.authService.logoutEverywhere(req.user.id);
@@ -135,14 +146,14 @@ export class AuthController {
 
   @Get('sessions')
   @UseGuards(AuthGuard('jwt'))
-  async getActiveSessions(@Req() req: any) {
+  async getActiveSessions(@Req() req: AuthenticatedRequest) {
     return this.authService.getActiveSessions(req.user.id);
   }
 
   @Delete('sessions/:sessionId')
   @UseGuards(AuthGuard('jwt'))
   async revokeSession(
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
   ) {
     await this.authService.revokeSession(req.user.id, sessionId);
@@ -151,7 +162,7 @@ export class AuthController {
 
   @Get('profile')
   @UseGuards(AuthGuard('jwt'))
-  async getProfile(@Req() req: any) {
+  async getProfile(@Req() req: AuthenticatedRequest) {
     return this.authService.getProfile(req.user.id);
   }
 
@@ -167,7 +178,7 @@ export class AuthController {
   @Post('file-token')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
-  async getFileToken(@Req() req: any) {
+  getFileToken(@Req() req: AuthenticatedRequest) {
     return { token: this.authService.generateFileToken(req.user.id) };
   }
 

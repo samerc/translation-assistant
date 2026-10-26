@@ -95,8 +95,8 @@ export class InvoicesService {
         'maxNum',
       )
       .setParameter('prefixLen', prefix.length)
-      .getRawOne();
-    const nextNum = parseInt(result?.maxNum || '0', 10) + 1;
+      .getRawOne<{ maxNum: string | number | null }>();
+    const nextNum = Number(result?.maxNum ?? 0) + 1;
     return `${prefix}${String(nextNum).padStart(4, '0')}`;
   }
 

@@ -15,7 +15,9 @@
     "outDir": "./dist",
     "rootDir": "./",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
     "incremental": true,
     "skipLibCheck": true,
@@ -24,6 +26,10 @@
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "strictBindCallApply": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "types": [
+      "node",
+      "jest"
+    ]
   }
 }
