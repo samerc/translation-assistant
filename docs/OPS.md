@@ -96,6 +96,12 @@ it up via synchronize, so it also needs stamping in step 2.
    synchronize, so migrations must NOT try to recreate tables). Create the
    `migrations` table and insert one row per migration (baseline + the top-up) with
    their `(timestamp, name)` so `migrationsRun` treats them as applied.
+   Stamping is right for **schema** migrations only. Data migrations
+   (`*-TranslatorSettingsRead.ts`) are idempotent: stamp one only after
+   checking its effect is already on prod, otherwise let it run. Prod still runs
+   synchronize, so the Translator `settings:read` grant is applied by hand with the
+   migration's SQL (pre-change backup of `roles`/`role_permissions`:
+   `C:\apps\translation-assistant\backup-role-permissions-2026-10-26.sql`).
 
 3. **Flip prod to migrations:** set `DB_SYNCHRONIZE:'false'` (or `NODE_ENV=production`
    without the override) in the ecosystem, then `pm2 delete` + `pm2 start` `ta-backend`.

@@ -9,6 +9,7 @@ import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
+import { toast } from '@/lib/toast';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -34,13 +35,13 @@ const STATUSES = [
   { value: 'lost', label: 'Lost' }, { value: 'cancelled', label: 'Cancelled' },
 ];
 
-// Valid next statuses from each state
+// Valid next statuses from each state — mirrors JobsService.STATUS_TRANSITIONS
 const VALID_TRANSITIONS: Record<string, string[]> = {
   quote: ['accepted', 'in_progress', 'lost', 'cancelled'],
   accepted: ['in_progress', 'lost', 'cancelled'],
-  in_progress: ['delivered', 'cancelled'],
-  delivered: ['invoiced', 'paid'],
-  invoiced: ['paid'],
+  in_progress: ['delivered', 'lost', 'cancelled'],
+  delivered: ['invoiced', 'cancelled'],
+  invoiced: ['paid', 'cancelled'],
   paid: [],
   lost: ['quote', 'in_progress'],
   cancelled: ['quote', 'in_progress'],
@@ -74,18 +75,33 @@ export default function JobDetailPage() {
 
   const handleDelete = async () => {
     if (!(await confirmDialog(`Delete job "${job.title}"?`))) return;
-    await api.delete(`/jobs/${id}`);
-    router.push('/jobs');
+    try {
+      await api.delete(`/jobs/${id}`);
+      router.push('/jobs');
+    } catch (err) {
+      logger.error('Failed to delete job', err, 'jobs');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete job.');
+    }
   };
 
   const handleStatusChange = async (status: string) => {
-    await api.patch(`/jobs/${id}/status`, { status });
-    loadJob();
+    try {
+      await api.patch(`/jobs/${id}/status`, { status });
+      loadJob();
+    } catch (err) {
+      logger.error('Failed to update job status', err, 'jobs');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update status.');
+    }
   };
 
   const handleReopen = async () => {
-    await api.post(`/jobs/${id}/reopen`);
-    loadJob();
+    try {
+      await api.post(`/jobs/${id}/reopen`);
+      loadJob();
+    } catch (err) {
+      logger.error('Failed to reopen job', err, 'jobs');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to reopen job.');
+    }
   };
 
   const isLocked = ['delivered', 'invoiced', 'paid'].includes(job.status);
@@ -207,8 +223,7 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
       setEditing(false);
       onUpdate();
     } catch (err) {
-      const raw = err instanceof ApiError ? err.message : 'Failed to save. Please try again.';
-      setSaveError(Array.isArray(raw) ? raw.join(' ') : String(raw));
+      setSaveError(err instanceof ApiError ? err.message : 'Failed to save. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -425,11 +440,11 @@ function DocumentsTab({ job }: { job: Job }) {
   const [cloning, setCloning] = useState(false);
   const router = useRouter();
 
-  const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs); };
+  const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs).catch((err) => { logger.error('Failed to load documents', err, 'jobs'); toast.error(err instanceof ApiError ? err.message : 'Failed to load documents.'); }); };
 
   useEffect(() => {
     loadDocs();
-    api.get<{ id: string; name: string }[]>('/templates?isActive=true').then(setTemplates);
+    api.get<{ id: string; name: string }[]>('/templates?isActive=true').then(setTemplates).catch((err) => logger.error('Failed to load templates', err, 'jobs'));
   }, [job.id]);
 
   useEffect(() => {
@@ -447,26 +462,35 @@ function DocumentsTab({ job }: { job: Job }) {
       const doc = await api.post<{ id: string }>(`/documents/${sourceId}/clone`, { jobId: job.id });
       setShowClone(false);
       router.push(`/documents/${doc.id}`);
-    } catch {
+    } catch (err) {
       setCloning(false);
+      toast.error(err instanceof ApiError ? err.message : 'Failed to clone document.');
     }
   };
 
   const handleCreate = async () => {
     if (!selectedTemplateId) return;
-    const doc = await api.post<{ id: string }>('/documents', {
-      jobId: job.id,
-      templateId: selectedTemplateId,
-    });
-    setShowAdd(false);
-    setSelectedTemplateId('');
-    router.push(`/documents/${doc.id}`);
+    try {
+      const doc = await api.post<{ id: string }>('/documents', {
+        jobId: job.id,
+        templateId: selectedTemplateId,
+      });
+      setShowAdd(false);
+      setSelectedTemplateId('');
+      router.push(`/documents/${doc.id}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to create document.');
+    }
   };
 
   const handleDelete = async (docId: string) => {
     if (!(await confirmDialog('Delete this document?'))) return;
-    await api.delete(`/documents/${docId}`);
-    loadDocs();
+    try {
+      await api.delete(`/documents/${docId}`);
+      loadDocs();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete document.');
+    }
   };
 
   return (
@@ -571,27 +595,27 @@ function FilesTab({ job, category, files, onUpdate }: { job: Job; category: 'sou
     formData.append('category', category);
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/jobs/${job.id}/files`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Upload failed' }));
-        setError(Array.isArray(data.message) ? data.message.join(', ') : data.message);
-      } else {
-        fileInput.value = '';
-        onUpdate();
-      }
-    } catch (err) { logger.error('Upload failed', err, 'jobs'); setError('Upload failed'); }
-    setUploading(false);
+      await api.upload(`/jobs/${job.id}/files`, formData, 'POST');
+      fileInput.value = '';
+      onUpdate();
+    } catch (err) {
+      logger.error('Upload failed', err, 'jobs');
+      setError(err instanceof ApiError ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleDelete = async (fileId: string) => {
     if (!(await confirmDialog('Delete this file?'))) return;
-    await api.delete(`/jobs/${job.id}/files/${fileId}`);
-    onUpdate();
+    setError('');
+    try {
+      await api.delete(`/jobs/${job.id}/files/${fileId}`);
+      onUpdate();
+    } catch (err) {
+      logger.error('File delete failed', err, 'jobs');
+      setError(err instanceof ApiError ? err.message : 'Failed to delete file.');
+    }
   };
 
   const formatSize = (bytes: number) => {

@@ -61,7 +61,7 @@ export async function seed(dataSource: DataSource) {
       description: 'Can manage jobs, documents, and clients',
       permissions: allPermissions.filter(
         (p) =>
-          [
+          ([
             'clients',
             'jobs',
             'documents',
@@ -70,7 +70,9 @@ export async function seed(dataSource: DataSource) {
             'calendar',
             'notifications',
           ].includes(p.resource) &&
-          ['create', 'read', 'update'].includes(p.action),
+            ['create', 'read', 'update'].includes(p.action)) ||
+          // languages, labels, job types and currency — needed to create jobs
+          (p.resource === 'settings' && p.action === 'read'),
       ),
     });
     await roleRepo.save(translatorRole);

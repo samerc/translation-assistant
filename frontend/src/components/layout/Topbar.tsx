@@ -6,6 +6,7 @@ import { useTheme } from '@/lib/theme-context';
 import { useAuth } from '@/lib/auth-context';
 import { useSidebar } from '@/lib/sidebar-context';
 import { api } from '@/lib/api';
+import { confirmLeave } from '@/lib/unsaved-changes';
 import { useDebounce } from '@/lib/use-debounce';
 import { useNow } from '@/lib/use-now';
 import { formatTimeAgo } from '@/lib/format';
@@ -132,7 +133,7 @@ export default function Topbar() {
       setUnreadCount((c) => Math.max(0, c - 1));
     }
     setShowNotifications(false);
-    if (n.link) router.push(n.link);
+    if (n.link && (await confirmLeave())) router.push(n.link);
   };
 
   const handleMarkAllRead = async () => {
@@ -192,7 +193,7 @@ export default function Topbar() {
                   Clients <span className="text-text-muted">({visibleResults.counts.clients})</span>
                 </div>
                 {visibleResults.clients.map((c) => (
-                  <button key={c.id} onClick={() => { router.push(`/clients/${c.id}`); setShowSearch(false); setSearchQuery(''); }}
+                  <button key={c.id} onClick={async () => { if (!(await confirmLeave())) return; router.push(`/clients/${c.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <ClientIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
                     <div>
@@ -210,7 +211,7 @@ export default function Topbar() {
                   Jobs <span className="text-text-muted">({visibleResults.counts.jobs})</span>
                 </div>
                 {visibleResults.jobs.map((j) => (
-                  <button key={j.id} onClick={() => { router.push(`/jobs/${j.id}`); setShowSearch(false); setSearchQuery(''); }}
+                  <button key={j.id} onClick={async () => { if (!(await confirmLeave())) return; router.push(`/jobs/${j.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <JobIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
                     <div>
@@ -228,7 +229,7 @@ export default function Topbar() {
                   Templates <span className="text-text-muted">({visibleResults.counts.templates})</span>
                 </div>
                 {visibleResults.templates.map((t) => (
-                  <button key={t.id} onClick={() => { router.push(`/templates/${t.id}`); setShowSearch(false); setSearchQuery(''); }}
+                  <button key={t.id} onClick={async () => { if (!(await confirmLeave())) return; router.push(`/templates/${t.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <TemplateIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
                     <div>
@@ -246,7 +247,7 @@ export default function Topbar() {
                   Invoices <span className="text-text-muted">({visibleResults.counts.invoices})</span>
                 </div>
                 {visibleResults.invoices.map((inv) => (
-                  <button key={inv.id} onClick={() => { router.push(`/invoices/${inv.id}`); setShowSearch(false); setSearchQuery(''); }}
+                  <button key={inv.id} onClick={async () => { if (!(await confirmLeave())) return; router.push(`/invoices/${inv.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <InvoiceIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
                     <div>

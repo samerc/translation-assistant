@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { logger } from './logger';
 
 interface UserRole {
@@ -31,9 +31,18 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
   logout: () => Promise<void>;
   logoutEverywhere: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
+}
+
+export interface RegisterData {
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  inviteToken: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,7 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then(setUser)
         .catch((err) => {
           logger.error('Profile fetch failed', err, 'auth');
-          localStorage.removeItem('accessToken');
+          // Only an auth failure invalidates the token — a 5xx/429/network blip
+          // during a backend restart must not log the user out.
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            localStorage.removeItem('accessToken');
+          }
         })
         .finally(() => setLoading(false));
     } else {
@@ -64,6 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await api.post<LoginResponse>('/auth/login', { email, password });
     localStorage.setItem('accessToken', data.accessToken);
     // refreshToken is set as httpOnly cookie by the server — not stored in localStorage
+    setUser(data.user);
+  }, []);
+
+  // Registration logs the user in (access token in body, refresh cookie set).
+  const register = useCallback(async (dto: RegisterData) => {
+    const data = await api.post<LoginResponse>('/auth/register', dto);
+    localStorage.setItem('accessToken', data.accessToken);
     setUser(data.user);
   }, []);
 
@@ -96,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, logoutEverywhere, hasPermission }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, logoutEverywhere, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

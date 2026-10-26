@@ -102,10 +102,15 @@ export default function InvoiceDetailPage() {
   };
 
   const handleRecordPayment = async () => {
+    const amount = Number(paymentAmount);
+    if (paymentAmount.trim() === '' || !Number.isFinite(amount) || amount <= 0) {
+      toast.error('Enter a payment amount greater than zero.');
+      return;
+    }
     setSaving(true);
     try {
       await api.post(`/invoices/${id}/record-payment`, {
-        paidAmount: Number(paymentAmount),
+        paidAmount: amount,
         paidAt: paymentDate,
       });
       setShowPaymentModal(false);
@@ -135,19 +140,10 @@ export default function InvoiceDetailPage() {
 
   const handleExport = async (format: 'pdf' | 'word') => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/invoices/${id}/export-${format}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${invoice?.invoiceNumber || 'invoice'}.${format === 'pdf' ? 'pdf' : 'docx'}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await api.download(
+        `/invoices/${id}/export-${format}`,
+        `${invoice?.invoiceNumber || 'invoice'}.${format === 'pdf' ? 'pdf' : 'docx'}`,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Export failed';
       toast.error(msg);

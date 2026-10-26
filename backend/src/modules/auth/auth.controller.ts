@@ -147,7 +147,11 @@ export class AuthController {
   @Get('sessions')
   @UseGuards(AuthGuard('jwt'))
   async getActiveSessions(@Req() req: AuthenticatedRequest) {
-    return this.authService.getActiveSessions(req.user.id);
+    // The refresh cookie's path (/api/auth) covers this endpoint.
+    return this.authService.getActiveSessions(
+      req.user.id,
+      getRefreshCookie(req),
+    );
   }
 
   @Delete('sessions/:sessionId')

@@ -63,6 +63,13 @@ export class UsersController {
     return this.usersService.update(id, dto);
   }
 
+  // Any authenticated user can read their own profile — no users:read needed
+  // (Translators don't have it; Settings > My Business loads through here).
+  @Get('profile/me')
+  getProfile(@CurrentUser() user: User) {
+    return this.usersService.findOne(user.id);
+  }
+
   @Patch('profile/me')
   updateProfile(@CurrentUser() user: User, @Body() dto: UpdateUserDto) {
     // Any authenticated user can update their own profile (limited fields)

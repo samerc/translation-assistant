@@ -2,7 +2,8 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
@@ -28,6 +29,7 @@ export default function TemplatesPage() {
   const { baseCurrency } = useSettings();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -61,16 +63,24 @@ export default function TemplatesPage() {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
-    const created = await api.post<Template>('/templates', {
-      type: form.type,
-      name: form.name,
-      description: form.description || undefined,
-      pricePerPage: form.pricePerPage ? parseFloat(form.pricePerPage) : 0,
-      discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : undefined,
-    });
-    setShowForm(false);
-    setForm({ type: 'designer', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
-    router.push(`/templates/${created.id}`);
+    if (saving) return;
+    setSaving(true);
+    try {
+      const created = await api.post<Template>('/templates', {
+        type: form.type,
+        name: form.name,
+        description: form.description || undefined,
+        pricePerPage: form.pricePerPage ? parseFloat(form.pricePerPage) : 0,
+        discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : undefined,
+      });
+      setShowForm(false);
+      setForm({ type: 'designer', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
+      router.push(`/templates/${created.id}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to create template.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -123,7 +133,7 @@ export default function TemplatesPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">Create & Configure Fields</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Creating...' : 'Create & Configure Fields'}</button>
             <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
           </div>
         </form>

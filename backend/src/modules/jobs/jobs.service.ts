@@ -68,6 +68,15 @@ export class JobsService {
     return JobsService.LOCKED_STATUSES.includes(job.status);
   }
 
+  // Files of a delivered/invoiced/paid job are frozen like the rest of the job.
+  private async assertUnlocked(jobId: string): Promise<void> {
+    if (this.isLocked(await this.findOneBasic(jobId))) {
+      throw new BadRequestException(
+        'This job is locked (delivered, invoiced or paid). Reopen it to change its files.',
+      );
+    }
+  }
+
   private async generateJobNumber(): Promise<string> {
     // MAX(existing) + 1, not COUNT(*), so numbers aren't reused after deletion.
     // Concurrent creates are still caught by the unique constraint on jobNumber.
@@ -549,7 +558,7 @@ export class JobsService {
     file: Express.Multer.File,
     userId: string,
   ): Promise<JobFile> {
-    await this.findOne(jobId);
+    await this.assertUnlocked(jobId);
     return this.jobFileRepository.save(
       this.jobFileRepository.create({
         jobId,
@@ -568,7 +577,7 @@ export class JobsService {
     sourceJobId: string,
     fileId: string,
   ): Promise<JobFile> {
-    await this.findOne(jobId);
+    await this.assertUnlocked(jobId);
     const sourceFile = await this.jobFileRepository.findOne({
       where: { id: fileId, jobId: sourceJobId },
     });
@@ -587,6 +596,7 @@ export class JobsService {
   }
 
   async removeFile(jobId: string, fileId: string): Promise<void> {
+    await this.assertUnlocked(jobId);
     const jf = await this.jobFileRepository.findOne({
       where: { id: fileId, jobId },
     });

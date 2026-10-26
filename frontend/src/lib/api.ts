@@ -18,6 +18,17 @@ class ApiError extends Error {
   }
 }
 
+// On these a 401 means "wrong credentials / bad token", not "session expired" —
+// never refresh or redirect, just surface the server's message.
+const NO_REFRESH = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/forgot-password',
+  '/auth/verify-reset-token',
+  '/auth/reset-password',
+];
+
 // Inject honeypot field into write request bodies.
 function withHoneypot(method: string, body: unknown): unknown {
   if (method === 'GET' || method === 'HEAD' || !body || typeof body !== 'object' || Array.isArray(body)) {
@@ -33,63 +44,15 @@ async function parseBody<T>(res: Response): Promise<T> {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-  const method = options.method || 'GET';
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const finalBody = options.body ? withHoneypot(method, options.body) : undefined;
-
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    method,
-    headers,
-    credentials: 'include', // Send httpOnly cookies
-    body: finalBody ? JSON.stringify(finalBody) : undefined,
-  });
-
-  if (res.status === 401) {
-    // Try refresh — cookie is sent automatically
-    const refreshed = await tryRefresh();
-    if (refreshed) {
-      headers['Authorization'] = `Bearer ${localStorage.getItem('accessToken')}`;
-      const retryRes = await fetch(`${API_URL}${endpoint}`, {
-        method,
-        headers,
-        credentials: 'include',
-        body: finalBody ? JSON.stringify(finalBody) : undefined,
-      });
-
-      if (!retryRes.ok) {
-        const error = await retryRes.json().catch(() => ({ message: 'Request failed' }));
-        throw new ApiError(retryRes.status, error.message);
-      }
-
-      return parseBody<T>(retryRes);
-    }
-
-    // Refresh failed
-    localStorage.removeItem('accessToken');
-    window.location.href = '/login';
-    throw new ApiError(401, 'Session expired');
-  }
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Request failed' }));
-    throw new ApiError(res.status, error.message);
-  }
-
-  return parseBody<T>(res);
+// class-validator sends `message` as a string array.
+async function toApiError(res: Response, fallback: string): Promise<ApiError> {
+  const data = await res.json().catch(() => ({}));
+  const raw = (data as { message?: unknown }).message;
+  const message = Array.isArray(raw) ? raw.join('. ') : typeof raw === 'string' && raw ? raw : fallback;
+  return new ApiError(res.status, message);
 }
 
-async function tryRefresh(): Promise<boolean> {
+async function doRefresh(): Promise<boolean> {
   try {
     // Refresh token is in httpOnly cookie — sent automatically with credentials: 'include'
     const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -110,25 +73,87 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
-// Multipart upload (e.g. logo/avatar). Lets the browser set the multipart
-// Content-Type boundary; reuses the same auth header + 401→refresh→retry flow.
-async function upload<T>(endpoint: string, formData: FormData, method = 'PATCH'): Promise<T> {
-  const doFetch = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-    return fetch(`${API_URL}${endpoint}`, { method, headers, credentials: 'include', body: formData });
-  };
+// Refresh tokens are one-time use: two refreshes with the same cookie make the
+// second fail and log the user out. So refresh at most once at a time — shared
+// by concurrent requests in this tab, and serialized across tabs with a Web Lock.
+// A caller whose token was already replaced (by another request or tab) just
+// retries with the new one.
+let refreshing: Promise<boolean> | null = null;
 
-  let res = await doFetch();
-  if (res.status === 401 && (await tryRefresh())) {
-    res = await doFetch();
+function refreshOnce(staleToken: string | null): Promise<boolean> {
+  if (!refreshing) {
+    const run = async () => {
+      const current = localStorage.getItem('accessToken');
+      if (current && current !== staleToken) return true;
+      return doRefresh();
+    };
+    const locked = typeof navigator !== 'undefined' && navigator.locks
+      ? navigator.locks.request('ta-auth-refresh', run)
+      : run();
+    refreshing = locked.finally(() => {
+      refreshing = null;
+    });
   }
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Upload failed' }));
-    throw new ApiError(res.status, error.message);
+  return refreshing;
+}
+
+// Every API call goes through here: auth header, 401 → refresh → retry once,
+// and a redirect to /login when the session is really gone.
+async function authedFetch(endpoint: string, init: RequestInit): Promise<Response> {
+  const send = (token: string | null) =>
+    fetch(`${API_URL}${endpoint}`, {
+      ...init,
+      credentials: 'include', // Send httpOnly cookies
+      headers: { ...(init.headers as Record<string, string>), ...(token && { Authorization: `Bearer ${token}` }) },
+    });
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const res = await send(token);
+  if (res.status !== 401 || NO_REFRESH.some((p) => endpoint.startsWith(p))) return res;
+
+  if (await refreshOnce(token)) {
+    const retry = await send(localStorage.getItem('accessToken'));
+    if (retry.status !== 401) return retry;
   }
+
+  localStorage.removeItem('accessToken');
+  window.location.href = '/login';
+  throw new ApiError(401, 'Session expired');
+}
+
+async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
+  const method = options.method || 'GET';
+  const finalBody = options.body ? withHoneypot(method, options.body) : undefined;
+  const res = await authedFetch(endpoint, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    body: finalBody ? JSON.stringify(finalBody) : undefined,
+  });
+  if (!res.ok) throw await toApiError(res, 'Request failed');
   return parseBody<T>(res);
+}
+
+// Multipart upload. Lets the browser set the multipart Content-Type boundary.
+async function upload<T>(endpoint: string, formData: FormData, method = 'PATCH'): Promise<T> {
+  const res = await authedFetch(endpoint, { method, body: formData });
+  if (!res.ok) throw await toApiError(res, 'Upload failed');
+  return parseBody<T>(res);
+}
+
+// Fetch a generated file (PDF/DOCX export) and hand it to the browser as a download.
+async function download(endpoint: string, fallbackName: string, method = 'POST'): Promise<void> {
+  const res = await authedFetch(endpoint, { method });
+  if (!res.ok) throw await toApiError(res, 'Download failed');
+  const blob = await res.blob();
+  const fileName = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export const api = {
@@ -139,6 +164,7 @@ export const api = {
     request<T>(endpoint, { method: 'PATCH', body }),
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
   upload,
+  download,
 };
 
 export { ApiError };
