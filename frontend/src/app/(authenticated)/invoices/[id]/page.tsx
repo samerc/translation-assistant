@@ -273,8 +273,8 @@ function InvoiceDetailPage() {
       {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-text">{invoice.invoiceNumber}</h1>
           <p className="text-text-secondary mt-1">{invoice.client.name}</p>
         </div>
@@ -300,13 +300,13 @@ function InvoiceDetailPage() {
           )}
           {canPay && (
             <button onClick={openPaymentModal}
-              className="px-3 py-1.5 bg-success text-white rounded-lg text-sm font-medium hover:opacity-90">
+              className="btn btn-primary btn-sm">
               Record Payment
             </button>
           )}
           {nextStatuses.length > 0 && (
             <select value="" onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
-              className="input h-8 px-2">
+              aria-label="Change invoice status" className="input h-8 px-2 w-auto">
               <option value="">Change status...</option>
               {nextStatuses.map((s) => {
                 const st = STATUSES.find((x) => x.value === s);
@@ -316,7 +316,7 @@ function InvoiceDetailPage() {
           )}
           {invoice.status === 'draft' && (
             <button onClick={handleDelete}
-              className="px-3 py-1.5 tone tone-danger rounded-lg text-sm hover:bg-danger hover:text-white">
+              className="btn btn-danger btn-sm">
               Delete
             </button>
           )}

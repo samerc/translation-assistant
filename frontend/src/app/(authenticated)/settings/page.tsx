@@ -480,7 +480,7 @@ function LabelsSettings() {
                     ) : (
                       <>
                         <span className="text-sm text-text">{label.value}</span>
-                        <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-3 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
                           <button onClick={() => { setEditingId(label.id); setEditValue(label.value); }} className="text-xs text-primary">Edit</button>
                           <button onClick={() => handleDelete(label.id)} className="text-xs text-danger">Remove</button>
                         </div>
@@ -920,6 +920,7 @@ interface AdminUser {
 interface RoleOption { id: string; name: string }
 
 function UsersSettings() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loadError, setLoadError] = useState(false);
@@ -976,7 +977,7 @@ function UsersSettings() {
     }
   };
 
-  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  const inputClass = 'input';
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -1035,10 +1036,17 @@ function UsersSettings() {
                     </span>
                   </td>
                   <td className="py-2 text-right whitespace-nowrap">
-                    <button onClick={() => toggleActive(u)} className="text-xs text-primary hover:underline mr-3">
-                      {u.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button onClick={() => remove(u)} className="text-xs text-danger hover:underline">Delete</button>
+                    {u.id === me?.id ? (
+                      // The API refuses changing your own status anyway — don't offer it.
+                      <span className="text-xs text-text-muted">You</span>
+                    ) : (
+                      <>
+                        <button onClick={() => toggleActive(u)} className="text-xs font-medium text-primary-text hover:underline mr-3">
+                          {u.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button onClick={() => remove(u)} className="text-xs font-medium text-danger hover:underline">Delete</button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1120,7 +1128,7 @@ function EmailSettings() {
     }
   };
 
-  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  const inputClass = 'input';
   if (!loaded) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
@@ -1247,7 +1255,7 @@ function RolesSettings() {
     catch (err) { setError(err instanceof ApiError ? String(err.message) : 'Failed to delete role.'); }
   };
 
-  const inputClass = 'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  const inputClass = 'input';
 
   if (editing) {
     return (
@@ -1430,7 +1438,7 @@ function BusinessSettings() {
             </label>
             {logo && (
               <button type="button" onClick={removeLogo} disabled={uploading}
-                className="px-4 py-2 bg-bg border border-border text-danger rounded-lg text-sm hover:bg-danger-light transition-colors disabled:opacity-50">
+                className="btn btn-danger">
                 Remove
               </button>
             )}

@@ -48,7 +48,10 @@ export class SearchService {
       .select(['j.id', 'j.jobNumber', 'j.title', 'j.status'])
       .leftJoin('j.client', 'client')
       .addSelect(['client.name'])
-      .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
+      .where(
+        '(j.title LIKE :q OR j.jobNumber LIKE :q OR j.description LIKE :q)',
+        { q: like },
+      );
     if (!isAdmin) {
       jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
@@ -57,7 +60,10 @@ export class SearchService {
 
     const jobCountQb = this.jobRepository
       .createQueryBuilder('j')
-      .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
+      .where(
+        '(j.title LIKE :q OR j.jobNumber LIKE :q OR j.description LIKE :q)',
+        { q: like },
+      );
     if (!isAdmin) {
       jobCountQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,

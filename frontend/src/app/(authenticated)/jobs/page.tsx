@@ -134,19 +134,19 @@ export default function JobsPage() {
       </div>
 
       <TableCard
-        minWidth={820}
+        minWidth={360}
         footer={<Pagination page={page} totalPages={totalPages} total={total} pageSize={25} noun={total === 1 ? 'job' : 'jobs'} onPage={setPage} />}
       >
         <thead>
           <tr>
             <SortableTh field="title" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Job</SortableTh>
-            <th>Client</th>
-            <th>Languages</th>
+            <th className="hidden sm:table-cell">Client</th>
+            <th className="hidden md:table-cell">Languages</th>
             <SortableTh field="status" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Status</SortableTh>
-            <th className="text-right">Items</th>
-            <SortableTh field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right">Total</SortableTh>
+            <th className="text-right hidden lg:table-cell">Items</th>
+            <SortableTh field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right hidden sm:table-cell">Total</SortableTh>
             <SortableTh field="deadline" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Deadline</SortableTh>
-            <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Created</SortableTh>
+            <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="hidden lg:table-cell">Created</SortableTh>
             <th aria-label="Open" />
           </tr>
         </thead>
@@ -170,24 +170,25 @@ export default function JobsPage() {
                   <div className="font-semibold text-text">{job.title}</div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
+                    <span className="text-xs text-text-secondary truncate sm:hidden">{job.client.name}</span>
                     <span className={`text-[11px] font-semibold px-1.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
                       {job.type === 'freeform' ? 'Free-form' : 'Template'}
                     </span>
                   </div>
                 </td>
-                <td>{job.client.name}</td>
-                <td className="font-mono text-xs whitespace-nowrap">
+                <td className="hidden sm:table-cell">{job.client.name}</td>
+                <td className="font-mono text-xs whitespace-nowrap hidden md:table-cell">
                   {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
                 </td>
                 <td><Badge dot tone={badge.color}>{badge.label}</Badge></td>
-                <td className="text-right tabular-nums">{job.lineItemCount || 0}</td>
-                <td className="text-right tabular-nums font-medium text-text whitespace-nowrap">{getPrice(job)}</td>
+                <td className="text-right tabular-nums hidden lg:table-cell">{job.lineItemCount || 0}</td>
+                <td className="text-right tabular-nums font-medium text-text whitespace-nowrap hidden sm:table-cell">{getPrice(job)}</td>
                 <td className="tabular-nums whitespace-nowrap">
                   {isJobOverdue(job, today)
                     ? <span className="text-danger font-semibold" title="Past the deadline">{formatDate(job.deadline)} · Overdue</span>
                     : formatDate(job.deadline)}
                 </td>
-                <td className="tabular-nums whitespace-nowrap">{formatDate(job.createdAt)}</td>
+                <td className="tabular-nums whitespace-nowrap hidden lg:table-cell">{formatDate(job.createdAt)}</td>
                 <RowChevron />
               </tr>
             );

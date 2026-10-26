@@ -85,7 +85,7 @@ export default function TemplateDetailPage() {
           </div>
           {template.description && <p className="text-sm text-text-secondary mt-1">{template.description}</p>}
         </div>
-        <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">Delete</button>
+        <button onClick={handleDelete} className="btn btn-danger">Delete</button>
       </div>
 
       <div className="flex gap-1 border-b border-border mb-6">

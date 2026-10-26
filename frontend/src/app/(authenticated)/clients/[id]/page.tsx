@@ -86,7 +86,7 @@ export default function ClientDetailPage() {
           <button onClick={() => router.push(`/jobs/new?clientId=${client.id}`)} className="btn btn-primary">
             + New Job
           </button>
-          <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">
+          <button onClick={handleDelete} className="btn btn-danger">
             Delete
           </button>
         </div>
@@ -347,7 +347,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
               )}
               <span className="text-sm text-text">{item.value}</span>
             </div>
-            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-2 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
               <button onClick={() => startEdit(item)} className="text-xs text-primary hover:text-primary-hover">
                 Edit
               </button>
