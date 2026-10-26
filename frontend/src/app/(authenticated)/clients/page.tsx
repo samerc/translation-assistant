@@ -5,9 +5,16 @@ import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
 import { toast } from '@/lib/toast';
-import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
-import { formatDate } from '@/lib/format';
+import { formatDate, initials } from '@/lib/format';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, SearchInput, Select } from '@/components/ui/Field';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Pagination, RowChevron, SortableTh, TableCard } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Alert } from '@/components/ui/Alert';
+import { BuildingIcon, PlusIcon, UserIcon, UsersIcon } from '@/components/ui/icons';
 
 interface ClientEmail { id: string; email: string; label: string | null; }
 interface ClientPhone { id: string; phone: string; label: string | null; }
@@ -101,166 +108,115 @@ export default function ClientsPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-text">Clients</h1>
-        {hasPermission('clients:create') && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-          >
-            + New Client
-          </button>
+      <PageHeader
+        title="Clients"
+        description="Companies and people you translate for."
+        actions={hasPermission('clients:create') && (
+          <Button variant="primary" icon={<PlusIcon />} onClick={() => setShowForm(true)}>New client</Button>
         )}
-      </div>
+      />
 
       {/* Create form */}
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-surface border border-border rounded-xl p-5 mb-6">
-          <h3 className="font-semibold text-text mb-4">New Client</h3>
+        <form onSubmit={handleCreate} className="card p-5 mb-6">
+          <h2 className="font-semibold text-text mb-4">New client</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Type</label>
-              <select
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as 'company' | 'person' })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              >
+            <Field label="Type" htmlFor="client-type">
+              <Select id="client-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'company' | 'person' })}>
                 <option value="company">Company</option>
                 <option value="person">Person</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Name *</label>
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                required
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Tax ID</label>
-              <input
-                value={form.taxId}
-                onChange={(e) => setForm({ ...form, taxId: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
+              </Select>
+            </Field>
+            <Field label="Name" htmlFor="client-name" required>
+              <Input id="client-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </Field>
+            <Field label="Tax ID" htmlFor="client-tax">
+              <Input id="client-tax" value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} />
+            </Field>
           </div>
           <p className="text-xs text-text-muted mt-3">Emails, phones, and addresses can be added after creating the client.</p>
           <div className="flex gap-2 mt-4">
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
-              {saving ? 'Creating...' : 'Create Client'}
-            </button>
-            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50">
-              Cancel
-            </button>
+            <Button type="submit" variant="primary" disabled={saving}>{saving ? 'Creating…' : 'Create client'}</Button>
+            <Button onClick={() => setShowForm(false)}>Cancel</Button>
           </div>
         </form>
       )}
 
-      {loadError && (
-        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
-          Couldn&apos;t load clients. Please refresh or try again.
-        </div>
-      )}
+      {loadError && <Alert className="mb-4">Couldn&apos;t load clients. Please refresh or try again.</Alert>}
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap">
-        <input
+      <div className="flex gap-3 mb-4 flex-wrap items-center">
+        <SearchInput
           aria-label="Search clients"
-          placeholder="Search clients..."
+          placeholder="Search clients…"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary"
         />
-        <select
+        <SegmentedControl
+          label="Client type"
           value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <option value="">All Types</option>
-          <option value="company">Company</option>
-          <option value="person">Person</option>
-        </select>
-        <span className="text-sm text-text-muted self-center ml-auto">{total} client{total !== 1 ? 's' : ''}</span>
+          onChange={(v) => { setTypeFilter(v); setPage(1); }}
+          options={[
+            { value: '', label: 'All' },
+            { value: 'company', label: 'Companies' },
+            { value: 'person', label: 'People' },
+          ]}
+        />
       </div>
 
-      {/* Table */}
-      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
-          <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('name')}>
-                Name <SortIcon field="name" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('type')}>
-                Type <SortIcon field="type" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Email</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Phone</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Contacts</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
-                Created <SortIcon field="createdAt" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
+      <TableCard
+        minWidth={680}
+        footer={<Pagination page={page} totalPages={totalPages} total={total} pageSize={25} noun={total === 1 ? 'client' : 'clients'} onPage={setPage} />}
+      >
+        <thead>
+          <tr>
+            <SortableTh field="name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Name</SortableTh>
+            <SortableTh field="type" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Type</SortableTh>
+            <th>Phone</th>
+            <th>Contacts</th>
+            <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Created</SortableTh>
+            <th aria-label="Open" />
+          </tr>
+        </thead>
+        <tbody>
+          {clients.length === 0 && !loadError && (
+            <tr>
+              <td colSpan={6}>
+                <EmptyState
+                  icon={<UsersIcon />}
+                  title={search || typeFilter ? 'No clients match your filters' : 'No clients yet'}
+                  description={search || typeFilter ? 'Try another name, or clear the filters.' : 'Add the companies and people you translate for.'}
+                />
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {clients.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-text-muted">
-                  No clients found. Create your first client above.
-                </td>
-              </tr>
-            )}
-            {clients.map((client) => (
-              <tr
-                key={client.id}
-                className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer"
-                onClick={() => router.push(`/clients/${client.id}`)}
-              >
-                <td className="px-4 py-3 font-medium text-text">{client.name}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    client.type === 'company'
-                      ? 'bg-primary-light text-primary'
-                      : 'bg-warning-light text-warning'
-                  }`}>
-                    {client.type === 'company' ? 'Company' : 'Person'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-text-secondary">{client.emails?.[0]?.email || '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{client.phones?.[0]?.phone || '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{client.type === 'company' ? (client.contactsCount || 0) : '—'}</td>
-                <td className="px-4 py-3 text-text-secondary">{formatDate(client.createdAt)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-2 mt-4">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage(page - 1)}
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary disabled:opacity-40 hover:bg-border/50"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-text-secondary">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage(page + 1)}
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary disabled:opacity-40 hover:bg-border/50"
-          >
-            Next
-          </button>
-        </div>
-      )}
+          )}
+          {clients.map((client) => (
+            <tr key={client.id} data-href onClick={() => router.push(`/clients/${client.id}`)}>
+              <td>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-8 h-8 grid place-items-center flex-none text-xs font-semibold bg-primary-light text-primary-text ${client.type === 'company' ? 'rounded-lg' : 'rounded-full'}`}>
+                    {initials(client.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-text truncate">{client.name}</div>
+                    <div className="text-xs text-text-muted truncate">{client.emails?.[0]?.email || 'No email'}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span className="inline-flex items-center gap-1.5">
+                  {client.type === 'company' ? <BuildingIcon className="w-3.5 h-3.5" /> : <UserIcon className="w-3.5 h-3.5" />}
+                  {client.type === 'company' ? 'Company' : 'Person'}
+                </span>
+              </td>
+              <td className="tabular-nums">{client.phones?.[0]?.phone || '—'}</td>
+              <td className="tabular-nums">{client.type === 'company' ? (client.contactsCount || 0) : '—'}</td>
+              <td className="tabular-nums">{formatDate(client.createdAt)}</td>
+              <RowChevron />
+            </tr>
+          ))}
+        </tbody>
+      </TableCard>
     </div>
   );
 }

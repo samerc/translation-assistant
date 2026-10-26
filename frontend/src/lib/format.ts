@@ -52,3 +52,9 @@ export function formatTimeAgo(value: string | Date, now: number): string {
   if (days < 7) return `${days}d ago`;
   return formatDate(value);
 }
+
+/** Up to two initials from a name ("Al Noor Legal" -> "AN"); letters from any script. */
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter((w) => /^\p{L}/u.test(w));
+  return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
+}

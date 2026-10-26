@@ -4,11 +4,18 @@ import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
-import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { Button } from '@/components/ui/Button';
+import { SearchInput, Select } from '@/components/ui/Field';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Badge } from '@/components/ui/Badge';
+import { Pagination, RowChevron, SortableTh, TableCard } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Alert } from '@/components/ui/Alert';
+import { BriefcaseIcon, PlusIcon, XIcon } from '@/components/ui/icons';
 
 interface Job {
   id: string;
@@ -97,111 +104,90 @@ export default function JobsPage() {
     return formatCurrency(price, baseCurrency);
   };
 
+  const filtered = Boolean(search || statusFilter || searchParams.get('clientId'));
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-text">Jobs</h1>
-        {hasPermission('jobs:create') && (
-          <button onClick={() => router.push('/jobs/new')}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-            + New Job
-          </button>
+      <PageHeader
+        title="Jobs"
+        description="Quotes, translations in progress, and delivered work."
+        actions={hasPermission('jobs:create') && (
+          <Button variant="primary" icon={<PlusIcon />} onClick={() => router.push('/jobs/new')}>New job</Button>
         )}
-      </div>
+      />
 
-      {loadError && (
-        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
-          Couldn&apos;t load jobs. Please refresh or try again.
-        </div>
-      )}
+      {loadError && <Alert className="mb-4">Couldn&apos;t load jobs. Please refresh or try again.</Alert>}
 
       {/* Filters */}
       <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <input placeholder="Search jobs..." aria-label="Search jobs" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
-        <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-          <option value="">All Statuses</option>
+        <SearchInput placeholder="Search jobs…" aria-label="Search jobs" value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+        <Select aria-label="Status" className="!w-auto" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
+          <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
+        </Select>
         {searchParams.get('clientId') && (
-          <button onClick={() => router.push('/jobs')} className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-xs">
-            Clear client filter
-          </button>
+          <Button size="sm" variant="ghost" icon={<XIcon />} onClick={() => router.push('/jobs')}>Clear client filter</Button>
         )}
-        <span className="text-sm text-text-muted ml-auto">{total} job{total !== 1 ? 's' : ''}</span>
       </div>
 
-      {/* Table */}
-      <div className="bg-surface border border-border rounded-xl overflow-x-auto">
-        <table className="w-full text-sm min-w-[700px]">
-          <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('title')}>
-                Job <SortIcon field="title" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Client</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Languages</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('status')}>
-                Status <SortIcon field="status" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Items</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('calculatedTotal')}>
-                Total <SortIcon field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('deadline')}>
-                Deadline <SortIcon field="deadline" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
-                Created <SortIcon field="createdAt" sortBy={sortBy} sortOrder={sortOrder} />
-              </th>
+      <TableCard
+        minWidth={820}
+        footer={<Pagination page={page} totalPages={totalPages} total={total} pageSize={25} noun={total === 1 ? 'job' : 'jobs'} onPage={setPage} />}
+      >
+        <thead>
+          <tr>
+            <SortableTh field="title" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Job</SortableTh>
+            <th>Client</th>
+            <th>Languages</th>
+            <SortableTh field="status" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Status</SortableTh>
+            <th className="text-right">Items</th>
+            <SortableTh field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right">Total</SortableTh>
+            <SortableTh field="deadline" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Deadline</SortableTh>
+            <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Created</SortableTh>
+            <th aria-label="Open" />
+          </tr>
+        </thead>
+        <tbody>
+          {jobs.length === 0 && !loadError && (
+            <tr>
+              <td colSpan={9}>
+                <EmptyState
+                  icon={<BriefcaseIcon />}
+                  title={filtered ? 'No jobs match your filters' : 'No jobs yet'}
+                  description={filtered ? 'Try another search or status.' : 'Create a job when a client sends you something to translate.'}
+                />
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {jobs.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-text-muted">No jobs found.</td></tr>
-            )}
-            {jobs.map((job) => {
-              const badge = getStatusBadge(job.status);
-              return (
-                <tr key={job.id} onClick={() => router.push(`/jobs/${job.id}`)}
-                  className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-text">{job.title}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
-                        {job.type === 'freeform' ? 'Free-form' : 'Template'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">{job.client.name}</td>
-                  <td className="px-4 py-3 text-text-secondary text-xs">
-                    {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${badge.color}`}>{badge.label}</span>
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">{job.lineItemCount || 0}</td>
-                  <td className="px-4 py-3 text-text-secondary">{getPrice(job)}</td>
-                  <td className="px-4 py-3 text-text-secondary">{formatDate(job.deadline)}</td>
-                  <td className="px-4 py-3 text-text-secondary">{formatDate(job.createdAt)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-2 mt-4">
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)}
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary disabled:opacity-40 hover:bg-border/50">Previous</button>
-          <span className="text-sm text-text-secondary">Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary disabled:opacity-40 hover:bg-border/50">Next</button>
-        </div>
-      )}
+          )}
+          {jobs.map((job) => {
+            const badge = getStatusBadge(job.status);
+            return (
+              <tr key={job.id} data-href onClick={() => router.push(`/jobs/${job.id}`)}>
+                <td>
+                  <div className="font-semibold text-text">{job.title}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
+                    <span className={`text-[11px] font-semibold px-1.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
+                      {job.type === 'freeform' ? 'Free-form' : 'Template'}
+                    </span>
+                  </div>
+                </td>
+                <td>{job.client.name}</td>
+                <td className="font-mono text-xs whitespace-nowrap">
+                  {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
+                </td>
+                <td><Badge dot tone={badge.color}>{badge.label}</Badge></td>
+                <td className="text-right tabular-nums">{job.lineItemCount || 0}</td>
+                <td className="text-right tabular-nums font-medium text-text whitespace-nowrap">{getPrice(job)}</td>
+                <td className="tabular-nums whitespace-nowrap">{formatDate(job.deadline)}</td>
+                <td className="tabular-nums whitespace-nowrap">{formatDate(job.createdAt)}</td>
+                <RowChevron />
+              </tr>
+            );
+          })}
+        </tbody>
+      </TableCard>
     </div>
   );
 }

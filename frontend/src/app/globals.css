@@ -2,127 +2,91 @@
 
 /* ==========================================
    Color Palette System
-   4 palettes, each with light + dark mode
-   User selects palette via data-palette attribute on <html>
-   Dark mode via class="dark" on <html>
+   Each palette sets only its brand colours (--brand, --brand-hover, --brand-accent)
+   via data-palette on <html>; everything else is derived below so every palette
+   works in light and dark mode. Dark mode via class="dark" on <html>.
    ========================================== */
 
-/* --- Indigo Minimal (default) --- */
 :root,
-[data-palette="indigo"] {
-  --color-primary: #4F46E5;
-  --color-primary-hover: #4338CA;
-  --color-primary-light: #EEF2FF;
-  --color-accent: #818CF8;
-  --color-success: #059669;
-  --color-success-light: #ECFDF5;
+[data-palette="indigo"] { --brand: #4F46E5; --brand-hover: #4338CA; --brand-accent: #818CF8; }
+[data-palette="ocean"]  { --brand: #1D4ED8; --brand-hover: #1E40AF; --brand-accent: #3B82F6; }
+[data-palette="teal"]   { --brand: #0D9488; --brand-hover: #0F766E; --brand-accent: #2DD4BF; }
+[data-palette="slate"]  { --brand: #334155; --brand-hover: #1E293B; --brand-accent: #F59E0B; }
+[data-palette="violet"] { --brand: #7C3AED; --brand-hover: #6D28D9; --brand-accent: #A78BFA; }
+[data-palette="orchid"] { --brand: #A21CAF; --brand-hover: #86198F; --brand-accent: #E879F9; }
+[data-palette="copper"] { --brand: #C2410C; --brand-hover: #9A3412; --brand-accent: #FB923C; }
+[data-palette="forest"] { --brand: #15803D; --brand-hover: #166534; --brand-accent: #4ADE80; }
+
+:root {
+  --color-primary: var(--brand);
+  --color-primary-hover: var(--brand-hover);
+  --color-accent: var(--brand-accent);
+
+  --color-success: #0F9D6B;
   --color-warning: #D97706;
-  --color-warning-light: #FFFBEB;
   --color-danger: #E11D48;
-  --color-danger-light: #FFF1F2;
+  --color-info: #0284C7;
+  --color-purple: #7C3AED;
   --color-neutral: #6B7280;
 
-  /* Status/badge palette (shared across all palettes; light tints derived so they
-     adapt to the active palette and can be flipped for dark mode below). */
-  --color-info: #0284C7;
-  --color-info-light: #E0F2FE;
-  --color-accent-light: color-mix(in srgb, var(--color-accent) 16%, white);
-  --color-neutral-light: color-mix(in srgb, var(--color-neutral) 14%, white);
-
-  --color-bg: #F8FAFC;
+  --color-bg: #F7F7FA;
   --color-surface: #FFFFFF;
-  --color-border: #E2E8F0;
-  --color-text: #1E293B;
-  --color-text-secondary: #64748B;
-  --color-text-muted: #94A3B8;
+  --color-sunken: #F2F2F6;
+  --color-border: #E6E6EE;
+  --color-border-strong: #D5D5E0;
+  --color-text: #17171F;
+  --color-text-secondary: #5B5B6E;
+  --color-text-muted: #8A8A9E;
 
-  --color-sidebar-bg: #312E81;
-  --color-sidebar-bg-dark: #1e1b4b;
-  --color-sidebar-text: #C7D2FE;
-  --color-sidebar-active: #818CF8;
-  --color-sidebar-hover: rgba(255, 255, 255, 0.08);
-}
+  /* Text drawn on a tinted background: in light mode the hue is darkened a little,
+     in dark mode lightened a lot, so it stays readable in both. */
+  --tone-ink: #000;
+  --tone-ink-amount: 18%;
+  --tone-bg-amount: 11%;
 
-/* --- Ocean Blue --- */
-[data-palette="ocean"] {
-  --color-primary: #1E40AF;
-  --color-primary-hover: #1E3A8A;
-  --color-primary-light: #DBEAFE;
-  --color-accent: #3B82F6;
-  --color-success: #16A34A;
-  --color-success-light: #DCFCE7;
-  --color-warning: #F59E0B;
-  --color-warning-light: #FFFBEB;
-  --color-danger: #DC2626;
-  --color-danger-light: #FEF2F2;
-  --color-neutral: #475569;
-
-  --color-sidebar-bg: #1e3a8a;
-  --color-sidebar-bg-dark: #172554;
-  --color-sidebar-text: #93C5FD;
-  --color-sidebar-active: #3B82F6;
-}
-
-/* --- Teal Focus --- */
-[data-palette="teal"] {
-  --color-primary: #0D9488;
-  --color-primary-hover: #0F766E;
-  --color-primary-light: #CCFBF1;
-  --color-accent: #2DD4BF;
-  --color-success: #16A34A;
-  --color-success-light: #DCFCE7;
-  --color-warning: #F59E0B;
-  --color-warning-light: #FFFBEB;
-  --color-danger: #DC2626;
-  --color-danger-light: #FEF2F2;
-  --color-neutral: #64748B;
-
-  --color-sidebar-bg: #0f766e;
-  --color-sidebar-bg-dark: #134e4a;
-  --color-sidebar-text: #99F6E4;
-  --color-sidebar-active: #2DD4BF;
-}
-
-/* --- Slate & Amber --- */
-[data-palette="slate"] {
-  --color-primary: #334155;
-  --color-primary-hover: #1E293B;
-  --color-primary-light: #F1F5F9;
-  --color-accent: #F59E0B;
-  --color-success: #16A34A;
-  --color-success-light: #DCFCE7;
-  --color-warning: #F97316;
-  --color-warning-light: #FFF7ED;
-  --color-danger: #DC2626;
-  --color-danger-light: #FEF2F2;
-  --color-neutral: #94A3B8;
-
-  --color-sidebar-bg: #1E293B;
-  --color-sidebar-bg-dark: #0f172a;
-  --color-sidebar-text: #CBD5E1;
-  --color-sidebar-active: #F59E0B;
+  --shadow-color: 20 20 40;
+  --shadow-sm: 0 1px 2px rgb(var(--shadow-color) / 0.05);
+  --shadow-md: 0 1px 2px rgb(var(--shadow-color) / 0.04), 0 4px 16px rgb(var(--shadow-color) / 0.07);
+  --shadow-lg: 0 2px 4px rgb(var(--shadow-color) / 0.04), 0 12px 32px rgb(var(--shadow-color) / 0.12);
 }
 
 /* ==========================================
    Dark Mode Overrides (applied to all palettes)
    ========================================== */
 .dark {
-  --color-bg: #0F172A;
-  --color-surface: #1E293B;
-  --color-border: #334155;
-  --color-text: #F1F5F9;
-  --color-text-secondary: #94A3B8;
-  --color-text-muted: #64748B;
+  /* The brand colour is lifted a little so buttons and links read on dark surfaces. */
+  --color-primary: color-mix(in srgb, var(--brand) 86%, white);
+  --color-primary-hover: var(--brand);
 
-  /* Badge/tint backgrounds: translucent tints of the base hue so they read on a
-     dark surface instead of the near-white light-mode swatches. */
-  --color-primary-light: color-mix(in srgb, var(--color-primary) 28%, transparent);
-  --color-success-light: color-mix(in srgb, var(--color-success) 26%, transparent);
-  --color-warning-light: color-mix(in srgb, var(--color-warning) 26%, transparent);
-  --color-danger-light: color-mix(in srgb, var(--color-danger) 26%, transparent);
-  --color-info-light: color-mix(in srgb, var(--color-info) 28%, transparent);
-  --color-accent-light: color-mix(in srgb, var(--color-accent) 28%, transparent);
-  --color-neutral-light: color-mix(in srgb, var(--color-neutral) 30%, transparent);
+  --color-bg: #0E0E14;
+  --color-surface: #16161F;
+  --color-sunken: #1C1C27;
+  --color-border: #262633;
+  --color-border-strong: #33333F;
+  --color-text: #EDEDF3;
+  --color-text-secondary: #A3A3B5;
+  --color-text-muted: #75758A;
+
+  --tone-ink: #fff;
+  --tone-ink-amount: 50%;
+  --tone-bg-amount: 20%;
+
+  --shadow-color: 0 0 0;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px rgb(0 0 0 / 0.35);
+  --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 16px 40px rgb(0 0 0 / 0.5);
+}
+
+/* Tints and readable text-on-tint, derived for both modes. */
+:root, .dark {
+  --color-primary-light: color-mix(in srgb, var(--color-primary) var(--tone-bg-amount), var(--color-surface));
+  --color-primary-text: color-mix(in srgb, var(--color-primary), var(--tone-ink) var(--tone-ink-amount));
+  --color-accent-light: color-mix(in srgb, var(--color-accent) var(--tone-bg-amount), var(--color-surface));
+  --color-success-light: color-mix(in srgb, var(--color-success) var(--tone-bg-amount), var(--color-surface));
+  --color-warning-light: color-mix(in srgb, var(--color-warning) var(--tone-bg-amount), var(--color-surface));
+  --color-danger-light: color-mix(in srgb, var(--color-danger) var(--tone-bg-amount), var(--color-surface));
+  --color-info-light: color-mix(in srgb, var(--color-info) var(--tone-bg-amount), var(--color-surface));
+  --color-neutral-light: color-mix(in srgb, var(--color-neutral) var(--tone-bg-amount), var(--color-surface));
 }
 
 /* ==========================================
@@ -132,31 +96,32 @@
   --color-primary: var(--color-primary);
   --color-primary-hover: var(--color-primary-hover);
   --color-primary-light: var(--color-primary-light);
+  --color-primary-text: var(--color-primary-text);
   --color-accent: var(--color-accent);
+  --color-accent-light: var(--color-accent-light);
   --color-success: var(--color-success);
   --color-success-light: var(--color-success-light);
   --color-warning: var(--color-warning);
   --color-warning-light: var(--color-warning-light);
   --color-danger: var(--color-danger);
   --color-danger-light: var(--color-danger-light);
-  --color-neutral: var(--color-neutral);
-  --color-neutral-light: var(--color-neutral-light);
   --color-info: var(--color-info);
   --color-info-light: var(--color-info-light);
-  --color-accent-light: var(--color-accent-light);
+  --color-neutral: var(--color-neutral);
+  --color-neutral-light: var(--color-neutral-light);
 
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
+  --color-sunken: var(--color-sunken);
   --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
   --color-text: var(--color-text);
   --color-text-secondary: var(--color-text-secondary);
   --color-text-muted: var(--color-text-muted);
 
-  --color-sidebar-bg: var(--color-sidebar-bg);
-  --color-sidebar-bg-dark: var(--color-sidebar-bg-dark);
-  --color-sidebar-text: var(--color-sidebar-text);
-  --color-sidebar-active: var(--color-sidebar-active);
-  --color-sidebar-hover: var(--color-sidebar-hover);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -171,23 +136,26 @@ body {
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
 }
 
+.dark { color-scheme: dark; }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
+  background: var(--color-border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--color-bg);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-neutral);
+  background: var(--color-text-muted);
 }
 
 /* Focus ring */
@@ -201,4 +169,100 @@ body {
 .rtl {
   direction: rtl;
   text-align: right;
+}
+
+/* ==========================================
+   Components — the React wrappers live in components/ui/.
+   ========================================== */
+@layer components {
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
+    height: 2.25rem; padding: 0 0.875rem; border-radius: 0.5rem; border: 1px solid transparent;
+    font-size: 0.875rem; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer;
+    transition: background-color 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn svg { width: 1rem; height: 1rem; flex: none; }
+  .btn-sm { height: 1.875rem; padding: 0 0.625rem; font-size: 0.8125rem; }
+  .btn-icon { width: 2.25rem; padding: 0; }
+  .btn-icon.btn-sm { width: 1.875rem; }
+
+  .btn-primary { background: var(--color-primary); color: #fff; box-shadow: var(--shadow-sm), inset 0 1px 0 rgb(255 255 255 / 0.12); }
+  .btn-primary:not(:disabled):hover { background: var(--color-primary-hover); }
+  .btn-secondary { background: var(--color-surface); border-color: var(--color-border-strong); color: var(--color-text); box-shadow: var(--shadow-sm); }
+  .btn-secondary:not(:disabled):hover { background: var(--color-sunken); }
+  .btn-ghost { background: transparent; color: var(--color-text-secondary); }
+  .btn-ghost:not(:disabled):hover { background: var(--color-sunken); color: var(--color-text); }
+  .btn-danger {
+    background: var(--color-surface); color: color-mix(in srgb, var(--color-danger), var(--tone-ink) var(--tone-ink-amount));
+    border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-border)); box-shadow: var(--shadow-sm);
+  }
+  .btn-danger:not(:disabled):hover { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+
+  /* Form controls */
+  .input {
+    width: 100%; height: 2.25rem; padding: 0 0.75rem; border-radius: 0.5rem;
+    border: 1px solid var(--color-border-strong); background: var(--color-surface); color: var(--color-text);
+    font-size: 0.875rem; box-shadow: var(--shadow-sm); transition: border-color 0.12s, box-shadow 0.12s;
+  }
+  textarea.input { height: auto; min-height: 5rem; padding: 0.5rem 0.75rem; line-height: 1.5; }
+  .input::placeholder { color: var(--color-text-muted); }
+  .input:focus, .input:focus-within { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent); }
+  .input:disabled { background: var(--color-sunken); color: var(--color-text-muted); }
+  .input[aria-invalid="true"] { border-color: var(--color-danger); }
+  /* An .input wrapper holding an icon and a bare <input> (search boxes) */
+  .input-group { display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-muted); }
+  .input-group svg { width: 1rem; height: 1rem; flex: none; }
+  .input-group input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--color-text); }
+  .input-group input::placeholder { color: var(--color-text-muted); }
+  .input-group input:focus-visible { outline: none; } /* the wrapper shows focus */
+
+  /* Surfaces */
+  .card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 0.75rem; box-shadow: var(--shadow-sm); }
+
+  /* Tables */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  .data-table th {
+    text-align: left; padding: 0.625rem 1rem; font-size: 0.75rem; font-weight: 600; color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border); white-space: nowrap; user-select: none;
+  }
+  .data-table th[aria-sort] { cursor: pointer; }
+  .data-table th[aria-sort]:hover { color: var(--color-text); }
+  .data-table td { padding: 0.6875rem 1rem; border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); vertical-align: middle; }
+  .data-table tbody tr:last-child td { border-bottom: 0; }
+  .data-table tbody tr[data-href] { cursor: pointer; transition: background-color 0.12s; }
+  .data-table tbody tr[data-href]:hover { background: color-mix(in srgb, var(--color-sunken) 70%, transparent); }
+  .data-table .row-chevron { opacity: 0; transform: translateX(-4px); transition: opacity 0.15s, transform 0.15s; color: var(--color-text-muted); }
+  .data-table tbody tr:hover .row-chevron { opacity: 1; transform: none; }
+
+  /* Status tones: set --c, get readable text on a tint in both modes. */
+  .tone { --c: var(--color-neutral); color: color-mix(in srgb, var(--c), var(--tone-ink) var(--tone-ink-amount)); background: color-mix(in srgb, var(--c) var(--tone-bg-amount), var(--color-surface)); }
+  .tone-neutral { --c: var(--color-neutral); }
+  .tone-info { --c: var(--color-info); }
+  .tone-primary { --c: var(--color-primary); }
+  .tone-purple { --c: var(--color-purple); }
+  .tone-success { --c: var(--color-success); }
+  .tone-warning { --c: var(--color-warning); }
+  .tone-danger { --c: var(--color-danger); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 0.375rem; height: 1.375rem; padding: 0 0.5rem;
+    border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+  }
+  .badge-dot::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--c, currentColor); }
+
+  /* Segmented control (filters, view toggles) */
+  .segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--color-sunken); border: 1px solid var(--color-border); border-radius: 0.5rem; }
+  .segmented button {
+    display: inline-flex; align-items: center; gap: 0.375rem; height: 1.75rem; padding: 0 0.625rem; border-radius: 0.375rem;
+    font-size: 0.8125rem; font-weight: 500; color: var(--color-text-secondary); cursor: pointer; white-space: nowrap;
+  }
+  .segmented button:hover { color: var(--color-text); }
+  .segmented button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-text); box-shadow: var(--shadow-sm); }
+  .segmented svg { width: 1rem; height: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
