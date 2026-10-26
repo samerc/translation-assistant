@@ -1,5 +1,6 @@
 #!/bin/bash
-# Full integration test for Translation Assistant
+# Full integration test for Translation Assistant (live API + frontend pages)
+# Needs backend on :3005 and frontend on :3080. Run: bash scripts/test-integration.sh
 # Tests all endpoints: happy paths, validation errors, business logic errors, security
 
 API="http://localhost:3005/api"
@@ -86,7 +87,7 @@ check "Register: common password rejected" "too common" "$R"
 R=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" -d '{"email":"test@test.com","password":"short","firstName":"A","lastName":"B","inviteToken":"fake"}')
 check "Register: short password → 400" "must be longer" "$R"
 
-R=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" -d '{"email":"test@test.com","password":"validlongpassphrase","firstName":"A","lastName":"B","inviteToken":"nonexistent-token"}')
+R=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" -d '{"email":"test@test.com","password":"Valid-Passphrase-42","firstName":"A","lastName":"B","inviteToken":"nonexistent-token"}')
 check "Register: bad invite token → 400" "Invalid or expired invite" "$R"
 
 R=$(curl -s -X POST "$API/auth/register" -H "Content-Type: application/json" -d '{"email":"not-email","password":"validpassphrase12","firstName":"A","lastName":"B","inviteToken":"x"}')
@@ -121,7 +122,7 @@ check "Reset password: common password rejected" "too common" "$R"
 R=$(curl -s -X POST "$API/auth/reset-password" -H "Content-Type: application/json" -d '{"token":"'$RESET_TOKEN'","newPassword":"short"}')
 check "Reset password: too short → 400" "must be longer" "$R"
 
-R=$(curl -s -X POST "$API/auth/reset-password" -H "Content-Type: application/json" -d '{"token":"invalid-token","newPassword":"mynewsecurepass99"}')
+R=$(curl -s -X POST "$API/auth/reset-password" -H "Content-Type: application/json" -d '{"token":"invalid-token","newPassword":"My-New-Secure-Pass-99"}')
 check "Reset password: bad token → 400" "Invalid or expired" "$R"
 
 # ═══════════════════════════════════════
@@ -159,7 +160,7 @@ check "Create user: empty firstName → 400" "must be longer" "$R"
 R=$(curl -s -X POST "$API/users" -H "$H" -H "Content-Type: application/json" -d '{"email":"dup@test.com","password":"uniquepass999","firstName":"A","lastName":"B","roleId":"not-a-uuid"}')
 check "Create user: bad roleId → 400" "must be a UUID" "$R"
 
-R=$(curl -s -X POST "$API/users/change-password" -H "$H" -H "Content-Type: application/json" -d '{"currentPassword":"wrongcurrent1","newPassword":"newvalid12345"}')
+R=$(curl -s -X POST "$API/users/change-password" -H "$H" -H "Content-Type: application/json" -d '{"currentPassword":"wrongcurrent1","newPassword":"New-Valid-12345"}')
 check "Change password: wrong current → 400" "Current password is incorrect" "$R"
 
 R=$(curl -s -X POST "$API/users/change-password" -H "$H" -H "Content-Type: application/json" -d '{"currentPassword":"admin123!","newPassword":"password1"}')
@@ -560,11 +561,13 @@ check "SQL injection blocked" "invalid data" "$R"
 R=$(curl -s -X POST "$API/clients" -H "$H" -H "Content-Type: application/json" -d '{"type":"person","name":"<script>alert(1)</script>"}')
 check "XSS script tag blocked" "invalid data" "$R"
 
-R=$(curl -s -X POST "$API/clients" -H "$H" -H "Content-Type: application/json" -d '{"type":"person","name":"<img onerror=alert(1)>"}')
-check "XSS event handler blocked" "invalid data" "$R"
+# The guard is a narrow, low-false-positive tripwire (plain words like
+# "DROP TABLE" or "onerror" are allowed — translator text hits them).
+R=$(curl -s -X POST "$API/clients" -H "$H" -H "Content-Type: application/json" -d '{"type":"person","name":"<a href=\"javascript:alert(1)\">x</a>"}')
+check "XSS javascript: URI blocked" "invalid data" "$R"
 
-R=$(curl -s -X POST "$API/clients" -H "$H" -H "Content-Type: application/json" -d '{"type":"person","name":"test; DROP TABLE users; --"}')
-check "SQL DROP TABLE blocked" "invalid data" "$R"
+R=$(curl -s -X POST "$API/clients" -H "$H" -H "Content-Type: application/json" -d "{\"type\":\"person\",\"name\":\"x'; WAITFOR DELAY '0:0:5'--\"}")
+check "SQL time-based injection blocked" "invalid data" "$R"
 
 # Honeypot
 R=$(curl -s -X POST "$API/clients" -H "$H" -H "Content-Type: application/json" -d '{"type":"person","name":"Bot","_hp":"filled"}')
