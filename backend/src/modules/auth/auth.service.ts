@@ -77,7 +77,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const passwordValid = await bcrypt.compare(dto.password, user.password);
+    const passwordValid = await bcrypt.compare(
+      dto.password,
+      await this.loadPasswordHash(user.id),
+    );
     if (!passwordValid) {
       this.recordFailure(attemptKey);
       throw new UnauthorizedException('Invalid credentials');
@@ -546,6 +549,15 @@ export class AuthService {
         this.loginAttempts.delete(key);
       }
     }
+  }
+
+  // `password` is select: false on User, so it must be fetched on its own.
+  private async loadPasswordHash(userId: string): Promise<string> {
+    const row = await this.userRepository.findOne({
+      where: { id: userId },
+      select: { id: true, password: true },
+    });
+    return row?.password ?? '';
   }
 
   // ── Sanitize ──

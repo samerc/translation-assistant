@@ -31,7 +31,10 @@ import {
   CreateClientAddressDto,
 } from './dto/client-detail.dto.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
-import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
+import {
+  FileValidationPipe,
+  UPLOAD_HARD_LIMIT_BYTES,
+} from '../../common/pipes/file-validation.pipe.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -356,7 +359,12 @@ export class ClientsController {
 
   @Post(':id/passports')
   @RequirePermissions('clients:create')
-  @UseInterceptors(FileInterceptor('file', { storage: uploadStorage }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: uploadStorage,
+      limits: { fileSize: UPLOAD_HARD_LIMIT_BYTES },
+    }),
+  )
   async createPassportCopy(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('label') label: string,

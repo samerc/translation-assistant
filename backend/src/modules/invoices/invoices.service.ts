@@ -37,11 +37,13 @@ export class InvoicesService {
     private readonly dataSource: DataSource,
   ) {}
 
-  // Verify user has access to this invoice (created it or has access to a linked job)
+  // Verify user has access to this invoice (created it or has access to a linked job).
+  // 'edit' for writes: a view-only assignment on a linked job grants read only.
   async verifyInvoiceAccess(
     invoiceId: string,
     userId: string,
     isAdmin: boolean,
+    level: 'view' | 'edit' = 'view',
   ): Promise<Invoice> {
     const invoice = await this.findOne(invoiceId);
     if (isAdmin) return invoice;
@@ -53,7 +55,11 @@ export class InvoicesService {
     const jobIds = invoice.items.filter((i) => i.jobId).map((i) => i.jobId);
     if (jobIds.length > 0) {
       const assignment = await this.jobUserRepository.findOne({
-        where: { jobId: In(jobIds), userId },
+        where: {
+          jobId: In(jobIds),
+          userId,
+          ...(level === 'edit' && { permissionLevel: 'edit' as const }),
+        },
       });
       if (assignment) return invoice;
     }
@@ -65,6 +71,7 @@ export class InvoicesService {
     jobId: string,
     userId: string,
     isAdmin: boolean,
+    level: 'view' | 'edit' = 'view',
   ): Promise<void> {
     if (isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
@@ -72,6 +79,9 @@ export class InvoicesService {
     });
     if (!assignment) {
       throw new ForbiddenException('You do not have access to this job');
+    }
+    if (level === 'edit' && assignment.permissionLevel !== 'edit') {
+      throw new ForbiddenException('You have view-only access to this job');
     }
   }
 
@@ -275,7 +285,7 @@ export class InvoicesService {
     }
     // IDOR guard: the caller must be able to access every job they link.
     for (const jobId of new Set(jobIds)) {
-      await this.verifyJobAccess(jobId, userId, isAdmin);
+      await this.verifyJobAccess(jobId, userId, isAdmin, 'edit');
     }
     const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
@@ -349,7 +359,7 @@ export class InvoicesService {
           dto.items.filter((i) => i.jobId).map((i) => i.jobId!),
         );
         for (const jobId of jobIds) {
-          await this.verifyJobAccess(jobId, userId, isAdmin);
+          await this.verifyJobAccess(jobId, userId, isAdmin, 'edit');
         }
       }
       await this.itemRepository.delete({ invoiceId: id });

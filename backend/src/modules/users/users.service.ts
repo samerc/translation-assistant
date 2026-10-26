@@ -91,7 +91,11 @@ export class UsersService {
   }
 
   async changePassword(id: string, dto: ChangePasswordDto): Promise<void> {
-    const user = await this.userRepository.findOne({ where: { id } });
+    // password is select: false on User — ask for it explicitly.
+    const user = await this.userRepository.findOne({
+      where: { id },
+      select: { id: true, password: true },
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const passwordValid = await bcrypt.compare(

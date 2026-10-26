@@ -57,7 +57,7 @@ translation-assistant/
 
 ## Auth
 - JWT access tokens (15 min TTL, returned in body → localStorage) + refresh tokens (7 days)
-- **Refresh token delivered as an httpOnly, SameSite=Lax cookie** (`refresh_token`, path `/api/auth`, `secure` in prod) — never exposed in the response body. Requires `cookie-parser` (wired in `main.ts`) and CORS `credentials: true`.
+- **Refresh token delivered as an httpOnly, SameSite=Strict cookie** (`refresh_token`, path `/api/auth`, `secure` in prod) — never exposed in the response body. Requires `cookie-parser` (wired in `main.ts`) and CORS `credentials: true`.
 - Refresh token rotation with bcrypt hashing
 - **Session tracking**: each login/refresh records a `Session` (IP, user-agent, lastUsed). Users can list active sessions (`GET /auth/sessions`), revoke one (`DELETE /auth/sessions/:id`), or `logout-everywhere` (revokes all + clears cookie). Password reset revokes all sessions.
 - **Password reset flow**: `forgot-password` → `verify-reset-token` → `reset-password`. Tokens are 32-byte random, single-use, 30-min expiry (`PasswordResetToken`). No email service yet — in **non-production** the token is returned in the response for testing; in production only a generic message is returned (see `requestPasswordReset` TODO to wire email).
@@ -65,6 +65,8 @@ translation-assistant/
 - 3 default roles: Admin (all permissions), Translator (CRUD on core resources), Viewer (read-only)
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
 - **`@AdminOnly()` + `AdminGuard`**: hard role-name check (DB) on top of RBAC for privilege-sensitive endpoints (e.g. invite, role management) — prevents a `roles:update` holder from self-escalating
+- **The Admin role is fixed** (`roles.service.ts`): it cannot be renamed, deleted or have its permissions changed — every admin check matches the literal name `Admin`, so changing it would lock admins out with no way back in the app
+- `JwtStrategy` accepts only `type: 'access'` tokens — refresh and file-access tokens (same secret; file tokens travel in URLs) are refused as API bearers
 - Invite-only registration: admin generates invite tokens via `POST /api/auth/invite`
 - Invite tokens are email-bound, one-time use, 7-day expiry
 
@@ -73,14 +75,18 @@ translation-assistant/
 - JWT secret required via env var in production (crashes on startup if missing)
 - Password complexity enforced: uppercase, lowercase, number, special character required
 - Job access control: `JobAccessGuard` checks user assignment, admins bypass
-- View-only users blocked from write operations on jobs
+- View-only users blocked from write operations on jobs, documents and invoices (`verifyJobAccess`/`verifyDocumentAccess`/`verifyInvoiceAccess` take a `'view' | 'edit'` level — pass `'edit'` on every write)
+- `User.password` and `User.refreshToken` are `select: false` — never returned by any query (JobUser.user is eager). Code that needs the hash selects it explicitly (`loadPasswordHash`, `changePassword`)
+- Emailing an invoice needs `invoices:update` + edit access, rate-limited to 10/hour (it sends branded mail to any address)
+- Settings responses (GET and PATCH) never include `smtpPass` — only `smtpPassSet`
 - Non-admin job list filtered to only assigned jobs (innerJoin on job_users)
 - ALL document endpoints verify job access via `verifyDocumentAccess()`/`verifyJobAccess()`
 - ALL invoice endpoints verify access via `verifyInvoiceAccess()` (creator or linked job access)
 - Document clone validates access to both source and target jobs
 - Document search-for-clone filtered by user's accessible jobs
 - File linking validates access to source job
-- File uploads validated against allowed types and max size
+- File uploads validated against allowed types and max size; multer hard cap `UPLOAD_HARD_LIMIT_BYTES` (100 MB) on disk uploads
+- `UploadCleanupInterceptor` (global) deletes multer disk uploads whenever the request fails — rejected/unauthorized uploads never stay on disk
 - Filenames sanitized in Content-Disposition headers (`replace(/[^\w.\-]/g, '_')`)
 - JWT token for file viewing passed via query param (not stored in URLs)
 - Pagination limits enforced server-side (max 100)
@@ -113,7 +119,7 @@ translation-assistant/
 - Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
 - Transactions: job creation and invoice creation wrapped in `dataSource.transaction()`
 - No eager loading on entities — all relations loaded explicitly per query
-- List endpoints use `loadRelationCountAndMap` for counts (not full relation joins)
+- List endpoints use `attachRelationCount()` for counts (not full relation joins)
 - N+1 eliminated: batch `IN()` queries, `Promise.all` for parallel validation
 - `recalculateTotal` uses DB `SUM()` aggregation (not in-memory)
 - Cron job overlap prevention: in-memory lock + error handling + logging

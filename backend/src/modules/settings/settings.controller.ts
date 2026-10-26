@@ -12,6 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
+import { AppSettings } from './entities/app-settings.entity.js';
 import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
 import {
   CreateLabelOptionDto,
@@ -39,7 +40,20 @@ export class SettingsController {
   @Get()
   @RequirePermissions('settings:read')
   async getSettings(@CurrentUser() user: User) {
-    const settings = await this.settingsService.getSettings();
+    return this.present(await this.settingsService.getSettings(), user);
+  }
+
+  @Patch()
+  @RequirePermissions('settings:update')
+  @AdminOnly()
+  async updateSettings(
+    @Body() dto: UpdateSettingsDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.present(await this.settingsService.updateSettings(dto), user);
+  }
+
+  private present(settings: AppSettings, user: User) {
     // Never expose the stored SMTP password; signal only whether one is set.
     const {
       smtpPass,
@@ -66,13 +80,6 @@ export class SettingsController {
       };
     }
     return safe;
-  }
-
-  @Patch()
-  @RequirePermissions('settings:update')
-  @AdminOnly()
-  updateSettings(@Body() dto: UpdateSettingsDto) {
-    return this.settingsService.updateSettings(dto);
   }
 
   // ── Languages ──
