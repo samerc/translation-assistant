@@ -6,6 +6,8 @@ import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { useClientOptions } from '@/lib/use-client-options';
+import { useSettings } from '@/lib/settings-context';
+import { localDateString, todayLocal } from '@/lib/format';
 
 interface ClientOption { id: string; name: string; }
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
@@ -22,14 +24,17 @@ export default function NewInvoicePage() {
 
   const [clientId, setClientId] = useState('');
   const clients = useClientOptions<ClientOption>(clientId);
-  const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
+  const { baseCurrency } = useSettings();
+  const [issueDate, setIssueDate] = useState(() => todayLocal());
   const [dueDate, setDueDate] = useState(() => {
     const due = new Date();
     due.setDate(due.getDate() + 30); // default: 30 days from now
-    return due.toISOString().split('T')[0];
+    return localDateString(due);
   });
   const [taxRate, setTaxRate] = useState(0);
-  const [currency, setCurrency] = useState('USD');
+  // null = not edited yet → follow the base currency (settings may load after mount).
+  const [currencyInput, setCurrency] = useState<string | null>(null);
+  const currency = currencyInput ?? baseCurrency;
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([{ description: '', jobId: '', quantity: 1, unitPrice: 0 }]);
 

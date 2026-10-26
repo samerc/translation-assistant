@@ -95,7 +95,9 @@ export class JobsService {
     discountedPricePerPage?: number | null;
   }): number {
     const price =
-      item.useDiscountedPrice && item.discountedPricePerPage
+      item.useDiscountedPrice &&
+      item.discountedPricePerPage !== null &&
+      item.discountedPricePerPage !== undefined
         ? Number(item.discountedPricePerPage)
         : Number(item.pricePerPage);
     return item.pageCount * price;

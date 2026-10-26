@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { todayLocal } from '@/lib/format';
+import { useNow } from '@/lib/use-now';
 
 interface CalendarEvent {
   id: string;
@@ -18,7 +20,7 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function CalendarPage() {
-  const now = new Date();
+  const now = new Date(useNow());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -26,9 +28,12 @@ export default function CalendarPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // `ignore` drops a slower response for a month the user has already clicked past.
+    let ignore = false;
     api.get<CalendarEvent[]>(`/calendar/events?month=${month}&year=${year}`)
-      .then(setEvents)
-      .catch(() => setEvents([]));
+      .then((res) => { if (!ignore) setEvents(res); })
+      .catch(() => { if (!ignore) setEvents([]); });
+    return () => { ignore = true; };
   }, [month, year]);
 
   const eventsByDate = useMemo(() => {
@@ -73,22 +78,19 @@ export default function CalendarPage() {
     return days;
   }, [month, year]);
 
-  const goToToday = () => {
-    setMonth(now.getMonth() + 1);
-    setYear(now.getFullYear());
+  // Changing month clears the selected day (its panel would show another month's date).
+  const changeMonth = (m: number, y: number) => {
+    if (m === month && y === year) return;
+    setMonth(m);
+    setYear(y);
+    setSelectedDate(null);
   };
 
-  const prevMonth = () => {
-    if (month === 1) { setMonth(12); setYear(year - 1); }
-    else setMonth(month - 1);
-  };
+  const goToToday = () => changeMonth(now.getMonth() + 1, now.getFullYear());
+  const prevMonth = () => (month === 1 ? changeMonth(12, year - 1) : changeMonth(month - 1, year));
+  const nextMonth = () => (month === 12 ? changeMonth(1, year + 1) : changeMonth(month + 1, year));
 
-  const nextMonth = () => {
-    if (month === 12) { setMonth(1); setYear(year + 1); }
-    else setMonth(month + 1);
-  };
-
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayStr = todayLocal(now.getTime());
 
   const getDateKey = (d: { day: number; month: number; year: number }) =>
     `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;

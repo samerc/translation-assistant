@@ -16,12 +16,34 @@ export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 
   @Get()
-  search(@Query('q') q: string, @CurrentUser() user: User) {
+  async search(@Query('q') q: string, @CurrentUser() user: User) {
     if (!q || q.length < 2) {
       throw new BadRequestException(
         'Search query must be at least 2 characters',
       );
     }
-    return this.searchService.search(q, user.id, user.role?.name === 'Admin');
+    const results = await this.searchService.search(
+      q,
+      user.id,
+      user.role?.name === 'Admin',
+    );
+    // Search spans four resources; only return the ones the caller may read
+    // (e.g. a Translator has no invoices:read and must not see invoice numbers).
+    const canRead = (resource: string) =>
+      (user.role?.permissions ?? []).some(
+        (p) => p.resource === resource && p.action === 'read',
+      );
+    for (const resource of [
+      'clients',
+      'jobs',
+      'templates',
+      'invoices',
+    ] as const) {
+      if (!canRead(resource)) {
+        results[resource] = [];
+        results.counts[resource] = 0;
+      }
+    }
+    return results;
   }
 }

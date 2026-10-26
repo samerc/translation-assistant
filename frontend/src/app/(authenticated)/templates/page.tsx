@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
+import { useDebounce } from '@/lib/use-debounce';
 import { toast } from '@/lib/toast';
 import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
@@ -31,6 +32,7 @@ export default function TemplatesPage() {
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
@@ -39,18 +41,21 @@ export default function TemplatesPage() {
   const [view, setView] = useState<ViewMode>('table');
   const router = useRouter();
 
+  // Returns a cancel fn: the effect uses it so only the latest request's response is applied.
   const loadTemplates = () => {
+    let ignore = false;
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (statusFilter) params.set('isActive', statusFilter);
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
     api.get<Template[]>(`/templates?${params}`)
-      .then((res) => { setTemplates(res); setLoadError(false); })
-      .catch(() => setLoadError(true));
+      .then((res) => { if (!ignore) { setTemplates(res); setLoadError(false); } })
+      .catch(() => { if (!ignore) setLoadError(true); });
+    return () => { ignore = true; };
   };
 
-  useEffect(() => { loadTemplates(); }, [search, statusFilter, sortBy, sortOrder]);
+  useEffect(() => loadTemplates(), [debouncedSearch, statusFilter, sortBy, sortOrder]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {

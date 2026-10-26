@@ -5,6 +5,7 @@ import { Notification } from './entities/notification.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
+import { User } from '../users/entities/user.entity.js';
 
 @Injectable()
 export class NotificationsService {
@@ -220,9 +221,23 @@ export class NotificationsService {
       { status: 'overdue' },
     );
 
-    // Batch create notifications
+    // Batch create notifications — only for creators that still exist: one
+    // deleted user would fail the FK and drop every notification in the batch.
+    const creatorIds = [
+      ...new Set(overdueInvoices.map((i) => i.createdByUserId).filter(Boolean)),
+    ];
+    const existing = new Set(
+      creatorIds.length
+        ? (
+            await this.notificationRepository.manager.find(User, {
+              where: { id: In(creatorIds) },
+              select: { id: true },
+            })
+          ).map((u) => u.id)
+        : [],
+    );
     const notifications = overdueInvoices
-      .filter((inv) => inv.createdByUserId)
+      .filter((inv) => existing.has(inv.createdByUserId))
       .map((inv) =>
         this.notificationRepository.create({
           userId: inv.createdByUserId,

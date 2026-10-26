@@ -139,6 +139,16 @@ export class TemplatesController {
     return this.templatesService.addField(id, dto);
   }
 
+  // Before ':id/fields/:fieldId' — or 'reorder' would be parsed as a field id.
+  @Patch(':id/fields/reorder')
+  @RequirePermissions('templates:update')
+  reorderFields(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReorderFieldsDto,
+  ) {
+    return this.templatesService.reorderFields(id, dto.fieldIds);
+  }
+
   @Patch(':id/fields/:fieldId')
   @RequirePermissions('templates:update')
   updateField(
@@ -156,14 +166,5 @@ export class TemplatesController {
     @Param('fieldId', ParseUUIDPipe) fieldId: string,
   ) {
     return this.templatesService.removeField(id, fieldId);
-  }
-
-  @Patch(':id/fields/reorder')
-  @RequirePermissions('templates:update')
-  reorderFields(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ReorderFieldsDto,
-  ) {
-    return this.templatesService.reorderFields(id, dto.fieldIds);
   }
 }

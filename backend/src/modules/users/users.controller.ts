@@ -59,7 +59,18 @@ export class UsersController {
   @Patch(':id')
   @RequirePermissions('users:update')
   @AdminOnly()
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() user: User,
+  ) {
+    // Same rule as /deactivate: an admin can't lock themselves out (and since
+    // every caller is an admin, this also keeps at least one active admin).
+    if (id === user.id && (dto.isActive !== undefined || dto.roleId)) {
+      throw new ForbiddenException(
+        'You cannot change your own role or active status',
+      );
+    }
     return this.usersService.update(id, dto);
   }
 

@@ -126,17 +126,22 @@ export class InvoicesService {
     cancelled: ['draft'],
   };
 
-  private async generateInvoiceNumber(): Promise<string> {
-    const settings = await this.settingsRepository.find();
+  // MAX()+1 of the numbers with the current prefix. Call inside the create
+  // transaction after locking the settings row (see create()), so concurrent
+  // creates are serialized and can't pick the same number.
+  private async generateInvoiceNumber(manager: EntityManager): Promise<string> {
+    const settings = await manager.find(AppSettings, { take: 1 });
     const prefix = settings[0]?.invoicePrefix || 'INV-';
-    // Use MAX of existing invoice numbers to avoid race conditions
-    // Even with concurrent requests, the unique constraint will catch duplicates
-    const result = await this.invoiceRepository
-      .createQueryBuilder('inv')
+    const result = await manager
+      .createQueryBuilder(Invoice, 'inv')
       .select(
         'MAX(CAST(SUBSTRING(inv.invoiceNumber, :prefixLen + 1) AS UNSIGNED))',
         'maxNum',
       )
+      .where('inv.invoiceNumber LIKE :like', {
+        // only numbers with the current prefix (LIKE wildcards escaped)
+        like: prefix.replace(/[\\%_]/g, (c) => `\\${c}`) + '%',
+      })
       .setParameter('prefixLen', prefix.length)
       .getRawOne<{ maxNum: string | number | null }>();
     const nextNum = Number(result?.maxNum ?? 0) + 1;
@@ -308,10 +313,14 @@ export class InvoicesService {
       taxRate,
     );
 
-    const invoiceNumber = await this.generateInvoiceNumber();
-
-    // Wrap invoice + items creation in a transaction
+    // Numbering + invoice + items in one transaction. Locking the settings row
+    // serializes concurrent creates, so MAX()+1 never hands out a number twice.
     const savedId = await this.dataSource.transaction(async (manager) => {
+      await manager
+        .createQueryBuilder(AppSettings, 's')
+        .setLock('pessimistic_write')
+        .getMany();
+      const invoiceNumber = await this.generateInvoiceNumber(manager);
       const invoice = manager.create(Invoice, {
         invoiceNumber,
         clientId: dto.clientId,
@@ -479,10 +488,10 @@ export class InvoicesService {
           'Payments can only be recorded on sent or overdue invoices',
         );
       }
-      const balance = this.round(
+      const balance = this.round2(
         Number(invoice.total) - Number(invoice.paidAmount ?? 0),
       );
-      const amount = this.round(dto.paidAmount);
+      const amount = this.round2(dto.paidAmount);
       if (amount > balance) {
         throw new BadRequestException(
           `The payment is more than the balance due (${invoice.currency} ${balance.toFixed(2)})`,
@@ -532,8 +541,8 @@ export class InvoicesService {
       .addSelect('MAX(p.paidAt)', 'lastPaidAt')
       .where('p.invoice_id = :id', { id: invoice.id })
       .getRawOne<{ paid: string | number; lastPaidAt: string | null }>();
-    const paid = this.round(Number(sum?.paid ?? 0));
-    const fullyPaid = paid > 0 && paid >= this.round(Number(invoice.total));
+    const paid = this.round2(Number(sum?.paid ?? 0));
+    const fullyPaid = paid > 0 && paid >= this.round2(Number(invoice.total));
 
     let status = invoice.status;
     if (fullyPaid) status = 'paid';
@@ -565,10 +574,6 @@ export class InvoicesService {
         { status: 'invoiced' },
       );
     }
-  }
-
-  private round(n: number): number {
-    return Math.round(n * 100) / 100;
   }
 
   private today(): string {

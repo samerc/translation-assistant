@@ -45,27 +45,30 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState('monthly');
 
   useEffect(() => {
+    // `ignore` drops a slower response for a tab/period the user has already left.
+    let ignore = false;
     if (activeTab === 'revenue') {
       const now = new Date();
       const from = new Date(now.getFullYear(), now.getMonth() - 6, 1);
       const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`;
       api.get<RevenueData[]>(`/reports/revenue?period=${period}&from=${fromStr}`)
         // Aggregates come back as strings from the DB — coerce for recharts + toFixed.
-        .then((rows) => setRevenueData(rows.map((r) => ({ ...r, revenue: Number(r.revenue) }))))
-        .catch(() => setRevenueData([]));
+        .then((rows) => { if (!ignore) setRevenueData(rows.map((r) => ({ ...r, revenue: Number(r.revenue) }))); })
+        .catch(() => { if (!ignore) setRevenueData([]); });
     } else if (activeTab === 'client') {
       api.get<ClientData[]>('/reports/by-client')
-        .then((rows) => setClientData(rows.map((c) => ({
+        .then((rows) => { if (!ignore) setClientData(rows.map((c) => ({
           ...c,
           totalRevenue: Number(c.totalRevenue),
           invoiceCount: Number(c.invoiceCount),
-        }))))
-        .catch(() => setClientData([]));
+        }))); })
+        .catch(() => { if (!ignore) setClientData([]); });
     } else if (activeTab === 'status') {
       api.get<StatusData[]>('/reports/job-status')
-        .then((rows) => setStatusData(rows.map((s) => ({ ...s, count: Number(s.count) }))))
-        .catch(() => setStatusData([]));
+        .then((rows) => { if (!ignore) setStatusData(rows.map((s) => ({ ...s, count: Number(s.count) }))); })
+        .catch(() => { if (!ignore) setStatusData([]); });
     }
+    return () => { ignore = true; };
   }, [activeTab, period]);
 
   const tabs = [

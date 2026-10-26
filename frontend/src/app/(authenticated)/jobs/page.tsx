@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useDebounce } from '@/lib/use-debounce';
 import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
@@ -47,6 +48,7 @@ export default function JobsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
@@ -54,9 +56,11 @@ export default function JobsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Returns a cancel fn: the effect uses it so only the latest request's response is applied.
   const loadJobs = () => {
+    let ignore = false;
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (statusFilter) params.set('status', statusFilter);
     const clientId = searchParams.get('clientId');
     if (clientId) params.set('clientId', clientId);
@@ -66,14 +70,16 @@ export default function JobsPage() {
     params.set('limit', '25');
 
     api.get<JobsResponse>(`/jobs?${params}`).then((res) => {
+      if (ignore) return;
       setLoadError(false);
       setJobs(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    }).catch(() => setLoadError(true));
+    }).catch(() => { if (!ignore) setLoadError(true); });
+    return () => { ignore = true; };
   };
 
-  useEffect(() => { loadJobs(); }, [search, statusFilter, sortBy, sortOrder, page, searchParams]);
+  useEffect(() => loadJobs(), [debouncedSearch, statusFilter, sortBy, sortOrder, page, searchParams]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) { setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC'); }

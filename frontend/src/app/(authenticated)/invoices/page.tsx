@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { useDebounce } from '@/lib/use-debounce';
 import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { INVOICE_STATUS_BADGE } from '@/lib/status';
-import { formatDate } from '@/lib/format';
+import { formatDate, todayLocal } from '@/lib/format';
+import { useNow } from '@/lib/use-now';
 
 interface Invoice {
   id: string;
@@ -44,20 +46,24 @@ export default function InvoicesPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [clientFilter, setClientFilter] = useState('');
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const router = useRouter();
+  const today = todayLocal(useNow());
 
   useEffect(() => {
     api.get<{ data: ClientOption[] }>('/clients?limit=100').then((res) => setClients(res.data));
   }, []);
 
+  // Returns a cancel fn: the effect uses it so only the latest request's response is applied.
   const loadInvoices = () => {
+    let ignore = false;
     const params = new URLSearchParams();
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (statusFilter) params.set('status', statusFilter);
     if (clientFilter) params.set('clientId', clientFilter);
     params.set('sortBy', sortBy);
@@ -66,14 +72,16 @@ export default function InvoicesPage() {
     params.set('limit', '25');
 
     api.get<InvoicesResponse>(`/invoices?${params}`).then((res) => {
+      if (ignore) return;
       setLoadError(false);
       setInvoices(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
-    }).catch(() => setLoadError(true));
+    }).catch(() => { if (!ignore) setLoadError(true); });
+    return () => { ignore = true; };
   };
 
-  useEffect(() => { loadInvoices(); }, [search, statusFilter, clientFilter, sortBy, sortOrder, page]);
+  useEffect(() => loadInvoices(), [debouncedSearch, statusFilter, clientFilter, sortBy, sortOrder, page]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) { setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC'); }
@@ -150,7 +158,7 @@ export default function InvoicesPage() {
             )}
             {invoices.map((inv) => {
               const badge = getStatusBadge(inv.status);
-              const isOverdue = inv.status === 'sent' && new Date(inv.dueDate) < new Date();
+              const isOverdue = inv.status === 'sent' && inv.dueDate.slice(0, 10) < today;
               return (
                 <tr key={inv.id} onClick={() => router.push(`/invoices/${inv.id}`)}
                   className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">

@@ -49,3 +49,6 @@ backend/exports/
 # Next.js (regenerated on every build)
 frontend/next-env.d.ts
 frontend/AGENTS.md
+
+#Settings files
+.claude/settings.local.json

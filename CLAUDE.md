@@ -95,12 +95,12 @@ translation-assistant/
 - Job user assignment validates user exists before creating assignment
 - Invoice creation requires at least 1 line item
 - Word template uploads rejected if no valid placeholders found
-- Search access control: non-admins only see clients they have jobs with, only active templates
+- Search access control: non-admins only see clients they have jobs with, only active templates; each result type is dropped unless the caller has that resource's `:read` permission (Translators get no invoices)
 - Translate endpoint: language code validation, 5000 char limit, 10s timeout, 30/min rate limit
-- **Global guard chain (registration order in `app.module.ts`)**: `HoneypotGuard` (rejects writes with a filled hidden `_hp` field — bot trap) → `AbuseDetectionGuard` (blocks SQL-injection / XSS payloads in body/query/params) → `ThrottlerGuard` (global 300 req/min) → `WriteThrottleGuard` (120 write ops/min per user or IP). `AdminGuard` is applied per-controller (needs `req.user`).
+- **Global guard chain (registration order in `app.module.ts`)**: `HoneypotGuard` (rejects writes with a filled hidden `_hp` field — bot trap) → `AbuseDetectionGuard` (blocks SQL-injection / XSS payloads in JSON bodies — not query/params, and multipart fields are not parsed yet when global guards run) → `ThrottlerGuard` (global 300 req/min) → `WriteThrottleGuard` (120 write ops/min per user or IP). `AdminGuard` is applied per-controller (needs `req.user`).
 - **`GlobalExceptionFilter`** (`main.ts`): logs full technical details server-side, returns only sanitized messages to clients (no stack traces, SQL, or file paths); maps TypeORM `QueryFailedError`/`EntityNotFoundError` to safe 409/404/400
 - **Common-password blocklist**: registration/password-change reject the top ~550 breached passwords via `@IsNotCommonPassword` validator
-- Password reset tokens single-use, 30-min expiry; reset revokes all sessions
+- Password reset and invite tokens are single-use, claimed with a conditional `UPDATE … WHERE used = false` (safe under concurrent requests); reset revokes all sessions
 - Rate limiting: login (15/min), register (10/min), refresh (10/min), forgot-password (3/min), verify-reset (10/min), reset-password (5/min), change-password (5/min), invite (5/hr). Global fallback 300/min + 120 writes/min per identity.
 - Centralized frontend logger (ready for Sentry/external service)
 - Frontend: `ErrorBoundary` component wraps the app (`layout.tsx`) — graceful fallback UI on render errors
@@ -117,7 +117,7 @@ translation-assistant/
   - **Prod cutover runbook** (one-time — the prod DB predates the `sessions`/`password_reset_tokens` tables): (1) deploy once with `DB_SYNCHRONIZE=true` to create the two new tables, OR create them manually; (2) create a `migrations` table and insert the baseline row `(timestamp, name)` so `migrationsRun` treats the baseline as already applied; (3) set `DB_SYNCHRONIZE=false` (or `NODE_ENV=production`) for subsequent deploys. A fresh/empty DB instead just runs the baseline migration on first boot.
 - Connection pool: 20 max, 10s connect timeout, 30s idle timeout (configurable via env)
 - Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
-- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction
+- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction. Invoice numbers: `MAX()+1` for the current prefix, generated inside the create transaction after locking the `app_settings` row (serializes concurrent creates). Prefix max 15 chars (invoiceNumber is varchar(20))
 - Never `save()` an entity loaded with a `cascade: true` relation after replacing that relation's rows separately — TypeORM writes the stale loaded rows back. Use `update()` for the scalars (see `InvoicesService.update`)
 - No eager loading on entities — all relations loaded explicitly per query
 - List endpoints use `attachRelationCount()` for counts (not full relation joins)
@@ -143,6 +143,9 @@ translation-assistant/
 
 ## Conventions
 - **Lint is clean** (backend 0/0, frontend 0 errors) — keep it that way: `npm run lint` in each app. Backend tests relax `no-unsafe-*` (supertest bodies are `any`).
+- Config factories (`config/app.config.ts`, `config/database.config.ts`) read `process.env` inside the function, never at module load — `.env` is loaded by `ConfigModule.forRoot` after these files are imported.
+- `GlobalExceptionFilter` logs every database error server-side (error level) even when it is mapped to a 400 for the client.
+- Admins cannot change their own role or active status (`PATCH /users/:id`, `/deactivate`); deactivating by any route revokes the user's sessions.
 - Backend request typing: `getRequest<AuthenticatedRequest>()` behind the `jwt` guard, `MaybeAuthenticatedRequest` in global guards (they run before auth, so `req.user` is absent there), `RefreshRequest` on `/auth/refresh` — all in `common/types/authenticated-request.ts`. Raw queries: always `getRawOne<{...}>()` + `Number()`.
 - Temp export downloads: `streamThenDelete(filePath, res)` (deletes on success, error and client abort).
 - Frontend: no setState directly in effects or `Date.now()` in render (React Compiler lint) — derive state, use `useNow()` + `formatTimeAgo()`, `uid()` for client ids, `useSyncExternalStore` for module stores (see `lib/toast.tsx`, `lib/confirm.tsx`). `api.*` resolves empty response bodies as `undefined`.

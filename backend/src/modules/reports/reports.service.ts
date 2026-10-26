@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
+import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { InvoicePayment } from '../invoices/entities/invoice-payment.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 
@@ -87,19 +88,17 @@ export class ReportsService {
     }
     const dueThisWeek = await dueQb.getCount();
 
-    // Get currency from first paid invoice or default
-    const currencyResult = await this.invoiceRepository
-      .createQueryBuilder('inv')
-      .select('inv.currency', 'currency')
-      .limit(1)
-      .getRawOne<{ currency: string | null }>();
+    // Revenue is shown in the app's base currency (Settings > General).
+    const settings = await this.invoiceRepository.manager.find(AppSettings, {
+      take: 1,
+    });
 
     return {
       activeJobs,
       monthlyRevenue,
       pendingInvoices,
       dueThisWeek,
-      currency: currencyResult?.currency || 'USD',
+      currency: settings[0]?.baseCurrency || 'USD',
     };
   }
 

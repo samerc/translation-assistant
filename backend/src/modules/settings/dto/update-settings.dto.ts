@@ -24,7 +24,7 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(255) // column is varchar(255)
   companyLogo?: string;
 
   @IsOptional()
@@ -35,7 +35,8 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(50)
+  // invoiceNumber is varchar(20): prefix + at least 4-5 digits must fit
+  @MaxLength(15)
   invoicePrefix?: string;
 
   @IsOptional()
