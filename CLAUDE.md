@@ -160,13 +160,16 @@ translation-assistant/
 - Font: Plus Jakarta Sans (body), JetBrains Mono (code/monospace)
 
 ## Color Palettes
-Four palettes available (user selects in Settings > Appearance):
-- **Indigo Minimal** (default): Primary `#4F46E5`, Accent `#818CF8`
-- **Ocean Blue**: Primary `#1E40AF`, Accent `#3B82F6`
-- **Teal Focus**: Primary `#0D9488`, Accent `#2DD4BF`
-- **Slate & Amber**: Primary `#334155`, Accent `#F59E0B`
+Eight palettes (user selects in Settings > Appearance; saved per user in `colorPalette`):
+Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, Slate & Amber `#334155`, Violet `#7C3AED`, Orchid `#A21CAF`, Copper `#C2410C`, Forest `#15803D`.
+- A palette only sets `--brand`, `--brand-hover`, `--brand-accent` (`globals.css` `[data-palette]`); all tints, dark-mode lifts and text-on-tint colours are derived. Adding one = a CSS line + `PALETTE_OPTIONS` (`lib/theme-context.tsx`) + the `@IsIn` list in `UpdateUserDto`.
+- Light + dark mode supported (separate toggle from palette). Text on a tinted background uses `text-primary-text` / tone classes, never `text-primary` (unreadable in dark mode).
 
-Light + dark mode supported (separate toggle from palette).
+## UI Kit (`frontend/src/components/ui/`)
+- Use these instead of hand-written class strings: `Button`/`buttonClass()` (primary/secondary/ghost/danger; Cancel = secondary), `Input`/`Select`/`Textarea`/`SearchInput`/`Field`, `Badge`, `PageHeader`, `EmptyState`, `Alert`, `SegmentedControl` (≤4 options), `TableCard`/`SortableTh`/`RowChevron`/`Pagination` (`DataTable.tsx`), outline icons in `icons.tsx`.
+- CSS component classes behind them live in `globals.css` `@layer components` (`.btn*`, `.input`, `.card`, `.data-table`, `.badge`, `.tone-*`, `.segmented`). Status colours: `lib/status.ts` maps → tone classes.
+- Clickable table rows: `<tr data-href onClick=…>` + `<RowChevron />` as the last cell.
+- Migrated so far: app shell (Sidebar/Topbar), Clients/Jobs/Invoices/Templates lists, Settings > Appearance. Other pages still use inline classes (they pick up the new tokens) — migrate when touched.
 
 ## Database Entities
 

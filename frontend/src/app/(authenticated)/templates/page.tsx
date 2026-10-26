@@ -5,11 +5,19 @@ import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
 import { toast } from '@/lib/toast';
-import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, SearchInput, Select } from '@/components/ui/Field';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Badge } from '@/components/ui/Badge';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { RowChevron, SortableTh, TableCard } from '@/components/ui/DataTable';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Alert } from '@/components/ui/Alert';
+import { FileTextIcon, GridIcon, PlusIcon, TableIcon } from '@/components/ui/icons';
 
 interface Template {
   id: string;
@@ -88,180 +96,145 @@ export default function TemplatesPage() {
     }
   };
 
+  const filtered = Boolean(search || statusFilter);
+  const empty = templates.length === 0 && !loadError && (
+    <EmptyState
+      icon={<FileTextIcon />}
+      title={filtered ? 'No templates match your filters' : 'No templates yet'}
+      description={filtered ? 'Try another name, or clear the status filter.' : 'Templates hold the fields and layout for documents you translate often, like passports or certificates.'}
+    />
+  );
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-text">Templates</h1>
-        {hasPermission('templates:create') && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover transition-colors"
-          >
-            + New Template
-          </button>
+      <PageHeader
+        title="Templates"
+        description="Document layouts and per-page pricing."
+        actions={hasPermission('templates:create') && (
+          <Button variant="primary" icon={<PlusIcon />} onClick={() => setShowForm(true)}>New template</Button>
         )}
-      </div>
+      />
 
       {showForm && (
-        <form onSubmit={handleCreate} className="bg-surface border border-border rounded-xl p-5 mb-6">
-          <h3 className="font-semibold text-text mb-4">New Template</h3>
+        <form onSubmit={handleCreate} className="card p-5 mb-6">
+          <h2 className="font-semibold text-text mb-4">New template</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Type</label>
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'designer' | 'word' | 'simple' })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+            <Field label="Type" htmlFor="tpl-type">
+              <Select id="tpl-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'designer' | 'word' | 'simple' })}>
                 <option value="designer">Designer (build layout)</option>
                 <option value="word">Word (upload .docx)</option>
                 <option value="simple">Simple (pricing only)</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Name *</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Description</label>
-              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Price per Page</label>
-              <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Discounted Price</label>
-              <input type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })}
-                placeholder="Optional"
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
+              </Select>
+            </Field>
+            <Field label="Name" htmlFor="tpl-name" required>
+              <Input id="tpl-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </Field>
+            <Field label="Description" htmlFor="tpl-desc">
+              <Input id="tpl-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </Field>
+            <Field label="Price per page" htmlFor="tpl-price">
+              <Input id="tpl-price" type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} />
+            </Field>
+            <Field label="Discounted price" htmlFor="tpl-disc">
+              <Input id="tpl-disc" type="number" step="0.01" min="0" value={form.discountedPricePerPage} placeholder="Optional"
+                onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} />
+            </Field>
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Creating...' : 'Create & Configure Fields'}</button>
-            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+            <Button type="submit" variant="primary" disabled={saving}>{saving ? 'Creating…' : 'Create & configure fields'}</Button>
+            <Button onClick={() => setShowForm(false)}>Cancel</Button>
           </div>
         </form>
       )}
 
-      {loadError && (
-        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
-          Couldn&apos;t load templates. Please refresh or try again.
-        </div>
-      )}
+      {loadError && <Alert className="mb-4">Couldn&apos;t load templates. Please refresh or try again.</Alert>}
 
       {/* Filters + view toggle */}
       <div className="flex gap-3 mb-4 items-center flex-wrap">
-        <input placeholder="Search templates..." aria-label="Search templates" value={search} onChange={(e) => setSearch(e.target.value)}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary" />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-          <option value="">All Statuses</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
-        <span className="text-sm text-text-muted ml-auto mr-3">{templates.length} template{templates.length !== 1 ? 's' : ''}</span>
-        <div className="flex border border-border rounded-lg overflow-hidden">
-          <button onClick={() => setView('table')}
-            className={`p-2 transition-colors ${view === 'table' ? 'bg-primary text-white' : 'bg-bg text-text-secondary hover:bg-border/50'}`}
-            title="Table view">
-            <TableIcon className="w-4 h-4" />
-          </button>
-          <button onClick={() => setView('cards')}
-            className={`p-2 transition-colors ${view === 'cards' ? 'bg-primary text-white' : 'bg-bg text-text-secondary hover:bg-border/50'}`}
-            title="Card view">
-            <GridIcon className="w-4 h-4" />
-          </button>
-        </div>
+        <SearchInput placeholder="Search templates…" aria-label="Search templates" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <SegmentedControl
+          label="Status"
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: '', label: 'All' },
+            { value: 'true', label: 'Active' },
+            { value: 'false', label: 'Inactive' },
+          ]}
+        />
+        <span className="text-sm text-text-muted ml-auto tabular-nums">{templates.length} template{templates.length !== 1 ? 's' : ''}</span>
+        <SegmentedControl<ViewMode>
+          label="View"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'table', label: <TableIcon />, title: 'Table view' },
+            { value: 'cards', label: <GridIcon />, title: 'Card view' },
+          ]}
+        />
       </div>
 
       {/* Table view */}
       {view === 'table' && (
-        <div className="bg-surface border border-border rounded-xl overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
-            <thead>
-              <tr className="bg-bg border-b border-border">
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('name')}>
-                  Name <SortIcon field="name" sortBy={sortBy} sortOrder={sortOrder} />
-                </th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Type</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Description</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Fields</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('pricePerPage')}>
-                  Price/Page <SortIcon field="pricePerPage" sortBy={sortBy} sortOrder={sortOrder} />
-                </th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Discounted</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
-                <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
-                  Created <SortIcon field="createdAt" sortBy={sortBy} sortOrder={sortOrder} />
-                </th>
+        <TableCard minWidth={760}>
+          <thead>
+            <tr>
+              <SortableTh field="name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Name</SortableTh>
+              <th>Type</th>
+              <th className="text-right">Fields</th>
+              <SortableTh field="pricePerPage" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right">Price / page</SortableTh>
+              <th className="text-right">Discounted</th>
+              <th>Status</th>
+              <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Created</SortableTh>
+              <th aria-label="Open" />
+            </tr>
+          </thead>
+          <tbody>
+            {empty && <tr><td colSpan={8}>{empty}</td></tr>}
+            {templates.map((t) => (
+              <tr key={t.id} data-href onClick={() => router.push(`/templates/${t.id}`)}>
+                <td className="max-w-sm">
+                  <div className="font-semibold text-text truncate">{t.name}</div>
+                  {t.description && <div className="text-xs text-text-muted truncate">{t.description}</div>}
+                </td>
+                <td><TemplateTypeBadge type={t.type} /></td>
+                <td className="text-right tabular-nums">{t.type === 'simple' ? '—' : t.fields.length}</td>
+                <td className="text-right tabular-nums text-text font-medium whitespace-nowrap">{formatCurrency(t.pricePerPage, baseCurrency)}</td>
+                <td className="text-right tabular-nums whitespace-nowrap">
+                  {t.discountedPricePerPage ? formatCurrency(t.discountedPricePerPage, baseCurrency) : '—'}
+                </td>
+                <td><ActiveBadge active={t.isActive} /></td>
+                <td className="tabular-nums whitespace-nowrap">{formatDate(t.createdAt)}</td>
+                <RowChevron />
               </tr>
-            </thead>
-            <tbody>
-              {templates.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-text-muted">No templates found.</td></tr>
-              )}
-              {templates.map((t) => (
-                <tr key={t.id} onClick={() => router.push(`/templates/${t.id}`)}
-                  className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
-                  <td className="px-4 py-3 font-medium text-text">{t.name}</td>
-                  <td className="px-4 py-3">
-                    <TemplatTypeBadge type={t.type} />
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary max-w-xs truncate">{t.description || '—'}</td>
-                  <td className="px-4 py-3 text-text-secondary">{t.type === 'simple' ? '—' : t.fields.length}</td>
-                  <td className="px-4 py-3 text-text-secondary">{formatCurrency(t.pricePerPage, baseCurrency)}</td>
-                  <td className="px-4 py-3 text-text-secondary">
-                    {t.discountedPricePerPage ? formatCurrency(t.discountedPricePerPage, baseCurrency) : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      t.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'
-                    }`}>
-                      {t.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-text-secondary">{formatDate(t.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </TableCard>
       )}
 
       {/* Card view */}
       {view === 'cards' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {templates.length === 0 && (
-            <div className="col-span-full bg-surface border border-border rounded-xl p-12 text-center text-text-muted">
-              No templates found.
-            </div>
-          )}
+          {empty && <div className="col-span-full card">{empty}</div>}
           {templates.map((t) => (
-            <div key={t.id} onClick={() => router.push(`/templates/${t.id}`)}
-              className="bg-surface border border-border rounded-xl p-5 hover:border-primary/50 cursor-pointer transition-colors">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-text">{t.name}</h3>
-                  <TemplatTypeBadge type={t.type} />
+            <button key={t.id} type="button" onClick={() => router.push(`/templates/${t.id}`)}
+              className="card p-5 text-left flex flex-col gap-3 hover:border-border-strong hover:shadow-md transition-[box-shadow,border-color]">
+              <div className="flex justify-between items-start gap-3 w-full">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-text truncate">{t.name}</h3>
+                  <div className="mt-1.5"><TemplateTypeBadge type={t.type} /></div>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  t.isActive ? 'bg-success-light text-success' : 'bg-bg text-text-muted'
-                }`}>
-                  {t.isActive ? 'Active' : 'Inactive'}
+                <ActiveBadge active={t.isActive} />
+              </div>
+              {t.description && <p className="text-sm text-text-secondary line-clamp-2">{t.description}</p>}
+              <div className="mt-auto pt-3 border-t border-border flex justify-between text-xs text-text-muted w-full">
+                <span>{t.type === 'simple' ? 'Pricing only' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
+                <span className="tabular-nums">
+                  <span className="text-text font-semibold">{formatCurrency(t.pricePerPage, baseCurrency)}</span> / page
+                  {t.discountedPricePerPage && <span className="text-success"> ({formatCurrency(t.discountedPricePerPage, baseCurrency)})</span>}
                 </span>
               </div>
-              {t.description && <p className="text-sm text-text-secondary mb-3 line-clamp-2">{t.description}</p>}
-              <div className="flex justify-between text-xs text-text-muted">
-                <span>{t.type === 'simple' ? 'Simple' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
-                <div className="flex gap-2">
-                  <span>{formatCurrency(t.pricePerPage, baseCurrency)} / page</span>
-                  {t.discountedPricePerPage && (
-                    <span className="text-success">({formatCurrency(t.discountedPricePerPage, baseCurrency)})</span>
-                  )}
-                </div>
-              </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -269,30 +242,12 @@ export default function TemplatesPage() {
   );
 }
 
-// ── Icons ──
+const TEMPLATE_TYPE_LABEL: Record<string, string> = { designer: 'Designer', word: 'Word', simple: 'Simple' };
 
-function TemplatTypeBadge({ type }: { type: string }) {
-  const config: Record<string, { bg: string; label: string }> = {
-    designer: { bg: TEMPLATE_TYPE_BADGE.designer, label: 'Designer' },
-    word: { bg: TEMPLATE_TYPE_BADGE.word, label: 'Word' },
-    simple: { bg: TEMPLATE_TYPE_BADGE.simple, label: 'Simple' },
-  };
-  const c = config[type] || config.designer;
-  return <span className={`px-2 py-0.5 rounded text-xs font-medium ${c.bg}`}>{c.label}</span>;
+function TemplateTypeBadge({ type }: { type: string }) {
+  return <Badge tone={TEMPLATE_TYPE_BADGE[type] ?? TEMPLATE_TYPE_BADGE.designer}>{TEMPLATE_TYPE_LABEL[type] ?? type}</Badge>;
 }
 
-function TableIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M5 4a3 3 0 00-3 3v6a3 3 0 003 3h10a3 3 0 003-3V7a3 3 0 00-3-3H5zm-1 9v-1h5v2H5a1 1 0 01-1-1zm7 1h4a1 1 0 001-1v-1h-5v2zm0-4h5V8h-5v2zM9 8H4v2h5V8z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
-function GridIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
-      <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-    </svg>
-  );
+function ActiveBadge({ active }: { active: boolean }) {
+  return <Badge dot tone={active ? 'tone tone-success' : 'tone tone-neutral'}>{active ? 'Active' : 'Inactive'}</Badge>;
 }

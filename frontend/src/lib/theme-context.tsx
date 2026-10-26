@@ -4,8 +4,21 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { api } from './api';
 import { useAuth } from './auth-context';
 
-export type Palette = 'indigo' | 'ocean' | 'teal' | 'slate';
-const PALETTES: Palette[] = ['indigo', 'ocean', 'teal', 'slate'];
+// Keep in sync with globals.css ([data-palette]) and the backend's UpdateUserDto @IsIn list.
+export const PALETTE_OPTIONS = [
+  { id: 'indigo', name: 'Indigo Minimal', color: '#4F46E5', accent: '#818CF8' },
+  { id: 'ocean', name: 'Ocean Blue', color: '#1D4ED8', accent: '#3B82F6' },
+  { id: 'teal', name: 'Teal Focus', color: '#0D9488', accent: '#2DD4BF' },
+  { id: 'slate', name: 'Slate & Amber', color: '#334155', accent: '#F59E0B' },
+  { id: 'violet', name: 'Violet', color: '#7C3AED', accent: '#A78BFA' },
+  { id: 'orchid', name: 'Orchid', color: '#A21CAF', accent: '#E879F9' },
+  { id: 'copper', name: 'Copper', color: '#C2410C', accent: '#FB923C' },
+  { id: 'forest', name: 'Forest', color: '#15803D', accent: '#4ADE80' },
+] as const;
+
+export type Palette = (typeof PALETTE_OPTIONS)[number]['id'];
+const PALETTES: readonly string[] = PALETTE_OPTIONS.map((p) => p.id);
+const isPalette = (v: unknown): v is Palette => typeof v === 'string' && PALETTES.includes(v);
 
 interface ThemeContextType {
   palette: Palette;
@@ -26,10 +39,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // localStorage only exists after hydration, so the saved theme is applied in a
   // second pass (rendering it on the first pass would mismatch the server HTML).
   useEffect(() => {
-    const savedPalette = localStorage.getItem('palette') as Palette | null;
+    const savedPalette = localStorage.getItem('palette');
     const savedDark = localStorage.getItem('darkMode');
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (savedPalette) setPaletteState(savedPalette);
+    if (isPalette(savedPalette)) setPaletteState(savedPalette);
     if (savedDark) setDarkModeState(savedDark === 'true');
   }, []);
 
@@ -37,7 +50,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   if ((user?.id ?? null) !== hydratedUserId) {
     setHydratedUserId(user?.id ?? null);
     if (user) {
-      if (PALETTES.includes(user.colorPalette as Palette)) setPaletteState(user.colorPalette as Palette);
+      if (isPalette(user.colorPalette)) setPaletteState(user.colorPalette);
       if (typeof user.darkMode === 'boolean') setDarkModeState(user.darkMode);
     }
   }

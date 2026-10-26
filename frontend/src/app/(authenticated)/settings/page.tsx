@@ -3,7 +3,12 @@
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { useTheme, type Palette } from '@/lib/theme-context';
+import { useTheme, PALETTE_OPTIONS } from '@/lib/theme-context';
+import { JOB_STATUS_BADGE } from '@/lib/status';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { CheckIcon, MoonIcon, SunIcon } from '@/components/ui/icons';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 
@@ -700,76 +705,84 @@ function InputField({
 // ── Appearance Settings ──
 
 function AppearanceSettings() {
-  const { palette, setPalette, darkMode, toggleDarkMode } = useTheme();
-
-  const palettes: { id: Palette; name: string; color: string }[] = [
-    { id: 'indigo', name: 'Indigo Minimal', color: '#4F46E5' },
-    { id: 'ocean', name: 'Ocean Blue', color: '#1E40AF' },
-    { id: 'teal', name: 'Teal Focus', color: '#0D9488' },
-    { id: 'slate', name: 'Slate & Amber', color: '#334155' },
-  ];
+  const { palette, setPalette, darkMode, setDarkMode } = useTheme();
 
   return (
     <div className="max-w-4xl space-y-6">
       {/* Color Palette */}
-      <div className="bg-surface border border-border rounded-xl p-6">
-        <h3 className="font-semibold text-text mb-2">Color Palette</h3>
-        <p className="text-sm text-text-secondary mb-4">Choose your preferred color theme. This applies to your account only.</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {palettes.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPalette(p.id)}
-              className={`flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-colors ${
-                palette === p.id
-                  ? 'border-primary bg-primary-light'
-                  : 'border-border hover:border-primary/50'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-full" style={{ backgroundColor: p.color }} />
-              <span className="text-sm font-medium text-text">{p.name}</span>
-            </button>
-          ))}
+      <div className="card p-6">
+        <h3 className="font-semibold text-text">Color palette</h3>
+        <p className="text-sm text-text-secondary mt-1 mb-5">Used for buttons, links and highlights. This applies to your account only.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" role="radiogroup" aria-label="Color palette">
+          {PALETTE_OPTIONS.map((p) => {
+            const selected = palette === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setPalette(p.id)}
+                className={`group text-left rounded-xl border p-2.5 transition-[border-color,box-shadow] ${
+                  selected ? 'border-primary ring-2 ring-primary/25' : 'border-border hover:border-border-strong'
+                }`}
+              >
+                {/* Mini app preview: sidebar with an active item, a title bar and a button */}
+                <div className="h-16 rounded-lg bg-bg border border-border flex overflow-hidden" aria-hidden="true">
+                  <div className="w-1/3 bg-surface border-r border-border p-1.5 flex flex-col gap-1">
+                    <div className="h-1.5 rounded-full" style={{ background: `color-mix(in srgb, ${p.color} 18%, transparent)` }} />
+                    <div className="h-1.5 rounded-full bg-border" />
+                    <div className="h-1.5 rounded-full bg-border" />
+                  </div>
+                  <div className="flex-1 p-2 flex flex-col justify-between">
+                    <div className="h-1.5 w-2/3 rounded-full bg-border-strong" />
+                    <div className="flex gap-1 items-center">
+                      <div className="h-3.5 w-9 rounded" style={{ background: p.color }} />
+                      <div className="h-2 w-2 rounded-full" style={{ background: p.accent }} />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-2.5 px-0.5">
+                  <span className="text-sm font-medium text-text">{p.name}</span>
+                  {selected && <CheckIcon className="w-4 h-4 text-primary-text" />}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Dark Mode */}
-      <div className="bg-surface border border-border rounded-xl p-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h3 className="font-semibold text-text">Dark Mode</h3>
-            <p className="text-sm text-text-secondary mt-1">Switch between light and dark interface.</p>
-          </div>
-          <button
-            onClick={toggleDarkMode}
-            className={`relative w-12 h-7 rounded-full transition-colors ${darkMode ? 'bg-primary' : 'bg-border'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform shadow ${darkMode ? 'translate-x-5' : ''}`} />
-          </button>
+      {/* Theme */}
+      <div className="card p-6 flex flex-wrap justify-between items-center gap-4">
+        <div>
+          <h3 className="font-semibold text-text">Theme</h3>
+          <p className="text-sm text-text-secondary mt-1">Light or dark interface. You can also switch from the top bar.</p>
         </div>
+        <SegmentedControl
+          label="Theme"
+          value={darkMode ? 'dark' : 'light'}
+          onChange={(v) => setDarkMode(v === 'dark')}
+          options={[
+            { value: 'light', label: <><SunIcon />Light</> },
+            { value: 'dark', label: <><MoonIcon />Dark</> },
+          ]}
+        />
       </div>
 
       {/* Preview */}
-      <div className="bg-surface border border-border rounded-xl p-6">
-        <h3 className="font-semibold text-text mb-4">Color Preview</h3>
-        <div className="flex gap-3 flex-wrap">
-          <Swatch label="Primary" className="bg-primary" />
-          <Swatch label="Accent" className="bg-accent" />
-          <Swatch label="Success" className="bg-success" />
-          <Swatch label="Warning" className="bg-warning" />
-          <Swatch label="Danger" className="bg-danger" />
-          <Swatch label="Neutral" className="bg-neutral" />
+      <div className="card p-6">
+        <h3 className="font-semibold text-text mb-4">Preview</h3>
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Button variant="primary">Primary</Button>
+          <Button>Secondary</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="danger">Delete</Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {Object.entries({ Quote: 'quote', Accepted: 'accepted', 'In progress': 'in_progress', Delivered: 'delivered', Invoiced: 'invoiced', Paid: 'paid', Cancelled: 'cancelled' })
+            .map(([label, key]) => <Badge key={key} dot tone={JOB_STATUS_BADGE[key]}>{label}</Badge>)}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Swatch({ label, className }: { label: string; className: string }) {
-  return (
-    <div className="text-center">
-      <div className={`w-14 h-14 rounded-xl ${className}`} />
-      <span className="text-xs text-text-muted mt-1 block">{label}</span>
     </div>
   );
 }
