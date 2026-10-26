@@ -14,7 +14,7 @@ Internal multi-user web application for freelance translators. Two core modules:
 - **Auth:** JWT + refresh tokens, RBAC
 - **File uploads:** Local disk, validated by magic bytes (no image compression)
 - **Word export:** `docx` npm library
-- **PDF export:** `pdfkit` library (invoice export)
+- **PDF export:** `pdfkit` library (invoice export). Text goes through `PdfText` (`invoices/pdf-text.ts`): embedded Noto Sans + Noto Sans Arabic (npm `@expo-google-fonts/*`, OFL), own line wrapping, and Unicode bidi via `bidi-js` — each line is drawn as direction runs on one alphabetic baseline (fontkit shapes Arabic but does no bidi, and pdfkit wrapping drops spaces between Arabic words). Never use `doc.text` / Helvetica directly for user data. Rows are measured, pages break with a repeated table header, totals stay together, page numbers when >1 page. Not covered: CJK, Hebrew, Thai, Devanagari; `→`-style symbols missing from Noto Sans
 - **Translation helper:** Google Cloud Translation API
 - **Charts:** `recharts` (reporting page)
 - **Scheduling:** `@nestjs/schedule` (notification cron jobs)

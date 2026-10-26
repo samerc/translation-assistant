@@ -26,6 +26,8 @@
     "migration:show": "npm run build && npm run typeorm -- migration:show"
   },
   "dependencies": {
+    "@expo-google-fonts/noto-sans": "0.4.2",
+    "@expo-google-fonts/noto-sans-arabic": "0.4.3",
     "@nestjs/common": "^12.2.0",
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.2.0",
@@ -37,6 +39,7 @@
     "@nestjs/typeorm": "^12.0.2",
     "@sentry/node": "^11.9.0",
     "bcrypt": "^6.0.0",
+    "bidi-js": "1.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",

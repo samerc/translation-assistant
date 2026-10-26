@@ -5,7 +5,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FindOperator, getMetadataArgsStorage } from 'typeorm';
-import { existsSync, mkdtempSync, writeFileSync } from 'fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { lastValueFrom, of, throwError } from 'rxjs';
@@ -22,6 +28,7 @@ import { DocumentsController } from '../src/modules/documents/documents.controll
 import { ClientsController } from '../src/modules/clients/clients.controller.js';
 import { AbuseDetectionGuard } from '../src/common/guards/abuse-detection.guard.js';
 import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
+import { InvoiceExportService } from '../src/modules/invoices/invoice-export.service.js';
 import {
   sniffType,
   sniffImageMime,
@@ -1010,5 +1017,57 @@ describe('Data integrity (Batch B)', () => {
     await expect(
       svc.update('inv-1', { items: [] } as any, 'user-1', true),
     ).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('Invoice PDF (Unicode fonts + pagination)', () => {
+  it('renders Arabic/Cyrillic text over several pages with embedded Noto fonts', async () => {
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      description:
+        i % 2 === 0
+          ? `ترجمة وثيقة رسمية رقم ${i} — Перевод`
+          : `Line ${i}: certified translation with a fairly long description that wraps onto a second line`,
+      quantity: 1,
+      unitPrice: 10,
+      lineTotal: 10,
+      sortOrder: 60 - i,
+    }));
+    const invoice = {
+      id: 'inv-1',
+      invoiceNumber: 'INV-9999',
+      status: 'draft',
+      issueDate: '2026-10-26',
+      dueDate: '2026-11-25',
+      currency: 'SAR',
+      subtotal: 600,
+      taxRate: 0,
+      taxAmount: 0,
+      total: 600,
+      paidAmount: null,
+      notes: 'الدفع خلال ٣٠ يوماً\nPayment within 30 days.',
+      createdByUserId: null,
+      client: { name: 'شركة الترجمة', addresses: [], emails: [] },
+      items,
+    };
+    const svc = new InvoiceExportService(
+      { findOne: jest.fn().mockResolvedValue(invoice) } as any,
+      { find: jest.fn().mockResolvedValue([]) } as any,
+      { findOne: jest.fn().mockResolvedValue(null) } as any,
+    );
+    const { filePath } = await svc.exportPdf('inv-1');
+    try {
+      const pdf = readFileSync(filePath).toString('latin1');
+      const pages = Number(
+        /\/Type \/Pages[\s\S]*?\/Count (\d+)/.exec(pdf)?.[1],
+      );
+      expect(pages).toBeGreaterThan(1);
+      expect(pdf).toMatch(/NotoSansArabic/);
+      expect(pdf).toMatch(/NotoSans-/);
+      expect(pdf).not.toMatch(/Helvetica/);
+      // items printed in sortOrder (the last item has sortOrder 1)
+      expect(invoice.items[0].sortOrder).toBe(1);
+    } finally {
+      unlinkSync(filePath);
+    }
   });
 });

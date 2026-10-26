@@ -20,6 +20,7 @@ import {
 } from 'docx';
 import PDFDocument from 'pdfkit';
 import { Invoice } from './entities/invoice.entity.js';
+import { PdfText, TextAlign, TextStyle } from './pdf-text.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { User } from '../users/entities/user.entity.js';
 
@@ -125,7 +126,15 @@ export class InvoiceExportService {
       },
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    invoice.items.sort((a, b) => a.sortOrder - b.sortOrder);
     return invoice;
+  }
+
+  // issueDate/dueDate are date-only strings ("2026-10-26"). new Date() reads
+  // them as UTC midnight, so format in UTC — the server's own time zone would
+  // shift the printed day.
+  private formatDate(value: string | Date): string {
+    return new Date(value).toLocaleDateString(undefined, { timeZone: 'UTC' });
   }
 
   private async getSettings(): Promise<AppSettings | null> {
@@ -263,8 +272,8 @@ export class InvoiceExportService {
     // Invoice details
     const detailLines = [
       `Invoice Number: ${invoice.invoiceNumber}`,
-      `Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`,
-      `Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`,
+      `Issue Date: ${this.formatDate(invoice.issueDate)}`,
+      `Due Date: ${this.formatDate(invoice.dueDate)}`,
       `Status: ${invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}`,
     ];
 
@@ -650,268 +659,326 @@ export class InvoiceExportService {
     const filePath = join(dir, `${randomUUID()}.pdf`);
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      // bufferPages: page numbers are written once the page count is known.
+      const doc = new PDFDocument({
+        size: 'A4',
+        margin: 50,
+        bufferPages: true,
+      });
       const chunks: Buffer[] = [];
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
       doc.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-        writeFileSync(filePath, buffer);
-        resolve({ filePath, fileName });
+        try {
+          writeFileSync(filePath, Buffer.concat(chunks));
+          resolve({ filePath, fileName });
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err)));
+        }
       });
       doc.on('error', reject);
 
-      const pageWidth = doc.page.width - 100; // margins
-
-      // Company header — per-user branding, logo beside the business name.
-      let textX = 50;
-      if (branding.logo) {
-        try {
-          doc.image(branding.logo.buffer, 50, 45, { fit: [110, 46] });
-          textX = 50 + 110 + 14;
-        } catch {
-          textX = 50; // corrupt image → fall back to text-only header
-        }
+      try {
+        this.drawPdf(doc, invoice, branding);
+        doc.end();
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
-      let headerY = 50;
-      if (branding.businessName) {
-        doc
-          .fontSize(16)
-          .font('Helvetica-Bold')
-          .fillColor('#000000')
-          .text(branding.businessName, textX, headerY, { width: 300 });
-        headerY += 20;
-      }
-      if (branding.businessAddress) {
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text(
-            branding.businessAddress,
-            textX,
-            branding.businessName ? headerY : 52,
-            { width: 260 },
-          );
-      }
-      doc.fillColor('#000000');
-
-      // INVOICE title
-      doc
-        .fontSize(28)
-        .font('Helvetica-Bold')
-        .fillColor('#000000')
-        .text('INVOICE', 50, 50, { align: 'right' });
-
-      // Invoice details (right side)
-      const detailsY = 90;
-      doc.fontSize(9).font('Helvetica').fillColor('#333333');
-      doc.text(`Invoice #: ${invoice.invoiceNumber}`, 350, detailsY, {
-        align: 'right',
-        width: pageWidth - 300,
-      });
-      doc.text(
-        `Issue Date: ${new Date(invoice.issueDate).toLocaleDateString()}`,
-        { align: 'right' },
-      );
-      doc.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString()}`, {
-        align: 'right',
-      });
-      doc.text(
-        `Status: ${invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}`,
-        { align: 'right' },
-      );
-
-      // Bill To
-      let y = 160;
-      doc
-        .fontSize(10)
-        .font('Helvetica-Bold')
-        .fillColor('#000000')
-        .text('Bill To:', 50, y);
-      y += 16;
-      doc.fontSize(11).font('Helvetica-Bold').text(invoice.client.name, 50, y);
-      y += 16;
-      if (invoice.client.taxId) {
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text(`Tax ID: ${invoice.client.taxId}`, 50, y);
-        y += 14;
-      }
-      const billingAddr =
-        invoice.client.addresses?.find((a) => a.label === 'Billing') ||
-        invoice.client.addresses?.[0];
-      if (billingAddr) {
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text(billingAddr.address, 50, y);
-        y += 14;
-      }
-      const email =
-        invoice.client.emails?.find((e) => e.isPrimary) ||
-        invoice.client.emails?.[0];
-      if (email) {
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text(email.email, 50, y);
-        y += 14;
-      }
-
-      // Line items table
-      y += 30;
-      const colWidths = [
-        pageWidth * 0.45,
-        pageWidth * 0.1,
-        pageWidth * 0.2,
-        pageWidth * 0.25,
-      ];
-      const colX = [
-        50,
-        50 + colWidths[0],
-        50 + colWidths[0] + colWidths[1],
-        50 + colWidths[0] + colWidths[1] + colWidths[2],
-      ];
-
-      // Table header
-      doc.rect(50, y, pageWidth, 22).fill('#F3F4F6');
-      doc.fontSize(8).font('Helvetica-Bold').fillColor('#374151');
-      doc.text('Description', colX[0] + 6, y + 6, { width: colWidths[0] - 12 });
-      doc.text('Qty', colX[1] + 6, y + 6, {
-        width: colWidths[1] - 12,
-        align: 'center',
-      });
-      doc.text('Unit Price', colX[2] + 6, y + 6, {
-        width: colWidths[2] - 12,
-        align: 'right',
-      });
-      doc.text('Total', colX[3] + 6, y + 6, {
-        width: colWidths[3] - 12,
-        align: 'right',
-      });
-      y += 22;
-
-      // Table rows
-      doc.font('Helvetica').fillColor('#333333').fontSize(9);
-      for (const item of invoice.items) {
-        // Draw border line
-        doc
-          .moveTo(50, y)
-          .lineTo(50 + pageWidth, y)
-          .strokeColor('#E5E7EB')
-          .lineWidth(0.5)
-          .stroke();
-
-        doc.fillColor('#333333');
-        doc.text(item.description, colX[0] + 6, y + 6, {
-          width: colWidths[0] - 12,
-        });
-        doc.text(String(Number(item.quantity)), colX[1] + 6, y + 6, {
-          width: colWidths[1] - 12,
-          align: 'center',
-        });
-        doc.text(
-          `${invoice.currency} ${Number(item.unitPrice).toFixed(2)}`,
-          colX[2] + 6,
-          y + 6,
-          { width: colWidths[2] - 12, align: 'right' },
-        );
-        doc.text(
-          `${invoice.currency} ${Number(item.lineTotal).toFixed(2)}`,
-          colX[3] + 6,
-          y + 6,
-          { width: colWidths[3] - 12, align: 'right' },
-        );
-        y += 22;
-      }
-
-      // Bottom border
-      doc
-        .moveTo(50, y)
-        .lineTo(50 + pageWidth, y)
-        .strokeColor('#E5E7EB')
-        .lineWidth(0.5)
-        .stroke();
-
-      // Totals
-      y += 20;
-      const totalsX = colX[2];
-      const totalsW = colWidths[2] + colWidths[3];
-
-      doc.fontSize(9).font('Helvetica').fillColor('#666666');
-      doc.text('Subtotal', totalsX, y, { width: totalsW * 0.5 });
-      doc.text(
-        `${invoice.currency} ${Number(invoice.subtotal).toFixed(2)}`,
-        totalsX + totalsW * 0.5,
-        y,
-        { width: totalsW * 0.5, align: 'right' },
-      );
-      y += 16;
-
-      if (Number(invoice.taxRate) > 0) {
-        doc.text(`Tax (${invoice.taxRate}%)`, totalsX, y, {
-          width: totalsW * 0.5,
-        });
-        doc.text(
-          `${invoice.currency} ${Number(invoice.taxAmount).toFixed(2)}`,
-          totalsX + totalsW * 0.5,
-          y,
-          { width: totalsW * 0.5, align: 'right' },
-        );
-        y += 16;
-      }
-
-      // Total line
-      doc
-        .moveTo(totalsX, y)
-        .lineTo(totalsX + totalsW, y)
-        .strokeColor('#000000')
-        .lineWidth(1)
-        .stroke();
-      y += 6;
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#000000');
-      doc.text('Total', totalsX, y, { width: totalsW * 0.5 });
-      doc.text(
-        `${invoice.currency} ${Number(invoice.total).toFixed(2)}`,
-        totalsX + totalsW * 0.5,
-        y,
-        { width: totalsW * 0.5, align: 'right' },
-      );
-      y += 24;
-
-      if (invoice.paidAmount !== null) {
-        doc.fontSize(10).font('Helvetica-Bold').fillColor('#16A34A');
-        doc.text('Paid', totalsX, y, { width: totalsW * 0.5 });
-        doc.text(
-          `${invoice.currency} ${Number(invoice.paidAmount).toFixed(2)}`,
-          totalsX + totalsW * 0.5,
-          y,
-          { width: totalsW * 0.5, align: 'right' },
-        );
-        y += 20;
-      }
-
-      // Notes
-      if (invoice.notes) {
-        y += 30;
-        doc
-          .fontSize(10)
-          .font('Helvetica-Bold')
-          .fillColor('#000000')
-          .text('Notes:', 50, y);
-        y += 16;
-        doc
-          .fontSize(9)
-          .font('Helvetica')
-          .fillColor('#666666')
-          .text(invoice.notes, 50, y, { width: pageWidth });
-      }
-
-      doc.end();
     });
+  }
+
+  private drawPdf(
+    doc: PDFKit.PDFDocument,
+    invoice: Invoice,
+    branding: InvoiceBranding,
+  ): void {
+    const t = new PdfText(doc);
+    const left = 50;
+    const pageWidth = doc.page.width - 100; // margins
+    const top = 50;
+    const bottom = doc.page.height - 60; // room for the page-number footer
+    const money = (n: unknown) => `${invoice.currency} ${Number(n).toFixed(2)}`;
+    const muted = '#666666';
+
+    // Company header — per-user branding, logo beside the business name.
+    let textX = left;
+    if (branding.logo) {
+      try {
+        doc.image(branding.logo.buffer, left, 45, { fit: [110, 46] });
+        textX = left + 110 + 14;
+      } catch {
+        textX = left; // corrupt image → fall back to text-only header
+      }
+    }
+    let headerY = top;
+    if (branding.businessName) {
+      headerY = t.draw(
+        branding.businessName,
+        textX,
+        headerY,
+        260,
+        {
+          size: 16,
+          bold: true,
+          color: '#000000',
+        },
+        'left',
+      );
+    }
+    if (branding.businessAddress) {
+      headerY = t.draw(
+        branding.businessAddress,
+        textX,
+        headerY + 2,
+        240,
+        {
+          size: 9,
+          color: muted,
+        },
+        'left',
+      );
+    }
+
+    // INVOICE title + details (right side)
+    t.drawLine(
+      'INVOICE',
+      left,
+      top,
+      pageWidth,
+      { size: 28, bold: true, color: '#000000' },
+      'end',
+    );
+    let detailsY = 90;
+    for (const line of [
+      `Invoice #: ${invoice.invoiceNumber}`,
+      `Issue Date: ${this.formatDate(invoice.issueDate)}`,
+      `Due Date: ${this.formatDate(invoice.dueDate)}`,
+      `Status: ${invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}`,
+    ]) {
+      t.drawLine(
+        line,
+        left,
+        detailsY,
+        pageWidth,
+        { size: 9, color: '#333333' },
+        'end',
+      );
+      detailsY += 13;
+    }
+
+    // Bill To
+    let y = Math.max(160, headerY + 16, detailsY + 16);
+    y =
+      t.draw(
+        'Bill To:',
+        left,
+        y,
+        300,
+        {
+          size: 10,
+          bold: true,
+          color: '#000000',
+        },
+        'left',
+      ) + 2;
+    y = t.draw(
+      invoice.client.name,
+      left,
+      y,
+      300,
+      { size: 11, bold: true },
+      'left',
+    );
+    const small = { size: 9, color: muted };
+    if (invoice.client.taxId)
+      y = t.draw(
+        `Tax ID: ${invoice.client.taxId}`,
+        left,
+        y,
+        300,
+        small,
+        'left',
+      );
+    const billingAddr =
+      invoice.client.addresses?.find((a) => a.label === 'Billing') ||
+      invoice.client.addresses?.[0];
+    if (billingAddr)
+      y = t.draw(billingAddr.address, left, y, 300, small, 'left');
+    const email =
+      invoice.client.emails?.find((e) => e.isPrimary) ||
+      invoice.client.emails?.[0];
+    if (email) y = t.draw(email.email, left, y, 300, small, 'left');
+
+    // Line items table
+    y += 24;
+    const colWidths = [
+      pageWidth * 0.45,
+      pageWidth * 0.1,
+      pageWidth * 0.2,
+      pageWidth * 0.25,
+    ];
+    const colX = [
+      left,
+      left + colWidths[0],
+      left + colWidths[0] + colWidths[1],
+      left + colWidths[0] + colWidths[1] + colWidths[2],
+    ];
+    const cellPad = 6;
+    const headStyle = { size: 8, bold: true, color: '#374151' };
+    const cellStyle = { size: 9, color: '#333333' };
+
+    const rule = (atY: number, color = '#E5E7EB', width = 0.5) => {
+      doc
+        .moveTo(left, atY)
+        .lineTo(left + pageWidth, atY)
+        .strokeColor(color)
+        .lineWidth(width)
+        .stroke();
+    };
+    const tableHeader = () => {
+      doc.rect(left, y, pageWidth, 22).fill('#F3F4F6');
+      const cells: [string, number, TextAlign][] = [
+        ['Description', 0, 'start'],
+        ['Qty', 1, 'center'],
+        ['Unit Price', 2, 'end'],
+        ['Total', 3, 'end'],
+      ];
+      for (const [label, c, align] of cells) {
+        t.drawLine(
+          label,
+          colX[c] + cellPad,
+          y + 6,
+          colWidths[c] - 2 * cellPad,
+          headStyle,
+          align,
+        );
+      }
+      y += 22;
+    };
+    // New page when `h` more points won't fit; repeats the table header if asked.
+    const ensure = (h: number, repeatHeader = false) => {
+      if (y + h <= bottom) return;
+      doc.addPage();
+      y = top;
+      if (repeatHeader) tableHeader();
+    };
+
+    tableHeader();
+    const lineH = t.lineHeight(cellStyle);
+    for (const item of invoice.items) {
+      const descLines = t.lines(
+        item.description,
+        colWidths[0] - 2 * cellPad,
+        cellStyle,
+      );
+      const rowH = Math.max(descLines.length * lineH, lineH) + 2 * cellPad;
+      ensure(rowH, true);
+      rule(y);
+      descLines.forEach((line, i) =>
+        t.drawLine(
+          line,
+          colX[0] + cellPad,
+          y + cellPad + i * lineH,
+          colWidths[0] - 2 * cellPad,
+          cellStyle,
+        ),
+      );
+      const cells: [string, number, TextAlign][] = [
+        [String(Number(item.quantity)), 1, 'center'],
+        [money(item.unitPrice), 2, 'end'],
+        [money(item.lineTotal), 3, 'end'],
+      ];
+      for (const [text, c, align] of cells) {
+        t.drawLine(
+          text,
+          colX[c] + cellPad,
+          y + cellPad,
+          colWidths[c] - 2 * cellPad,
+          cellStyle,
+          align,
+        );
+      }
+      y += rowH;
+    }
+    rule(y);
+
+    // Totals — kept together on one page
+    const totalsX = colX[2];
+    const totalsW = colWidths[2] + colWidths[3];
+    const half = totalsW * 0.5;
+    ensure(20 + 16 * 2 + 30 + (invoice.paidAmount !== null ? 20 : 0));
+    y += 20;
+    const totalRow = (label: string, value: string, style: TextStyle) => {
+      t.drawLine(label, totalsX, y, half, style);
+      t.drawLine(value, totalsX + half, y, half, style, 'end');
+    };
+    totalRow('Subtotal', money(invoice.subtotal), { size: 9, color: muted });
+    y += 16;
+    if (Number(invoice.taxRate) > 0) {
+      totalRow(`Tax (${Number(invoice.taxRate)}%)`, money(invoice.taxAmount), {
+        size: 9,
+        color: muted,
+      });
+      y += 16;
+    }
+    doc
+      .moveTo(totalsX, y)
+      .lineTo(totalsX + totalsW, y)
+      .strokeColor('#000000')
+      .lineWidth(1)
+      .stroke();
+    y += 6;
+    totalRow('Total', money(invoice.total), {
+      size: 12,
+      bold: true,
+      color: '#000000',
+    });
+    y += 24;
+    if (invoice.paidAmount !== null) {
+      totalRow('Paid', money(invoice.paidAmount), {
+        size: 10,
+        bold: true,
+        color: '#16A34A',
+      });
+      y += 20;
+    }
+
+    // Notes — may run over several pages
+    if (invoice.notes) {
+      const notesStyle = { size: 9, color: muted };
+      const notesLH = t.lineHeight(notesStyle);
+      y += 20;
+      ensure(16 + notesLH);
+      t.drawLine('Notes:', left, y, pageWidth, {
+        size: 10,
+        bold: true,
+        color: '#000000',
+      });
+      y += 16;
+      for (const line of t.lines(invoice.notes, pageWidth, notesStyle)) {
+        ensure(notesLH);
+        t.drawLine(line, left, y, pageWidth, notesStyle);
+        y += notesLH;
+      }
+    }
+
+    // Page numbers (only when there is more than one page)
+    const range = doc.bufferedPageRange();
+    if (range.count > 1) {
+      for (let i = 0; i < range.count; i++) {
+        doc.switchToPage(range.start + i);
+        // Writing inside the bottom margin would make pdfkit add a page.
+        const margin = doc.page.margins.bottom;
+        doc.page.margins.bottom = 0;
+        t.drawLine(
+          `${invoice.invoiceNumber} — page ${i + 1} of ${range.count}`,
+          left,
+          doc.page.height - 35,
+          pageWidth,
+          { size: 8, color: '#999999' },
+          'center',
+        );
+        doc.page.margins.bottom = margin;
+      }
+    }
   }
 }
