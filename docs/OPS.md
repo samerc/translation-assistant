@@ -7,6 +7,20 @@ place and no-ops safely until these are done.
 
 ---
 
+## 0. Next deploy — one-off data steps
+
+Prod runs `synchronize`, which applies schema changes but never data migrations.
+Run these against the prod DB **after** deploying the code (back up first; each
+is idempotent):
+
+- **Translator `settings:read`** — the SQL in
+  `backend/src/migrations/1793100000000-TranslatorSettingsRead.ts` (`up()`). Without
+  it translators can't load languages/labels and can't create jobs. A backup of
+  `roles`/`role_permissions` taken before this change is at
+  `C:\apps\translation-assistant\backup-role-permissions-2026-10-26.sql`.
+
+---
+
 ## 1. Email (SMTP) — makes password reset & invites actually send
 
 The code is ready (`MailService`, Settings → Email tab, `POST /api/mail/test`). In

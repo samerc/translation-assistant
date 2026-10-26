@@ -595,6 +595,16 @@ export class JobsService {
     );
   }
 
+  async getFileForDownload(jobId: string, fileId: string): Promise<JobFile> {
+    const jf = await this.jobFileRepository.findOne({
+      where: { id: fileId, jobId },
+    });
+    if (!jf || !jf.filePath || !existsSync(jf.filePath)) {
+      throw new NotFoundException('File not found');
+    }
+    return jf;
+  }
+
   async removeFile(jobId: string, fileId: string): Promise<void> {
     await this.assertUnlocked(jobId);
     const jf = await this.jobFileRepository.findOne({

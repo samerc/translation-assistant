@@ -276,6 +276,7 @@ Light + dark mode supported (separate toggle from palette).
 - `POST/DELETE /:id/users/:userId` — Assign/remove users
 - `POST/PATCH/DELETE /:id/line-items/:itemId` — Job line items
 - `POST /:id/files` — Upload source/translated files (with FileValidationPipe)
+- `GET /:id/files/:fileId/download` — Download a job file (attachment, `application/octet-stream`; view-only assignees allowed)
 - `POST /:id/files/link` — Link file from another job
 - `DELETE /:id/files/:fileId` — Remove file
 
