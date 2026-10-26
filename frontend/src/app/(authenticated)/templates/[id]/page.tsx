@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DOMPurify from 'dompurify';
 import { api } from '@/lib/api';
+import { uid } from '@/lib/uid';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog, alertDialog } from '@/lib/confirm';
@@ -114,7 +115,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
 
   const toggleSelect = (id: string) => {
     const next = new Set(selected);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id)) next.delete(id); else next.add(id);
     setSelected(next);
   };
 
@@ -324,7 +325,6 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
 
             {sorted.map((field) => {
               const isEditing = editingId === field.id;
-              const missing = getMissingLabels(field);
               const data = isEditing ? editForm : null;
 
               return (
@@ -495,7 +495,7 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
   const fieldKeys = template.fields.map((f) => f.fieldKey);
 
   const addBlock = (type: LayoutBlock['type']) => {
-    const id = `block_${Date.now()}`;
+    const id = uid('block');
     let newBlock: LayoutBlock;
     switch (type) {
       case 'header': newBlock = { id, type, content: 'Header Text', fontSize: 18, alignment: 'center' }; break;
@@ -875,23 +875,21 @@ interface WordPreview {
 function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<WordPreview | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [previewFor, setPreviewFor] = useState<string | null>(null); // wordFilePath the preview was loaded for
   const [error, setError] = useState('');
+  const loadingPreview = Boolean(template.wordFilePath) && previewFor !== template.wordFilePath;
 
-  const loadPreview = async () => {
-    if (!template.wordFilePath) return;
-    setLoadingPreview(true);
-    try {
-      const data = await api.get<WordPreview>(`/templates/${template.id}/word-preview`);
-      setPreview(data);
-    } catch (err) {
-      logger.error('Failed to load preview', err, 'templates');
-      setError('Failed to load preview');
-    }
-    setLoadingPreview(false);
-  };
-
-  useEffect(() => { loadPreview(); }, [template.wordFilePath]);
+  useEffect(() => {
+    const filePath = template.wordFilePath;
+    if (!filePath) return;
+    api.get<WordPreview>(`/templates/${template.id}/word-preview`)
+      .then(setPreview)
+      .catch((err) => {
+        logger.error('Failed to load preview', err, 'templates');
+        setError('Failed to load preview');
+      })
+      .finally(() => setPreviewFor(filePath));
+  }, [template.id, template.wordFilePath]);
 
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault();

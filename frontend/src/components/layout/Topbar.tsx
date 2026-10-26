@@ -7,6 +7,8 @@ import { useAuth } from '@/lib/auth-context';
 import { useSidebar } from '@/lib/sidebar-context';
 import { api } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
+import { useNow } from '@/lib/use-now';
+import { formatTimeAgo } from '@/lib/format';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 interface NotificationItem {
@@ -54,16 +56,22 @@ export default function Topbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
   const [showSearch, setShowSearch] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [resultsQuery, setResultsQuery] = useState<string | null>(null); // query the current results belong to
   const searchRef = useRef<HTMLDivElement>(null);
   const debouncedQuery = useDebounce(searchQuery, 300);
+  const searchActive = debouncedQuery.length >= 2;
+  const searchLoading = searchActive && resultsQuery !== debouncedQuery;
+  const visibleResults = searchActive ? searchResults : null;
+  const now = useNow();
 
   // Close search on navigation
-  useEffect(() => {
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
     setShowSearch(false);
     setSearchQuery('');
     setSearchResults(null);
-  }, [pathname]);
+  }
 
   const initials = user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : '?';
 
@@ -80,18 +88,17 @@ export default function Topbar() {
   }, []);
 
   // Search
+  // Loading/visibility are derived (searchLoading, visibleResults). `ignore`
+  // drops responses for queries the user has already typed past.
   useEffect(() => {
-    if (debouncedQuery.length >= 2) {
-      setSearchLoading(true);
-      api.get<SearchResults>(`/search?q=${encodeURIComponent(debouncedQuery)}`)
-        .then((res) => { setSearchResults(res); setShowSearch(true); })
-        .catch(() => setSearchResults(null))
-        .finally(() => setSearchLoading(false));
-    } else {
-      setSearchResults(null);
-      setShowSearch(false);
-    }
-  }, [debouncedQuery]);
+    if (!searchActive) return;
+    let ignore = false;
+    api.get<SearchResults>(`/search?q=${encodeURIComponent(debouncedQuery)}`)
+      .then((res) => { if (!ignore) { setSearchResults(res); setShowSearch(true); } })
+      .catch(() => { if (!ignore) setSearchResults(null); })
+      .finally(() => { if (!ignore) setResultsQuery(debouncedQuery); });
+    return () => { ignore = true; };
+  }, [debouncedQuery, searchActive]);
 
   // Close dropdowns on click outside
   useEffect(() => {
@@ -144,17 +151,6 @@ export default function Topbar() {
     }
   };
 
-  const timeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
-
   return (
     <header className={`fixed top-0 right-0 h-14 bg-surface border-b border-border flex items-center justify-between px-3 md:px-6 z-10 transition-all duration-200 left-0 ${collapsed ? 'md:left-16' : 'md:left-56'}`}>
       {/* Mobile hamburger */}
@@ -176,26 +172,26 @@ export default function Topbar() {
           placeholder="Search clients, jobs, templates..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          onFocus={() => { if (searchResults) setShowSearch(true); }}
+          onFocus={() => { if (visibleResults) setShowSearch(true); }}
           onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearch(false); } }}
           className="w-full pl-10 pr-4 py-2 bg-bg border border-border rounded-lg text-sm text-text placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
         />
 
-        {showSearch && searchResults && (
+        {showSearch && visibleResults && (
           <div className="absolute left-0 right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-50 max-h-96 overflow-y-auto">
             {searchLoading && (
               <div className="px-4 py-3 text-sm text-text-muted">Searching...</div>
             )}
-            {!searchLoading && searchResults.counts.clients + searchResults.counts.jobs + searchResults.counts.templates + searchResults.counts.invoices === 0 && (
+            {!searchLoading && visibleResults.counts.clients + visibleResults.counts.jobs + visibleResults.counts.templates + visibleResults.counts.invoices === 0 && (
               <div className="px-4 py-6 text-sm text-text-muted text-center">No results found</div>
             )}
 
-            {searchResults.clients.length > 0 && (
+            {visibleResults.clients.length > 0 && (
               <div>
                 <div className="px-4 py-2 text-xs font-semibold text-text-muted bg-bg border-b border-border">
-                  Clients <span className="text-text-muted">({searchResults.counts.clients})</span>
+                  Clients <span className="text-text-muted">({visibleResults.counts.clients})</span>
                 </div>
-                {searchResults.clients.map((c) => (
+                {visibleResults.clients.map((c) => (
                   <button key={c.id} onClick={() => { router.push(`/clients/${c.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <ClientIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
@@ -208,12 +204,12 @@ export default function Topbar() {
               </div>
             )}
 
-            {searchResults.jobs.length > 0 && (
+            {visibleResults.jobs.length > 0 && (
               <div>
                 <div className="px-4 py-2 text-xs font-semibold text-text-muted bg-bg border-b border-border">
-                  Jobs <span className="text-text-muted">({searchResults.counts.jobs})</span>
+                  Jobs <span className="text-text-muted">({visibleResults.counts.jobs})</span>
                 </div>
-                {searchResults.jobs.map((j) => (
+                {visibleResults.jobs.map((j) => (
                   <button key={j.id} onClick={() => { router.push(`/jobs/${j.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <JobIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
@@ -226,12 +222,12 @@ export default function Topbar() {
               </div>
             )}
 
-            {searchResults.templates.length > 0 && (
+            {visibleResults.templates.length > 0 && (
               <div>
                 <div className="px-4 py-2 text-xs font-semibold text-text-muted bg-bg border-b border-border">
-                  Templates <span className="text-text-muted">({searchResults.counts.templates})</span>
+                  Templates <span className="text-text-muted">({visibleResults.counts.templates})</span>
                 </div>
-                {searchResults.templates.map((t) => (
+                {visibleResults.templates.map((t) => (
                   <button key={t.id} onClick={() => { router.push(`/templates/${t.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <TemplateIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
@@ -244,12 +240,12 @@ export default function Topbar() {
               </div>
             )}
 
-            {searchResults.invoices.length > 0 && (
+            {visibleResults.invoices.length > 0 && (
               <div>
                 <div className="px-4 py-2 text-xs font-semibold text-text-muted bg-bg border-b border-border">
-                  Invoices <span className="text-text-muted">({searchResults.counts.invoices})</span>
+                  Invoices <span className="text-text-muted">({visibleResults.counts.invoices})</span>
                 </div>
-                {searchResults.invoices.map((inv) => (
+                {visibleResults.invoices.map((inv) => (
                   <button key={inv.id} onClick={() => { router.push(`/invoices/${inv.id}`); setShowSearch(false); setSearchQuery(''); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-bg/50 flex items-center gap-3 border-b border-border last:border-0">
                     <InvoiceIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
@@ -310,7 +306,7 @@ export default function Topbar() {
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-text">{n.title}</div>
                         <div className="text-xs text-text-secondary mt-0.5 truncate">{n.message}</div>
-                        <div className="text-xs text-text-muted mt-1">{timeAgo(n.createdAt)}</div>
+                        <div className="text-xs text-text-muted mt-1">{formatTimeAgo(n.createdAt, now)}</div>
                       </div>
                       {!n.isRead && <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-1.5" />}
                     </button>

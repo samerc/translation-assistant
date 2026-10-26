@@ -99,8 +99,6 @@ export default function JobDetailPage() {
     { id: 'translated-files', label: `Translated Files (${translatedFiles.length})` },
   ];
 
-  const effectivePrice = job.finalPrice ?? job.calculatedTotal;
-
   return (
     <div>
       {/* Locked banner */}

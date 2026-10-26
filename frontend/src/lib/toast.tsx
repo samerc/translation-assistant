@@ -4,7 +4,7 @@
 // anywhere; a single <ToastHost/> (mounted in the authenticated layout) renders
 // the stack. Same singleton pattern as lib/confirm.tsx — no per-component hook.
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -15,12 +15,20 @@ interface Toast {
 }
 
 let counter = 0;
+// Replaced (never mutated) on every change so it doubles as the store snapshot.
 let items: Toast[] = [];
-let listeners: ((t: Toast[]) => void)[] = [];
+let listeners: (() => void)[] = [];
+const NO_TOASTS: Toast[] = [];
 
 function emit() {
-  const snapshot = [...items];
-  listeners.forEach((l) => l(snapshot));
+  listeners.forEach((l) => l());
+}
+
+function subscribe(listener: () => void) {
+  listeners.push(listener);
+  return () => {
+    listeners = listeners.filter((l) => l !== listener);
+  };
 }
 
 function dismiss(id: number) {
@@ -30,7 +38,7 @@ function dismiss(id: number) {
 
 function push(type: ToastType, message: string, ttl = 4000) {
   const id = ++counter;
-  items.push({ id, type, message });
+  items = [...items, { id, type, message }];
   emit();
   if (typeof window !== 'undefined') {
     window.setTimeout(() => dismiss(id), ttl);
@@ -58,15 +66,7 @@ const ACCENT: Record<ToastType, string> = {
 const ICON: Record<ToastType, string> = { success: '✓', error: '!', info: 'i' };
 
 export function ToastHost() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  useEffect(() => {
-    listeners.push(setToasts);
-    setToasts([...items]);
-    return () => {
-      listeners = listeners.filter((l) => l !== setToasts);
-    };
-  }, []);
+  const toasts = useSyncExternalStore(subscribe, () => items, () => NO_TOASTS);
 
   if (!toasts.length) return null;
 

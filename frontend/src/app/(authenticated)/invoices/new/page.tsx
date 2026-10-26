@@ -15,14 +15,18 @@ export default function NewInvoicePage() {
   const searchParams = useSearchParams();
   const prefillJobId = searchParams.get('jobId');
   const [clients, setClients] = useState<ClientOption[]>([]);
-  const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [clientJobs, setClientJobs] = useState<{ clientId: string; jobs: JobOption[] }>({ clientId: '', jobs: [] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const prefilled = useRef(false);
 
   const [clientId, setClientId] = useState('');
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dueDate, setDueDate] = useState('');
+  const [dueDate, setDueDate] = useState(() => {
+    const due = new Date();
+    due.setDate(due.getDate() + 30); // default: 30 days from now
+    return due.toISOString().split('T')[0];
+  });
   const [taxRate, setTaxRate] = useState(0);
   const [currency, setCurrency] = useState('USD');
   const [notes, setNotes] = useState('');
@@ -30,10 +34,6 @@ export default function NewInvoicePage() {
 
   useEffect(() => {
     api.get<{ data: ClientOption[] }>('/clients?limit=100').then((res) => setClients(res.data));
-    // Set default due date to 30 days from now
-    const due = new Date();
-    due.setDate(due.getDate() + 30);
-    setDueDate(due.toISOString().split('T')[0]);
 
     // Pre-fill from job if jobId is in URL
     if (prefillJobId && !prefilled.current) {
@@ -51,14 +51,18 @@ export default function NewInvoicePage() {
     }
   }, []);
 
+  // Only jobs fetched for the currently selected client are shown, so switching
+  // clients never offers the previous client's jobs while the new list loads.
+  const jobs = clientId && clientJobs.clientId === clientId ? clientJobs.jobs : [];
+
   useEffect(() => {
-    if (clientId) {
-      api.get<{ data: JobOption[] }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => {
-        setJobs(res.data.filter((j) => ['delivered', 'in_progress', 'accepted'].includes(j.status)));
+    if (!clientId) return;
+    api.get<{ data: JobOption[] }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => {
+      setClientJobs({
+        clientId,
+        jobs: res.data.filter((j) => ['delivered', 'in_progress', 'accepted'].includes(j.status)),
       });
-    } else {
-      setJobs([]);
-    }
+    });
   }, [clientId]);
 
   const updateItem = (index: number, field: keyof LineItem, value: string | number) => {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { formatDate } from '@/lib/format';
@@ -64,8 +65,8 @@ export default function InvoicesPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
-    setLoadError(false);
     api.get<InvoicesResponse>(`/invoices?${params}`).then((res) => {
+      setLoadError(false);
       setInvoices(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
@@ -77,11 +78,6 @@ export default function InvoicesPage() {
   const handleSort = (field: string) => {
     if (sortBy === field) { setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC'); }
     else { setSortBy(field); setSortOrder('DESC'); }
-  };
-
-  const SortIcon = ({ field }: { field: string }) => {
-    if (sortBy !== field) return <span className="text-text-muted ml-1">↕</span>;
-    return <span className="text-primary ml-1">{sortOrder === 'ASC' ? '↑' : '↓'}</span>;
   };
 
   const getStatusBadge = (status: string) => {
@@ -130,21 +126,21 @@ export default function InvoicesPage() {
           <thead>
             <tr className="bg-bg border-b border-border">
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('invoiceNumber')}>
-                Invoice # <SortIcon field="invoiceNumber" />
+                Invoice # <SortIcon field="invoiceNumber" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Client</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('status')}>
-                Status <SortIcon field="status" />
+                Status <SortIcon field="status" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('issueDate')}>
-                Issue Date <SortIcon field="issueDate" />
+                Issue Date <SortIcon field="issueDate" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('dueDate')}>
-                Due Date <SortIcon field="dueDate" />
+                Due Date <SortIcon field="dueDate" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Items</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('total')}>
-                Total <SortIcon field="total" />
+                Total <SortIcon field="total" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
             </tr>
           </thead>

@@ -16,18 +16,16 @@ interface DashboardStats {
 export default function Dashboard() {
   const { user, hasPermission } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const canSeeStats = hasPermission('reports:read');
+  const [loading, setLoading] = useState(canSeeStats);
 
   useEffect(() => {
-    if (hasPermission('reports:read')) {
-      api.get<DashboardStats>('/reports/dashboard-stats')
-        .then(setStats)
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, []);
+    if (!canSeeStats) return;
+    api.get<DashboardStats>('/reports/dashboard-stats')
+      .then(setStats)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [canSeeStats]);
 
   const currency = stats?.currency || 'USD';
   const canSeeFinancials = hasPermission('reports:read');

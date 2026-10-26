@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { JOB_STATUS_BADGE, JOB_TYPE_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
@@ -64,8 +65,8 @@ export default function JobsPage() {
     params.set('page', String(page));
     params.set('limit', '25');
 
-    setLoadError(false);
     api.get<JobsResponse>(`/jobs?${params}`).then((res) => {
+      setLoadError(false);
       setJobs(res.data);
       setTotal(res.total);
       setTotalPages(res.totalPages);
@@ -77,11 +78,6 @@ export default function JobsPage() {
   const handleSort = (field: string) => {
     if (sortBy === field) { setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC'); }
     else { setSortBy(field); setSortOrder('DESC'); }
-  };
-
-  const SortIcon = ({ field }: { field: string }) => {
-    if (sortBy !== field) return <span className="text-text-muted ml-1">↕</span>;
-    return <span className="text-primary ml-1">{sortOrder === 'ASC' ? '↑' : '↓'}</span>;
   };
 
   const getStatusBadge = (status: string) => {
@@ -136,22 +132,22 @@ export default function JobsPage() {
           <thead>
             <tr className="bg-bg border-b border-border">
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('title')}>
-                Job <SortIcon field="title" />
+                Job <SortIcon field="title" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Client</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Languages</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('status')}>
-                Status <SortIcon field="status" />
+                Status <SortIcon field="status" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary">Items</th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('calculatedTotal')}>
-                Total <SortIcon field="calculatedTotal" />
+                Total <SortIcon field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('deadline')}>
-                Deadline <SortIcon field="deadline" />
+                Deadline <SortIcon field="deadline" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
               <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
-                Created <SortIcon field="createdAt" />
+                Created <SortIcon field="createdAt" sortBy={sortBy} sortOrder={sortOrder} />
               </th>
             </tr>
           </thead>

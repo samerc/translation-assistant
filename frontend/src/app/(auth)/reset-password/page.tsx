@@ -16,17 +16,14 @@ function ResetPasswordForm() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // Token verification state
-  const [verifying, setVerifying] = useState(true);
+  // Token verification state (no token → nothing to verify)
+  const [verifying, setVerifying] = useState(Boolean(token));
   const [tokenValid, setTokenValid] = useState(false);
   const [maskedEmail, setMaskedEmail] = useState('');
 
   // Verify the token before showing the form (requirement 6)
   useEffect(() => {
-    if (!token) {
-      setVerifying(false);
-      return;
-    }
+    if (!token) return;
 
     (async () => {
       try {

@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
+import { uid } from '@/lib/uid';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency } from '@/lib/format';
 
@@ -67,7 +68,7 @@ export default function NewJobPage() {
 
   const addLineItem = () => {
     setLineItems([...lineItems, {
-      key: `li_${Date.now()}`, description: '', templateId: undefined,
+      key: uid('li'), description: '', templateId: undefined,
       pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
     }]);
   };

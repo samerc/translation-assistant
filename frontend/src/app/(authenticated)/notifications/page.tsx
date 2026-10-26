@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { formatTimeAgo } from '@/lib/format';
+import { useNow } from '@/lib/use-now';
 
 interface NotificationItem {
   id: string;
@@ -29,6 +31,7 @@ export default function NotificationsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const router = useRouter();
+  const now = useNow();
 
   const loadNotifications = () => {
     const params = new URLSearchParams();
@@ -64,18 +67,6 @@ export default function NotificationsPage() {
       case 'job_assigned': return <span className="w-8 h-8 rounded-full bg-success-light flex items-center justify-center"><UserPlusIcon className="w-4 h-4 text-success" /></span>;
       default: return <span className="w-8 h-8 rounded-full bg-bg flex items-center justify-center"><BellIcon className="w-4 h-4 text-text-muted" /></span>;
     }
-  };
-
-  const timeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(dateStr).toLocaleDateString();
   };
 
   return (
@@ -119,7 +110,7 @@ export default function NotificationsPage() {
                   {!n.isRead && <span className="w-2 h-2 bg-primary rounded-full flex-shrink-0" />}
                 </div>
                 <p className="text-sm text-text-secondary mt-0.5">{n.message}</p>
-                <span className="text-xs text-text-muted mt-1 block">{timeAgo(n.createdAt)}</span>
+                <span className="text-xs text-text-muted mt-1 block">{formatTimeAgo(n.createdAt, now)}</span>
               </div>
             </button>
           ))
