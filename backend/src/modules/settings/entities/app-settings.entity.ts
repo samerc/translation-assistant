@@ -57,7 +57,7 @@ export class AppSettings {
   // Google Cloud Translation API key (document GT helper). Never returned by
   // the API — responses carry only `googleTranslateKeySet`. The env var
   // GOOGLE_TRANSLATE_API_KEY is used when this is empty.
-  @Column({ length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   googleTranslateApiKey: string | null;
 
   @UpdateDateColumn()

@@ -22,6 +22,20 @@ check() {
   fi
 }
 
+check_not() {
+  local desc="$1"
+  local unexpected="$2"
+  local actual="$3"
+  if echo "$actual" | grep -qF "$unexpected"; then
+    FAIL=$((FAIL + 1))
+    ERRORS="$ERRORS\n  FAIL: $desc (did not expect '$unexpected', got '${actual:0:150}')"
+    echo "  FAIL: $desc"
+  else
+    PASS=$((PASS + 1))
+    echo "  PASS: $desc"
+  fi
+}
+
 check_status() {
   local desc="$1"
   local expected="$2"
@@ -543,7 +557,13 @@ echo ""
 echo "=== 15. TRANSLATE ==="
 # ═══════════════════════════════════════
 R=$(curl -s -X POST "$API/translate" -H "$H" -H "Content-Type: application/json" -d '{"text":"hello","from":"en","to":"fr"}')
-check "Translate" "translatedText" "$R"
+# With a key: a translation. Without one: a clear 503 — never fake "[GT: …]" text.
+if echo "$(curl -s "$API/translate/status" -H "$H")" | grep -q '"configured":true'; then
+  check "Translate" "translatedText" "$R"
+else
+  check "Translate without a key says so" "not set up" "$R"
+  check_not "Translate without a key returns no fake text" "[GT:" "$R"
+fi
 
 R=$(curl -s -X POST "$API/translate" -H "$H" -H "Content-Type: application/json" -d '{"text":"hello","from":"!!!","to":"fr"}')
 check "Translate: bad lang code → 400" "Invalid language" "$R"

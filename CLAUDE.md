@@ -15,7 +15,7 @@ Internal multi-user web application for freelance translators. Two core modules:
 - **File uploads:** Local disk, validated by magic bytes (no image compression)
 - **Word export:** `docx` npm library
 - **PDF export:** `pdfkit` library (invoice export). Text goes through `PdfText` (`invoices/pdf-text.ts`): embedded Noto Sans + Noto Sans Arabic (npm `@expo-google-fonts/*`, OFL), own line wrapping, and Unicode bidi via `bidi-js` — each line is drawn as direction runs on one alphabetic baseline (fontkit shapes Arabic but does no bidi, and pdfkit wrapping drops spaces between Arabic words). Never use `doc.text` / Helvetica directly for user data. Rows are measured, pages break with a repeated table header, totals stay together, page numbers when >1 page. Not covered: CJK, Hebrew, Thai, Devanagari; `→`-style symbols missing from Noto Sans
-- **Translation helper:** Google Cloud Translation API
+- **Translation helper:** Google Cloud Translation API. Key set by an admin in Settings > General (`AppSettings.googleTranslateApiKey`, never returned — only `googleTranslateKeySet`); env `GOOGLE_TRANSLATE_API_KEY` is the fallback. No key → `POST /translate` is a 503 (never fake text); Google errors/timeouts are 502/504. `GET /translate/status` drives the document page's "not set up" banner
 - **Charts:** `recharts` (reporting page)
 - **Scheduling:** `@nestjs/schedule` (notification cron jobs)
 - **Containerization:** Docker + Docker Compose
@@ -61,7 +61,7 @@ translation-assistant/
 - Refresh token rotation with bcrypt hashing
 - **Session tracking**: each login/refresh records a `Session` (IP, user-agent, lastUsed). Users can list active sessions (`GET /auth/sessions`, the caller's own marked `current`), revoke one (`DELETE /auth/sessions/:id`), or `logout-everywhere` (revokes all + clears cookie). Password reset and password change revoke all sessions (the change-password modal then signs the user out). Refresh JWTs carry a random `jti`, so concurrent logins never share a session hash.
 - **Password reset flow**: `forgot-password` → `verify-reset-token` → `reset-password`. Tokens are 32-byte random, single-use, 30-min expiry (`PasswordResetToken`). No email service yet — in **non-production** the token is returned in the response for testing; in production only a generic message is returned (see `requestPasswordReset` TODO to wire email).
-- Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run)
+- Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run, with `mustChangePassword` — the app shows a banner until it is changed; any password change/reset clears it). First run also seeds en/ar/fr languages and label options; the dashboard shows admins a Getting started checklist
 - 3 default roles: Admin (all permissions), Translator (create/read/update on core resources + `settings:read`, needed for languages/labels/job types), Viewer (read-only). Existing DBs get Translator `settings:read` via migration `*-TranslatorSettingsRead` (applied by hand on prod — see docs/OPS.md §5)
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
 - **`@AdminOnly()` + `AdminGuard`**: hard role-name check (DB) on top of RBAC for privilege-sensitive endpoints (e.g. invite, role management) — prevents a `roles:update` holder from self-escalating
@@ -78,7 +78,8 @@ translation-assistant/
 - View-only users blocked from write operations on jobs, documents and invoices (`verifyJobAccess`/`verifyDocumentAccess`/`verifyInvoiceAccess` take a `'view' | 'edit'` level — pass `'edit'` on every write)
 - `User.password` and `User.refreshToken` are `select: false` — never returned by any query (JobUser.user is eager). Code that needs the hash selects it explicitly (`loadPasswordHash`, `changePassword`)
 - Emailing an invoice needs `invoices:update` + edit access, rate-limited to 10/hour (it sends branded mail to any address)
-- Settings responses (GET and PATCH) never include `smtpPass` — only `smtpPassSet`
+- Settings responses (GET and PATCH) never include `smtpPass` or `googleTranslateApiKey` — only `smtpPassSet` / `googleTranslateKeySet` (admins)
+- Download headers go through `contentDisposition()` (`common/utils/content-disposition.ts`): ASCII `filename` + RFC 5987 `filename*`, exposed via CORS `exposedHeaders`; document exports download as `JOB-0001 Template name.docx`
 - Non-admin job list filtered to only assigned jobs (innerJoin on job_users)
 - ALL document endpoints verify job access via `verifyDocumentAccess()`/`verifyJobAccess()`
 - ALL invoice endpoints verify access via `verifyInvoiceAccess()` (creator or linked job access)
@@ -95,16 +96,17 @@ translation-assistant/
 - Job user assignment validates user exists before creating assignment
 - Invoice creation requires at least 1 line item
 - Word template uploads rejected if no valid placeholders found
-- Search access control: non-admins only see clients they have jobs with, only active templates; each result type is dropped unless the caller has that resource's `:read` permission (Translators get no invoices)
+- **Client visibility** (non-admins): clients they created (`Client.createdByUserId`) or have a job with — one SQL rule, `clientVisibleSql()` (`clients/client-access.ts`), used by the client list/detail checks, search and job creation (a non-admin can't open a job on a client they can't see)
+- Search access control: non-admins only see clients they created or have jobs with, only active templates; each result type is dropped unless the caller has that resource's `:read` permission (Translators get no invoices)
 - Translate endpoint: language code validation, 5000 char limit, 10s timeout, 30/min rate limit
 - **Global guard chain (registration order in `app.module.ts`)**: `HoneypotGuard` (rejects writes with a filled hidden `_hp` field — bot trap) → `AbuseDetectionGuard` (blocks SQL-injection / XSS payloads in JSON bodies — not query/params, and multipart fields are not parsed yet when global guards run) → `ThrottlerGuard` (global 300 req/min) → `WriteThrottleGuard` (120 write ops/min per user or IP). `AdminGuard` is applied per-controller (needs `req.user`).
 - **`GlobalExceptionFilter`** (`main.ts`): logs full technical details server-side, returns only sanitized messages to clients (no stack traces, SQL, or file paths); maps TypeORM `QueryFailedError`/`EntityNotFoundError` to safe 409/404/400
-- **Common-password blocklist**: registration/password-change reject the top ~550 breached passwords via `@IsNotCommonPassword` validator
+- **Common-password blocklist**: registration/password-change reject the top ~550 breached passwords via `@IsNotCommonPassword` validator — also their stems with digits/symbols/leetspeak stripped (`Password1!`, `Welcome1!`, `P@ssw0rd2024`)
 - Password reset and invite tokens are single-use, claimed with a conditional `UPDATE … WHERE used = false` (safe under concurrent requests); reset revokes all sessions
 - Rate limiting: login (15/min), register (10/min), refresh (10/min), forgot-password (3/min), verify-reset (10/min), reset-password (5/min), change-password (5/min), invite (5/hr). Global fallback 300/min + 120 writes/min per identity.
 - Centralized frontend logger (ready for Sentry/external service)
 - Frontend: `ErrorBoundary` component wraps the app (`layout.tsx`) — graceful fallback UI on render errors
-- Frontend: sidebar items hidden based on user permissions (no Invoices/Reports for Translator role)
+- Frontend: sidebar items hidden based on user permissions (no Invoices/Reports for Translator role); pages wrapped in `RequirePermission` (`components/RequirePermission.tsx`) show a no-access state instead of failing requests (invoices, reports)
 - Frontend: dashboard gracefully handles 403 for non-admin users
 - Frontend: unsaved changes warning on document fill page — `useUnsavedChangesGuard(dirty)` (`lib/unsaved-changes.ts`) covers browser close and in-app links; shell code that navigates with `router.push` (Topbar search/notifications) calls `confirmLeave()` first
 - Frontend: status transitions enforced (only valid next states selectable)
@@ -169,12 +171,13 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - Use these instead of hand-written class strings: `Button`/`buttonClass()` (primary/secondary/ghost/danger; Cancel = secondary), `Input`/`Select`/`Textarea`/`SearchInput`/`Field`, `Badge`, `PageHeader`, `EmptyState`, `Alert`, `SegmentedControl` (≤4 options), `TableCard`/`SortableTh`/`RowChevron`/`Pagination` (`DataTable.tsx`), outline icons in `icons.tsx`.
 - CSS component classes behind them live in `globals.css` `@layer components` (`.btn*`, `.input`, `.card`, `.data-table`, `.badge`, `.tone-*`, `.segmented`). Status colours: `lib/status.ts` maps → tone classes.
 - Clickable table rows: `<tr data-href onClick=…>` + `<RowChevron />` as the last cell.
+- Overdue = open job (`OPEN_JOB_STATUSES`) past its deadline: `isJobOverdue(job, todayLocal(useNow()))` from `lib/status.ts`. Keys → labels: `humanize()` (`lib/format.ts`).
 - Fully on React kit components: app shell (Sidebar/Topbar), dashboard, Clients/Jobs/Invoices/Templates lists, Settings > Appearance. All other pages use the kit's CSS classes directly (`className="btn btn-primary"`, `input`, `card`, `data-table`, `tone tone-*`) — swap to the React components when you touch them; never reintroduce hand-written button/input class strings.
 
 ## Database Entities
 
 ### Auth & Users
-- **User** — email, password (bcrypt), firstName, lastName, avatar, isActive, colorPalette, darkMode, roleId, refreshToken
+- **User** — email, password (bcrypt), firstName, lastName, avatar, isActive, colorPalette, darkMode, mustChangePassword, roleId, refreshToken
 - **Role** — name, description. M2M with Permission via `role_permissions`
 - **Permission** — resource, action (e.g., `clients:create`)
 - **InviteToken** — token, email, roleId, expiresAt, used, usedByUserId
@@ -182,12 +185,12 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - **PasswordResetToken** — token, userId, expiresAt, used. 32-byte single-use, 30-min expiry.
 
 ### Settings
-- **AppSettings** — companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON)
+- **AppSettings** — companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. Invoice exports use the creator's My Business details, falling back to companyName/companyAddress/companyLogo
 - **Language** — code, name, direction (ltr/rtl), isActive
 - **LabelOption** — category (email/phone/address), value, sortOrder. Configurable labels for client contact info.
 
 ### Clients
-- **Client** — type (company/person), name, taxId, notes
+- **Client** — type (company/person), name, taxId, notes, createdByUserId
 - **ClientEmail** — email, label, isPrimary. Multiple per client.
 - **ClientPhone** — phone, label, isPrimary. Multiple per client.
 - **ClientAddress** — address, label, isPrimary. Multiple per client.
@@ -199,9 +202,9 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
   - **Designer type**: layout built with block-based designer, stored in layoutJson
   - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
     - Repeatable groups: `{#group_key}` … `{/group_key}` repeats the enclosed paragraphs/table row once per entry (no nesting). One scanner (`templates/word-placeholders.ts`) validates upload + preview; "Create Fields for All" puts fields found inside a loop into that group; preview warns when a loop field has a different `groupKey`. A group field used outside any loop exports its first entry
-  - **Designer type** export: `field`/`field-row` blocks showing group fields repeat once per entry (`collectFieldValues()` in export.service)
+  - **Designer type** export: `field`/`field-row` blocks showing group fields repeat once per entry (`collectFieldValues()` in export.service); labels come from the target language (`fieldLabelResolver()`). An empty layout exports a default document: title, fixed fields in sortOrder, one table per group
   - **Simple type**: pricing only, no fields or layout (used for freeform jobs)
-- **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey
+- **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey. Keys (and group keys) must match the Word placeholder rule `/^[a-zA-Z_][a-zA-Z0-9_]*$/` (`FIELD_KEY_PATTERN`)
   - Fields with same `groupKey` form a repeatable set (e.g., family extract rows)
   - Fields with no `groupKey` are fixed (appear once)
 - **TemplateFieldLabel** — label text per language per field (M2O to Language)
@@ -281,7 +284,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `POST /:id/word-placeholders` — Auto-create fields from placeholders
 
 ### Jobs (`/api/jobs`)
-- Full CRUD with search, status filter, client filter, sort, pagination
+- Full CRUD with search, status filter (one status or comma-separated), `hasDeadline=true`, client filter, sort, pagination
 - `PATCH /:id/status` — Update job status
 - `POST /:id/reopen` — Reopen a locked job
 - `POST/DELETE /:id/users/:userId` — Assign/remove users
@@ -303,7 +306,8 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `DELETE /:id` — Remove document
 
 ### Translate (`/api/translate`)
-- `POST /` — Google Translate proxy (text, from, to). Validated: language codes (ISO 639-1), max 5000 chars, 10s timeout, 30 req/min
+- `GET /status` — `{ configured }` (is a key set)
+- `POST /` — Google Translate proxy (text, from, to). Validated: language codes (ISO 639-1), max 5000 chars, 10s timeout, 30 req/min. 503 when no key
 
 ### Invoices (`/api/invoices`)
 - Full CRUD with search, status/client/date filters, sort, pagination
@@ -336,7 +340,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/login` — Login page (public, links to Forgot Password)
 - `/forgot-password` — Request a reset link (public). In dev shows the generated reset link directly (no email service).
 - `/reset-password?token=` — Verify token and set a new password (public)
-- `/` — Dashboard with summary cards
+- `/` — Dashboard: summary cards (reports:read), Upcoming deadlines (open jobs, overdue in red), admin Getting started checklist
 - `/clients` — Client list with search, type filter, sort, pagination
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)
 - `/templates` — Template list (table + card view toggle, search, status filter, sort)
@@ -350,7 +354,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/invoices/:id` — Invoice detail (status workflow, edit mode for drafts, Record Payment modal for partial/full payments, payments list with delete, balance due, line items with job links, PDF/Word export buttons)
 - `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
 - `/notifications` — Full notifications list with read/unread filter
-- `/reports` — Reports page (Revenue line chart, By Client bar chart, Job Status donut chart via recharts)
+- `/reports` — Reports page (Revenue line chart, By Client bar chart, Job Status donut chart via recharts — charts live in `reports/charts.tsx`, loaded with `next/dynamic` so recharts stays off other pages)
 - `/settings` — Settings page (General, Languages, Labels, File Uploads, Appearance tabs)
 
 ## File Upload Validation

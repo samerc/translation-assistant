@@ -134,7 +134,7 @@ export default function JobsPage() {
       </div>
 
       <TableCard
-        minWidth={360}
+        minWidth={0}
         footer={<Pagination page={page} totalPages={totalPages} total={total} pageSize={25} noun={total === 1 ? 'job' : 'jobs'} onPage={setPage} />}
       >
         <thead>
@@ -145,7 +145,7 @@ export default function JobsPage() {
             <SortableTh field="status" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Status</SortableTh>
             <th className="text-right hidden lg:table-cell">Items</th>
             <SortableTh field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right hidden sm:table-cell">Total</SortableTh>
-            <SortableTh field="deadline" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Deadline</SortableTh>
+            <SortableTh field="deadline" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="hidden sm:table-cell">Deadline</SortableTh>
             <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="hidden lg:table-cell">Created</SortableTh>
             <th aria-label="Open" />
           </tr>
@@ -166,12 +166,13 @@ export default function JobsPage() {
             const badge = getStatusBadge(job.status);
             return (
               <tr key={job.id} data-href onClick={() => router.push(`/jobs/${job.id}`)}>
-                <td>
+                {/* On phones the cell takes the leftover width so the client name truncates. */}
+                <td className="w-full max-w-0 sm:w-auto sm:max-w-none">
                   <div className="font-semibold text-text">{job.title}</div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs font-mono text-text-muted">{job.jobNumber}</span>
+                  <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                    <span className="text-xs font-mono text-text-muted whitespace-nowrap">{job.jobNumber}</span>
                     <span className="text-xs text-text-secondary truncate sm:hidden">{job.client.name}</span>
-                    <span className={`text-[11px] font-semibold px-1.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
+                    <span className={`hidden sm:inline text-[11px] font-semibold px-1.5 rounded ${job.type === 'freeform' ? JOB_TYPE_BADGE.freeform : JOB_TYPE_BADGE.template}`}>
                       {job.type === 'freeform' ? 'Free-form' : 'Template'}
                     </span>
                   </div>
@@ -180,10 +181,17 @@ export default function JobsPage() {
                 <td className="font-mono text-xs whitespace-nowrap hidden md:table-cell">
                   {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
                 </td>
-                <td><Badge dot tone={badge.color}>{badge.label}</Badge></td>
+                <td>
+                  <Badge dot tone={badge.color}>{badge.label}</Badge>
+                  {job.deadline && (
+                    <div className={`sm:hidden mt-1 text-xs tabular-nums whitespace-nowrap ${isJobOverdue(job, today) ? 'text-danger font-semibold' : 'text-text-muted'}`}>
+                      Due {formatDate(job.deadline)}
+                    </div>
+                  )}
+                </td>
                 <td className="text-right tabular-nums hidden lg:table-cell">{job.lineItemCount || 0}</td>
                 <td className="text-right tabular-nums font-medium text-text whitespace-nowrap hidden sm:table-cell">{getPrice(job)}</td>
-                <td className="tabular-nums whitespace-nowrap">
+                <td className="tabular-nums whitespace-nowrap hidden sm:table-cell">
                   {isJobOverdue(job, today)
                     ? <span className="text-danger font-semibold" title="Past the deadline">{formatDate(job.deadline)} · Overdue</span>
                     : formatDate(job.deadline)}
