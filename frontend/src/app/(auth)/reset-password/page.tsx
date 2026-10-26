@@ -79,7 +79,7 @@ function ResetPasswordForm() {
 
   if (verifying) {
     return (
-      <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+      <div className="card p-6 shadow-sm">
         <p className="text-sm text-text-secondary text-center">Verifying reset token...</p>
       </div>
     );
@@ -87,8 +87,8 @@ function ResetPasswordForm() {
 
   if (!token || !tokenValid) {
     return (
-      <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
-        <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+      <div className="card p-6 shadow-sm">
+        <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">
           This reset link is invalid or has expired. Please request a new one.
         </div>
         <div className="text-center">
@@ -102,7 +102,7 @@ function ResetPasswordForm() {
 
   if (success) {
     return (
-      <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+      <div className="card p-6 shadow-sm">
         <div className="mb-4 p-3 bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 rounded-lg text-sm">
           Password has been reset successfully. All other sessions have been logged out.
         </div>
@@ -116,10 +116,10 @@ function ResetPasswordForm() {
   }
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+    <div className="card p-6 shadow-sm">
       <form onSubmit={handleSubmit}>
         {error && (
-          <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>
+          <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>
         )}
 
         {maskedEmail && (
@@ -138,7 +138,7 @@ function ResetPasswordForm() {
             required
             minLength={8}
             autoFocus
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="input w-full"
             placeholder="Minimum 8 characters"
           />
         </div>
@@ -152,7 +152,7 @@ function ResetPasswordForm() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
             minLength={8}
-            className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            className="input w-full"
             placeholder="Re-enter your new password"
           />
         </div>
@@ -160,7 +160,7 @@ function ResetPasswordForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 bg-primary text-white rounded-lg font-medium text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn btn-primary w-full"
         >
           {loading ? 'Resetting...' : 'Reset Password'}
         </button>
@@ -190,7 +190,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <Suspense fallback={
-          <div className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+          <div className="card p-6 shadow-sm">
             <p className="text-sm text-text-secondary text-center">Loading...</p>
           </div>
         }>

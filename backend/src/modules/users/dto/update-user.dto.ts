@@ -37,7 +37,16 @@ export class UpdateUserDto {
 
   @IsOptional()
   // Keep in sync with PALETTE_OPTIONS in frontend/src/lib/theme-context.tsx
-  @IsIn(['indigo', 'ocean', 'teal', 'slate', 'violet', 'orchid', 'copper', 'forest'])
+  @IsIn([
+    'indigo',
+    'ocean',
+    'teal',
+    'slate',
+    'violet',
+    'orchid',
+    'copper',
+    'forest',
+  ])
   colorPalette?: string;
 
   @IsOptional()

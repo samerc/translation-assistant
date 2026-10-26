@@ -141,22 +141,22 @@ export default function NewInvoicePage() {
 
   return (
     <div className="max-w-4xl">
-      <button onClick={() => router.push('/invoices')} className="text-sm text-text-muted hover:text-text mb-4 inline-block">
+      <button onClick={() => router.push('/invoices')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
         &larr; Back to Invoices
       </button>
-      <h1 className="text-2xl font-bold text-text mb-6">New Invoice</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-text mb-6">New Invoice</h1>
 
-      {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
       <form onSubmit={handleSubmit}>
         {/* Invoice details */}
-        <div className="bg-surface border border-border rounded-xl p-6 mb-6">
+        <div className="card p-6 mb-6">
           <h2 className="text-lg font-semibold text-text mb-4">Invoice Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Client *</label>
               <select value={clientId} onChange={(e) => setClientId(e.target.value)} required
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                className="input w-full">
                 <option value="">Select client...</option>
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -164,37 +164,37 @@ export default function NewInvoicePage() {
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Currency</label>
               <input value={currency} onChange={(e) => setCurrency(e.target.value)}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Issue Date *</label>
               <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Due Date *</label>
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                className="input w-full" />
             </div>
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1">Tax Rate (%)</label>
               <input type="number" step="0.01" min="0" value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                className="input w-full" />
             </div>
           </div>
           <div className="mt-4">
             <label className="block text-sm font-medium text-text-secondary mb-1">Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-y" />
+              className="input w-full resize-y" />
           </div>
         </div>
 
         {/* Line items */}
-        <div className="bg-surface border border-border rounded-xl p-6 mb-6">
+        <div className="card p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-text">Line Items</h2>
             <button type="button" onClick={addItem}
-              className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm hover:bg-primary-hover">
+              className="btn btn-primary btn-sm">
               + Add Item
             </button>
           </div>
@@ -206,12 +206,12 @@ export default function NewInvoicePage() {
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Description</label>}
                   <input value={item.description} onChange={(e) => updateItem(i, 'description', e.target.value)}
                     placeholder="Description..."
-                    className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                    className="input w-full" />
                 </div>
                 <div className="col-span-2 md:col-span-3">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Link Job</label>}
                   <select value={item.jobId} onChange={(e) => selectJob(i, e.target.value)}
-                    className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                    className="input w-full">
                     <option value="">No linked job</option>
                     {jobs.map((j) => <option key={j.id} value={j.id}>{j.jobNumber} — {j.title}</option>)}
                   </select>
@@ -220,13 +220,13 @@ export default function NewInvoicePage() {
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Qty</label>}
                   <input type="number" min="0" step="0.01" value={item.quantity}
                     onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                    className="input w-full" />
                 </div>
                 <div className="col-span-1 md:col-span-2">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Unit Price</label>}
                   <input type="number" min="0" step="0.01" value={item.unitPrice}
                     onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                    className="input w-full" />
                 </div>
                 <div className="col-span-2 md:col-span-1 flex items-end">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">&nbsp;</label>}
@@ -264,11 +264,11 @@ export default function NewInvoicePage() {
 
         <div className="flex gap-3">
           <button type="submit" disabled={saving}
-            className="px-6 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+            className="btn btn-primary">
             {saving ? 'Creating...' : 'Create Invoice'}
           </button>
           <button type="button" onClick={() => router.push('/invoices')}
-            className="px-6 py-2.5 bg-bg border border-border text-text-secondary rounded-lg text-sm font-medium hover:bg-border/50">
+            className="btn btn-secondary">
             Cancel
           </button>
         </div>

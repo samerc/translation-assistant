@@ -95,7 +95,7 @@ export default function ReportsPage() {
 
       {/* Revenue Tab */}
       {activeTab === 'revenue' && (
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-semibold text-text">Revenue Over Time</h2>
             <div className="flex gap-1 bg-bg border border-border rounded-lg p-1">
@@ -131,7 +131,7 @@ export default function ReportsPage() {
 
       {/* By Client Tab */}
       {activeTab === 'client' && (
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card p-6">
           <h2 className="text-lg font-semibold text-text mb-6">Revenue by Client</h2>
           {clientData.length === 0 ? (
             <div className="text-center py-16 text-text-muted text-sm">No client data yet</div>
@@ -150,7 +150,7 @@ export default function ReportsPage() {
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-6 overflow-x-auto">
-                <table className="w-full text-sm min-w-[400px]">
+                <table className="data-table min-w-[400px]">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-semibold text-text-secondary">Client</th>
@@ -176,7 +176,7 @@ export default function ReportsPage() {
 
       {/* Job Status Tab */}
       {activeTab === 'status' && (
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="card p-6">
           <h2 className="text-lg font-semibold text-text mb-6">Jobs by Status</h2>
           {statusData.length === 0 ? (
             <div className="text-center py-16 text-text-muted text-sm">No job data yet</div>
@@ -198,7 +198,7 @@ export default function ReportsPage() {
               </ResponsiveContainer>
               </div>
               <div className="w-full lg:flex-1 overflow-x-auto">
-                <table className="w-full text-sm min-w-[300px]">
+                <table className="data-table min-w-[300px]">
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-semibold text-text-secondary">Status</th>

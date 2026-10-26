@@ -51,9 +51,9 @@ export default function LoginPage() {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-surface border border-border rounded-xl p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="card p-6 shadow-sm">
           {error && (
-            <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">
+            <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">
               {error}
             </div>
           )}
@@ -69,7 +69,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoFocus
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="input w-full"
               placeholder="you@example.com"
             />
           </div>
@@ -85,7 +85,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+              className="input w-full"
               placeholder="Enter your password"
             />
           </div>
@@ -93,7 +93,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-primary text-white rounded-lg font-medium text-sm hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn-primary w-full"
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </button>

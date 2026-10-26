@@ -265,35 +265,35 @@ export default function InvoiceDetailPage() {
 
   return (
     <div className="max-w-4xl">
-      <button onClick={() => router.push('/invoices')} className="text-sm text-text-muted hover:text-text mb-4 inline-block">
+      <button onClick={() => router.push('/invoices')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
         &larr; Back to Invoices
       </button>
 
-      {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
+      {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-text">{invoice.invoiceNumber}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-text">{invoice.invoiceNumber}</h1>
           <p className="text-text-secondary mt-1">{invoice.client.name}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.color}`}>{badge.label}</span>
           <button onClick={() => handleExport('pdf')}
-            className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 flex items-center gap-1.5">
+            className="btn btn-secondary btn-sm">
             <ExportIcon className="w-4 h-4" /> PDF
           </button>
           <button onClick={() => handleExport('word')}
-            className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 flex items-center gap-1.5">
+            className="btn btn-secondary btn-sm">
             <ExportIcon className="w-4 h-4" /> Word
           </button>
           <button onClick={() => { setEmailTo(''); setEmailMessage(''); setShowEmailModal(true); }}
-            className="px-3 py-1.5 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 flex items-center gap-1.5">
+            className="btn btn-secondary btn-sm">
             <EmailIcon className="w-4 h-4" /> Email
           </button>
           {invoice.status === 'draft' && !editing && (
             <button onClick={startEditing}
-              className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+              className="btn btn-primary btn-sm">
               Edit
             </button>
           )}
@@ -305,7 +305,7 @@ export default function InvoiceDetailPage() {
           )}
           {nextStatuses.length > 0 && (
             <select value="" onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
-              className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary">
+              className="input h-8 px-2">
               <option value="">Change status...</option>
               {nextStatuses.map((s) => {
                 const st = STATUSES.find((x) => x.value === s);
@@ -315,7 +315,7 @@ export default function InvoiceDetailPage() {
           )}
           {invoice.status === 'draft' && (
             <button onClick={handleDelete}
-              className="px-3 py-1.5 bg-danger-light text-danger rounded-lg text-sm hover:bg-danger hover:text-white">
+              className="px-3 py-1.5 tone tone-danger rounded-lg text-sm hover:bg-danger hover:text-white">
               Delete
             </button>
           )}
@@ -324,42 +324,42 @@ export default function InvoiceDetailPage() {
 
       {/* Invoice details */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-surface border border-border rounded-xl p-5">
+        <div className="card p-5">
           <h3 className="text-sm font-semibold text-text-secondary mb-3">Invoice Details</h3>
           {editing ? (
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-text-muted mb-1">Issue Date</label>
                 <input type="date" value={editForm.issueDate} onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-muted mb-1">Due Date</label>
                 <input type="date" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-muted mb-1">Tax Rate (%)</label>
                 <input type="number" step="0.01" min="0" value={editForm.taxRate} onChange={(e) => setEditForm({ ...editForm, taxRate: Number(e.target.value) })}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-muted mb-1">Currency</label>
                 <input value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-muted mb-1">Notes</label>
                 <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-y" />
+                  className="input w-full resize-y" />
               </div>
               <div className="flex gap-2 pt-1">
                 <button onClick={saveEdit} disabled={saving}
-                  className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+                  className="btn btn-primary">
                   {saving ? 'Saving...' : 'Save'}
                 </button>
                 <button onClick={() => setEditing(false)}
-                  className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
+                  className="btn btn-secondary">Cancel</button>
               </div>
             </div>
           ) : (
@@ -374,7 +374,7 @@ export default function InvoiceDetailPage() {
           )}
         </div>
 
-        <div className="bg-surface border border-border rounded-xl p-5">
+        <div className="card p-5">
           <h3 className="text-sm font-semibold text-text-secondary mb-3">Payment Summary</h3>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-text-muted">Subtotal</span><span className="text-text">{invoice.currency} {Number(invoice.subtotal).toFixed(2)}</span></div>
@@ -420,25 +420,25 @@ export default function InvoiceDetailPage() {
 
       {/* Notes */}
       {invoice.notes && (
-        <div className="bg-surface border border-border rounded-xl p-5 mb-6">
+        <div className="card p-5 mb-6">
           <h3 className="text-sm font-semibold text-text-secondary mb-2">Notes</h3>
           <p className="text-sm text-text whitespace-pre-wrap">{invoice.notes}</p>
         </div>
       )}
 
       {/* Line items */}
-      <div className="bg-surface border border-border rounded-xl overflow-x-auto mb-6">
+      <div className="card overflow-x-auto mb-6">
         <div className="px-5 py-4 border-b border-border">
           <h3 className="text-sm font-semibold text-text-secondary">Line Items</h3>
         </div>
-        <table className="w-full text-sm">
+        <table className="data-table">
           <thead>
-            <tr className="bg-bg border-b border-border">
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Description</th>
-              <th className="text-left px-4 py-3 font-semibold text-text-secondary">Linked Job</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Qty</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Unit Price</th>
-              <th className="text-right px-4 py-3 font-semibold text-text-secondary">Total</th>
+            <tr>
+              <th className="text-left">Description</th>
+              <th className="text-left">Linked Job</th>
+              <th className="text-right">Qty</th>
+              <th className="text-right">Unit Price</th>
+              <th className="text-right">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -465,7 +465,7 @@ export default function InvoiceDetailPage() {
       {/* Payment Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-surface border border-border rounded-xl p-6 w-full max-w-md">
+          <div className="card p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-text mb-1">Record Payment</h3>
             <p className="text-sm text-text-muted mb-4">Balance due: {invoice.currency} {balance.toFixed(2)} — record the full amount or part of it.</p>
             <div className="space-y-4">
@@ -473,34 +473,34 @@ export default function InvoiceDetailPage() {
                 <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>
                 <input type="number" step="0.01" min="0.01" max={balance} value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Payment Date</label>
                 <input type="date" value={paymentDate}
                   onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Method <span className="text-text-muted font-normal">(optional)</span></label>
                 <input type="text" maxLength={50} value={paymentMethod} placeholder="Bank transfer, cash, card…"
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Note <span className="text-text-muted font-normal">(optional)</span></label>
                 <input type="text" maxLength={255} value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={handleRecordPayment} disabled={saving}
-                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+                className="btn btn-primary">
                 {saving ? 'Saving...' : 'Record Payment'}
               </button>
               <button onClick={() => setShowPaymentModal(false)}
-                className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50">
+                className="btn btn-secondary">
                 Cancel
               </button>
             </div>
@@ -511,7 +511,7 @@ export default function InvoiceDetailPage() {
       {/* Email invoice modal */}
       {showEmailModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface border border-border rounded-xl p-6 w-full max-w-md">
+          <div className="card p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-text mb-1">Email invoice {invoice.invoiceNumber}</h3>
             <p className="text-sm text-text-secondary mb-4">The invoice PDF is attached automatically.</p>
             <div className="space-y-4">
@@ -519,22 +519,22 @@ export default function InvoiceDetailPage() {
                 <label className="block text-sm font-medium text-text-secondary mb-1">Recipient</label>
                 <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
                   placeholder="Leave blank to use the client's email on file"
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                  className="input w-full" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Message (optional)</label>
                 <textarea value={emailMessage} onChange={(e) => setEmailMessage(e.target.value)} rows={3}
                   placeholder="A short note to include in the email body"
-                  className="w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                  className="input w-full resize-none" />
               </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={handleEmailInvoice} disabled={sendingEmail}
-                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+                className="btn btn-primary">
                 {sendingEmail ? 'Sending...' : 'Send'}
               </button>
               <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}
-                className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50 disabled:opacity-50">
+                className="btn btn-secondary">
                 Cancel
               </button>
             </div>

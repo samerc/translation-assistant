@@ -74,7 +74,7 @@ export default function NotificationsPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-text">Notifications</h1>
         <button onClick={handleMarkAllRead}
-          className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50">
+          className="btn btn-secondary">
           Mark all as read
         </button>
       </div>
@@ -94,7 +94,7 @@ export default function NotificationsPage() {
       <span className="text-sm text-text-muted mb-4 block">{total} notification{total !== 1 ? 's' : ''}</span>
 
       {/* Notifications list */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="card overflow-hidden">
         {notifications.length === 0 ? (
           <div className="px-4 py-12 text-center text-text-muted text-sm">
             {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
@@ -120,10 +120,10 @@ export default function NotificationsPage() {
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 mt-4">
           <button disabled={page <= 1} onClick={() => setPage(page - 1)}
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary disabled:opacity-40 hover:bg-border/50">Previous</button>
+            className="btn btn-secondary btn-sm">Previous</button>
           <span className="text-sm text-text-secondary">Page {page} of {totalPages}</span>
           <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}
-            className="px-3 py-1.5 bg-bg border border-border rounded-lg text-sm text-text-secondary disabled:opacity-40 hover:bg-border/50">Next</button>
+            className="btn btn-secondary btn-sm">Next</button>
         </div>
       )}
     </div>
