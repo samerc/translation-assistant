@@ -12,6 +12,7 @@ import { Client } from './entities/client.entity.js';
 import { Contact } from './entities/contact.entity.js';
 import { PassportCopy } from './entities/passport-copy.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
+import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
 import { ClientAddress } from './entities/client-address.entity.js';
@@ -66,8 +67,7 @@ export class ClientsService {
     const qb = this.clientRepository
       .createQueryBuilder('client')
       .leftJoinAndSelect('client.emails', 'emails')
-      .leftJoinAndSelect('client.phones', 'phones')
-      .loadRelationCountAndMap('client.contactsCount', 'client.contacts');
+      .leftJoinAndSelect('client.phones', 'phones');
 
     // Non-admins only see clients they have jobs with
     if (!query.isAdmin && query.userId) {
@@ -99,6 +99,7 @@ export class ClientsService {
     qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
+    await attachRelationCount(data, this.contactRepository, 'clientId', 'contactsCount');
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
@@ -117,7 +118,13 @@ export class ClientsService {
   async findOne(id: string): Promise<Client> {
     const client = await this.clientRepository.findOne({
       where: { id },
-      relations: ['emails', 'phones', 'addresses', 'contacts', 'passportCopies'],
+      relations: {
+        emails: true,
+        phones: true,
+        addresses: true,
+        contacts: true,
+        passportCopies: true
+      },
     });
     if (!client) throw new NotFoundException('Client not found');
     return client;

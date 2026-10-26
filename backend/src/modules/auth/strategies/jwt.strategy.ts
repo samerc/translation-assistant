@@ -38,7 +38,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
-      relations: ['role', 'role.permissions'],
+      relations: {
+        role: {
+          permissions: true
+        }
+      },
     });
 
     if (!user || !user.isActive) {

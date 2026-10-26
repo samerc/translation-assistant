@@ -11,6 +11,7 @@ import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { Language } from '../settings/entities/language.entity.js';
 import { User } from '../users/entities/user.entity.js';
+import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
 
@@ -98,8 +99,7 @@ export class JobsService {
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.client', 'client')
       .leftJoinAndSelect('job.sourceLanguage', 'sourceLang')
-      .leftJoinAndSelect('job.targetLanguage', 'targetLang')
-      .loadRelationCountAndMap('job.lineItemCount', 'job.lineItems');
+      .leftJoinAndSelect('job.targetLanguage', 'targetLang');
 
     // Non-admin users can only see jobs they are assigned to
     if (query.userId && !query.isAdmin) {
@@ -126,13 +126,26 @@ export class JobsService {
     qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
+    await attachRelationCount(data, this.lineItemRepository, 'jobId', 'lineItemCount');
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: string): Promise<Job> {
     const job = await this.jobRepository.findOne({
       where: { id },
-      relations: ['client', 'contact', 'sourceLanguage', 'targetLanguage', 'lineItems', 'assignedUsers', 'assignedUsers.user', 'files'],
+      relations: {
+        client: true,
+        contact: true,
+        sourceLanguage: true,
+        targetLanguage: true,
+        lineItems: true,
+
+        assignedUsers: {
+          user: true
+        },
+
+        files: true
+      },
     });
     if (!job) throw new NotFoundException('Job not found');
     return job;

@@ -61,7 +61,13 @@ export class TemplatesService {
   async findOne(id: string): Promise<Template> {
     const template = await this.templateRepository.findOne({
       where: { id },
-      relations: ['fields', 'fields.labels', 'fields.labels.language'],
+      relations: {
+        fields: {
+          labels: {
+            language: true
+          }
+        }
+      },
       order: { fields: { sortOrder: 'ASC' } },
     });
     if (!template) throw new NotFoundException('Template not found');
@@ -292,7 +298,11 @@ export class TemplatesService {
 
     return this.fieldRepository.findOne({
       where: { id: saved.id },
-      relations: ['labels', 'labels.language'],
+      relations: {
+        labels: {
+          language: true
+        }
+      },
     }) as Promise<TemplateField>;
   }
 
@@ -303,7 +313,9 @@ export class TemplatesService {
   ): Promise<TemplateField> {
     const field = await this.fieldRepository.findOne({
       where: { id: fieldId, templateId },
-      relations: ['labels'],
+      relations: {
+        labels: true
+      },
     });
     if (!field) throw new NotFoundException('Field not found');
 
@@ -332,7 +344,11 @@ export class TemplatesService {
 
     return this.fieldRepository.findOne({
       where: { id: fieldId },
-      relations: ['labels', 'labels.language'],
+      relations: {
+        labels: {
+          language: true
+        }
+      },
     }) as Promise<TemplateField>;
   }
 

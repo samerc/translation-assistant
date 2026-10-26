@@ -46,16 +46,23 @@ export class ExportService {
   async exportDocument(documentId: string): Promise<{ filePath: string; fileName: string }> {
     const doc = await this.documentRepository.findOne({
       where: { id: documentId },
-      relations: [
-        'template',
-        'template.fields',
-        'template.fields.labels',
-        'template.fields.labels.language',
-        'fieldValues',
-        'fieldValues.templateField',
-        'job',
-        'job.targetLanguage',
-      ],
+      relations: {
+        template: {
+          fields: {
+            labels: {
+              language: true
+            }
+          }
+        },
+
+        fieldValues: {
+          templateField: true
+        },
+
+        job: {
+          targetLanguage: true
+        }
+      },
     });
 
     if (!doc) throw new NotFoundException('Document not found');

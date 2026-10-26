@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Document } from './entities/document.entity.js';
 import { DocumentFieldValue } from './entities/document-field-value.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
+import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { CreateDocumentDto, FieldValueDto } from './dto/document.dto.js';
 
 @Injectable()
@@ -34,27 +35,32 @@ export class DocumentsService {
   }
 
   async findByJob(jobId: string): Promise<Document[]> {
-    return this.documentRepository
+    const docs = await this.documentRepository
       .createQueryBuilder('doc')
       .leftJoin('doc.template', 'template')
       .addSelect(['template.id', 'template.name', 'template.type'])
-      .loadRelationCountAndMap('doc.fieldValueCount', 'doc.fieldValues')
       .where('doc.jobId = :jobId', { jobId })
       .orderBy('doc.createdAt', 'ASC')
       .getMany();
+    return attachRelationCount(docs, this.fieldValueRepository, 'documentId', 'fieldValueCount');
   }
 
   async findOne(id: string): Promise<Document> {
     const doc = await this.documentRepository.findOne({
       where: { id },
-      relations: [
-        'template',
-        'template.fields',
-        'template.fields.labels',
-        'template.fields.labels.language',
-        'fieldValues',
-        'fieldValues.templateField',
-      ],
+      relations: {
+        template: {
+          fields: {
+            labels: {
+              language: true
+            }
+          }
+        },
+
+        fieldValues: {
+          templateField: true
+        }
+      },
     });
     if (!doc) throw new NotFoundException('Document not found');
     return doc;

@@ -149,7 +149,10 @@ export class NotificationsService {
           type: 'deadline_approaching',
           createdAt: Between(oneDayAgo, now),
         },
-        select: ['userId', 'link'],
+        select: {
+          userId: true,
+          link: true
+        },
       }),
     ]);
 
@@ -194,7 +197,11 @@ export class NotificationsService {
     // Find overdue invoices before updating (need IDs for notifications)
     const overdueInvoices = await this.invoiceRepository.find({
       where: { status: 'sent', dueDate: LessThan(today) },
-      select: ['id', 'invoiceNumber', 'createdByUserId'],
+      select: {
+        id: true,
+        invoiceNumber: true,
+        createdByUserId: true
+      },
     });
 
     if (overdueInvoices.length === 0) return;

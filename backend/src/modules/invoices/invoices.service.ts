@@ -6,6 +6,7 @@ import { InvoiceItem } from './entities/invoice-item.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
+import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { CreateInvoiceDto, UpdateInvoiceDto, RecordPaymentDto } from './dto/invoice.dto.js';
 
@@ -113,8 +114,7 @@ export class InvoicesService {
 
     const qb = this.invoiceRepository
       .createQueryBuilder('inv')
-      .leftJoinAndSelect('inv.client', 'client')
-      .loadRelationCountAndMap('inv.itemCount', 'inv.items');
+      .leftJoinAndSelect('inv.client', 'client');
 
     // Non-admins: only see invoices they created or where they have access to linked jobs
     if (query.userId && !query.isAdmin) {
@@ -150,6 +150,7 @@ export class InvoicesService {
     qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
+    await attachRelationCount(data, this.itemRepository, 'invoiceId', 'itemCount');
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
@@ -179,7 +180,11 @@ export class InvoicesService {
   async getClientEmail(invoiceId: string): Promise<string | null> {
     const invoice = await this.invoiceRepository.findOne({
       where: { id: invoiceId },
-      relations: ['client', 'client.emails'],
+      relations: {
+        client: {
+          emails: true
+        }
+      },
     });
     const emails = invoice?.client?.emails || [];
     const chosen = emails.find((e) => e.isPrimary) || emails[0];
