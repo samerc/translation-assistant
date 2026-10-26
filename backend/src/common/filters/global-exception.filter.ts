@@ -6,9 +6,10 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { QueryFailedError, EntityNotFoundError } from 'typeorm';
 import { Sentry } from '../../instrument.js';
+import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
 /**
  * Global exception filter that:
@@ -25,9 +26,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const request = ctx.getRequest<MaybeAuthenticatedRequest>();
 
-    const { status, body } = this.buildResponse(exception, request);
+    const { status, body } = this.buildResponse(exception);
 
     // Log full details server-side only
     this.logException(exception, request, status);
@@ -35,7 +36,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     response.status(status).json(body);
   }
 
-  private buildResponse(exception: unknown, request: Request): { status: number; body: Record<string, unknown> } {
+  private buildResponse(exception: unknown): {
+    status: number;
+    body: Record<string, unknown>;
+  } {
     // NestJS HttpException (BadRequest, NotFound, Forbidden, Unauthorized, etc.)
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -58,7 +62,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         status,
         body: {
           statusCode: status,
-          message: typeof exceptionResponse === 'string' ? exceptionResponse : exception.message,
+          message:
+            typeof exceptionResponse === 'string'
+              ? exceptionResponse
+              : exception.message,
           error: HttpStatus[status],
         },
       };
@@ -67,8 +74,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // TypeORM query errors (constraint violations, bad queries)
     if (exception instanceof QueryFailedError) {
       // Check for unique constraint violation
-      const message = (exception as any).message || '';
-      if (message.includes('Duplicate entry') || message.includes('UNIQUE constraint')) {
+      const message = exception.message || '';
+      if (
+        message.includes('Duplicate entry') ||
+        message.includes('UNIQUE constraint')
+      ) {
         return {
           status: HttpStatus.CONFLICT,
           body: {
@@ -112,10 +122,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     };
   }
 
-  private logException(exception: unknown, request: Request, status: number): void {
+  private logException(
+    exception: unknown,
+    request: MaybeAuthenticatedRequest,
+    status: number,
+  ): void {
     const method = request.method;
     const url = request.originalUrl || request.url;
-    const userId = (request as any).user?.id || 'anonymous';
+    const userId = request.user?.id || 'anonymous';
     const ip = request.ip || 'unknown';
 
     // Don't log 4xx client errors at error level (they're expected)
@@ -130,7 +144,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     // 5xx errors — log full details for debugging
-    const stack = exception instanceof Error ? exception.stack : String(exception);
+    const stack =
+      exception instanceof Error ? exception.stack : String(exception);
     this.logger.error(
       `${method} ${url} → ${status} | user=${userId} ip=${ip}`,
       stack,
@@ -146,7 +161,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
       if (typeof response === 'object' && response !== null) {
-        const msg = (response as any).message;
+        const msg = (response as { message?: unknown }).message;
         return Array.isArray(msg) ? msg.join('; ') : String(msg);
       }
       return exception.message;

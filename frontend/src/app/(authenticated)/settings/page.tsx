@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme, type Palette } from '@/lib/theme-context';
@@ -746,15 +746,12 @@ function SecuritySettings() {
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState(false);
 
-  const loadSessions = useCallback(async () => {
-    try {
-      const data = await api.get<SessionInfo[]>('/auth/sessions');
-      setSessions(data);
-    } catch { /* ignore */ }
-    setLoading(false);
+  useEffect(() => {
+    api.get<SessionInfo[]>('/auth/sessions')
+      .then(setSessions)
+      .catch(() => { /* ignore */ })
+      .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => { loadSessions(); }, [loadSessions]);
 
   const handleLogoutEverywhere = async () => {
     if (!(await confirmDialog('This will log you out of all devices, including this one. Continue?'))) return;
@@ -843,8 +840,9 @@ function UsersSettings() {
   const [error, setError] = useState<string | null>(null);
 
   const load = () => {
-    setLoadError(false);
-    api.get<AdminUser[]>('/users').then(setUsers).catch(() => setLoadError(true));
+    api.get<AdminUser[]>('/users')
+      .then((res) => { setUsers(res); setLoadError(false); })
+      .catch(() => setLoadError(true));
     api.get<RoleOption[]>('/roles').then(setRoles).catch(() => {});
   };
   useEffect(load, []);

@@ -3,6 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -42,8 +43,9 @@ export default function TemplatesPage() {
     if (statusFilter) params.set('isActive', statusFilter);
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
-    setLoadError(false);
-    api.get<Template[]>(`/templates?${params}`).then(setTemplates).catch(() => setLoadError(true));
+    api.get<Template[]>(`/templates?${params}`)
+      .then((res) => { setTemplates(res); setLoadError(false); })
+      .catch(() => setLoadError(true));
   };
 
   useEffect(() => { loadTemplates(); }, [search, statusFilter, sortBy, sortOrder]);
@@ -55,11 +57,6 @@ export default function TemplatesPage() {
       setSortBy(field);
       setSortOrder('ASC');
     }
-  };
-
-  const SortIcon = ({ field }: { field: string }) => {
-    if (sortBy !== field) return <span className="text-text-muted ml-1">↕</span>;
-    return <span className="text-primary ml-1">{sortOrder === 'ASC' ? '↑' : '↓'}</span>;
   };
 
   const handleCreate = async (e: FormEvent) => {
@@ -170,18 +167,18 @@ export default function TemplatesPage() {
             <thead>
               <tr className="bg-bg border-b border-border">
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('name')}>
-                  Name <SortIcon field="name" />
+                  Name <SortIcon field="name" sortBy={sortBy} sortOrder={sortOrder} />
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Type</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Description</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Fields</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('pricePerPage')}>
-                  Price/Page <SortIcon field="pricePerPage" />
+                  Price/Page <SortIcon field="pricePerPage" sortBy={sortBy} sortOrder={sortOrder} />
                 </th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Discounted</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary">Status</th>
                 <th className="text-left px-4 py-3 font-semibold text-text-secondary cursor-pointer select-none" onClick={() => handleSort('createdAt')}>
-                  Created <SortIcon field="createdAt" />
+                  Created <SortIcon field="createdAt" sortBy={sortBy} sortOrder={sortOrder} />
                 </th>
               </tr>
             </thead>

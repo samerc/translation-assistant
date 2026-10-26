@@ -8,7 +8,14 @@ import { LabelOption } from './entities/label-option.entity.js';
 import { FreeformJobType } from './entities/freeform-job-type.entity.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([AppSettings, Language, LabelOption, FreeformJobType])],
+  imports: [
+    TypeOrmModule.forFeature([
+      AppSettings,
+      Language,
+      LabelOption,
+      FreeformJobType,
+    ]),
+  ],
   controllers: [SettingsController],
   providers: [SettingsService],
   exports: [SettingsService],

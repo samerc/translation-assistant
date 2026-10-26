@@ -26,7 +26,10 @@ export class NotificationsScheduler {
       await this.notificationsService.checkOverdueInvoices();
       this.logger.log(`Daily checks completed in ${Date.now() - start}ms`);
     } catch (error) {
-      this.logger.error('Daily checks failed', error instanceof Error ? error.stack : error);
+      this.logger.error(
+        'Daily checks failed',
+        error instanceof Error ? error.stack : error,
+      );
     } finally {
       this.running = false;
     }

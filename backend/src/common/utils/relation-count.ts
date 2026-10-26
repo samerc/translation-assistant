@@ -20,7 +20,9 @@ export async function attachRelationCount<T extends { id: string }>(
     .createQueryBuilder('child')
     .select(`child.${foreignKey}`, 'parentId')
     .addSelect('COUNT(*)', 'count')
-    .where(`child.${foreignKey} IN (:...parentIds)`, { parentIds: parents.map((p) => p.id) })
+    .where(`child.${foreignKey} IN (:...parentIds)`, {
+      parentIds: parents.map((p) => p.id),
+    })
     .groupBy(`child.${foreignKey}`)
     .getRawMany<{ parentId: string; count: string | number }>();
 

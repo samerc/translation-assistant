@@ -40,8 +40,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       where: { id: payload.sub },
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
 

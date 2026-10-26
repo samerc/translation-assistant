@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsBoolean, IsIn, MinLength, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsIn,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateLanguageDto {
   @IsString()

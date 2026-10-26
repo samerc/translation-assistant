@@ -18,8 +18,19 @@ export class CalendarController {
     @Query('month') month: string,
     @Query('year') year: string,
   ) {
-    const m = Math.min(12, Math.max(1, parseInt(month, 10) || new Date().getMonth() + 1));
-    const y = Math.min(2100, Math.max(2000, parseInt(year, 10) || new Date().getFullYear()));
-    return this.calendarService.getEvents(user.id, user.role?.name === 'Admin', m, y);
+    const m = Math.min(
+      12,
+      Math.max(1, parseInt(month, 10) || new Date().getMonth() + 1),
+    );
+    const y = Math.min(
+      2100,
+      Math.max(2000, parseInt(year, 10) || new Date().getFullYear()),
+    );
+    return this.calendarService.getEvents(
+      user.id,
+      user.role?.name === 'Admin',
+      m,
+      y,
+    );
   }
 }

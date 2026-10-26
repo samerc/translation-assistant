@@ -1,7 +1,13 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobUser } from '../../modules/jobs/entities/job-user.entity.js';
+import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
 @Injectable()
 export class JobAccessGuard implements CanActivate {
@@ -11,7 +17,9 @@ export class JobAccessGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<MaybeAuthenticatedRequest>();
     const user = request.user;
 
     if (!user) return false;
@@ -21,7 +29,8 @@ export class JobAccessGuard implements CanActivate {
     if (isAdmin) return true;
 
     // Get job ID from params (could be :id or :jobId)
-    const jobId = request.params.id || request.params.jobId;
+    const rawJobId = request.params.id || request.params.jobId;
+    const jobId = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId;
     if (!jobId) return true; // No job context, let other guards handle
 
     // Check if user is assigned to this job
@@ -35,7 +44,10 @@ export class JobAccessGuard implements CanActivate {
 
     // For edit operations, check permission level
     const method = request.method;
-    if (['PATCH', 'POST', 'DELETE'].includes(method) && assignment.permissionLevel === 'view') {
+    if (
+      ['PATCH', 'POST', 'DELETE'].includes(method) &&
+      assignment.permissionLevel === 'view'
+    ) {
       throw new ForbiddenException('You have view-only access to this job');
     }
 

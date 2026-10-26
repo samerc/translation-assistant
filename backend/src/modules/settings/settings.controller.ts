@@ -13,9 +13,15 @@ import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
 import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
-import { CreateLabelOptionDto, UpdateLabelOptionDto } from './dto/label-option.dto.js';
+import {
+  CreateLabelOptionDto,
+  UpdateLabelOptionDto,
+} from './dto/label-option.dto.js';
 import type { LabelCategory } from './dto/label-option.dto.js';
-import { CreateFreeformJobTypeDto, UpdateFreeformJobTypeDto } from './dto/freeform-job-type.dto.js';
+import {
+  CreateFreeformJobTypeDto,
+  UpdateFreeformJobTypeDto,
+} from './dto/freeform-job-type.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -35,11 +41,29 @@ export class SettingsController {
   async getSettings(@CurrentUser() user: User) {
     const settings = await this.settingsService.getSettings();
     // Never expose the stored SMTP password; signal only whether one is set.
-    const { smtpPass, smtpHost, smtpPort, smtpUser, smtpFrom, smtpSecure, appBaseUrl, ...safe } = settings;
+    const {
+      smtpPass,
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      smtpFrom,
+      smtpSecure,
+      appBaseUrl,
+      ...safe
+    } = settings;
     // SMTP / infrastructure details are admin-only. Non-admins (e.g. Viewer, who
     // holds settings:read) still get branding + currency + upload limits.
     if (user?.role?.name === 'Admin') {
-      return { ...safe, smtpHost, smtpPort, smtpUser, smtpFrom, smtpSecure, appBaseUrl, smtpPassSet: Boolean(smtpPass) };
+      return {
+        ...safe,
+        smtpHost,
+        smtpPort,
+        smtpUser,
+        smtpFrom,
+        smtpSecure,
+        appBaseUrl,
+        smtpPassSet: Boolean(smtpPass),
+      };
     }
     return safe;
   }

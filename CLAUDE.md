@@ -134,6 +134,10 @@ translation-assistant/
 - PM2 auto-resurrect on reboot via Windows Scheduled Task
 
 ## Conventions
+- **Lint is clean** (backend 0/0, frontend 0 errors) — keep it that way: `npm run lint` in each app. Backend tests relax `no-unsafe-*` (supertest bodies are `any`).
+- Backend request typing: `getRequest<AuthenticatedRequest>()` behind the `jwt` guard, `MaybeAuthenticatedRequest` in global guards (they run before auth, so `req.user` is absent there), `RefreshRequest` on `/auth/refresh` — all in `common/types/authenticated-request.ts`. Raw queries: always `getRawOne<{...}>()` + `Number()`.
+- Temp export downloads: `streamThenDelete(filePath, res)` (deletes on success, error and client abort).
+- Frontend: no setState directly in effects or `Date.now()` in render (React Compiler lint) — derive state, use `useNow()` + `formatTimeAgo()`, `uid()` for client ids, `useSyncExternalStore` for module stores (see `lib/toast.tsx`, `lib/confirm.tsx`). `api.*` resolves empty response bodies as `undefined`.
 - All API routes prefixed with `/api/`
 - RBAC permissions follow `resource:action` format (e.g., `clients:create`)
 - Database migrations managed via ORM (synchronize in dev, migrations in prod)

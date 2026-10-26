@@ -79,16 +79,24 @@ export class UsersController {
       limits: { fileSize: 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
         if (['image/png', 'image/jpeg'].includes(file.mimetype)) cb(null, true);
-        else cb(new BadRequestException('Logo must be a PNG or JPEG image'), false);
+        else
+          cb(
+            new BadRequestException('Logo must be a PNG or JPEG image'),
+            false,
+          );
       },
     }),
   )
-  uploadLogo(@CurrentUser() user: User, @UploadedFile() file?: Express.Multer.File) {
+  uploadLogo(
+    @CurrentUser() user: User,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
     if (!file) throw new BadRequestException('Logo file is required');
     // Verify actual content (magic bytes) — never trust the client-declared mimetype
     // for building the stored data URL (guards against spoofed/SVG payloads).
     const mime = sniffImageMime(file.buffer);
-    if (!mime) throw new BadRequestException('Logo must be a valid PNG or JPEG image');
+    if (!mime)
+      throw new BadRequestException('Logo must be a valid PNG or JPEG image');
     const dataUrl = `data:${mime};base64,${file.buffer.toString('base64')}`;
     return this.usersService.setLogo(user.id, dataUrl);
   }
@@ -114,7 +122,10 @@ export class UsersController {
   @Patch(':id/deactivate')
   @RequirePermissions('users:update')
   @AdminOnly()
-  deactivate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+  deactivate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
     if (id === user.id) {
       throw new ForbiddenException('You cannot deactivate your own account');
     }

@@ -22,7 +22,12 @@ export class Notification {
 
   @Column({
     type: 'enum',
-    enum: ['job_status_change', 'deadline_approaching', 'invoice_overdue', 'job_assigned'],
+    enum: [
+      'job_status_change',
+      'deadline_approaching',
+      'invoice_overdue',
+      'job_assigned',
+    ],
   })
   type: string;
 

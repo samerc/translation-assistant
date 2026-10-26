@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
 // NOTE: This guard is a low-signal *tripwire*, NOT the app's SQLi/XSS defense.
 // SQL injection is prevented by TypeORM parameterized queries; XSS by React output
@@ -26,16 +27,18 @@ const XSS_PATTERNS = [
 ];
 
 const MAX_FIELD_LENGTH = 50000;
-const MAX_DEPTH = 20;        // reject pathologically nested bodies
-const MAX_NODES = 1000;      // total values inspected per request (CPU bound)
-const MAX_KEYS = 200;        // per-object key fan-out cap
+const MAX_DEPTH = 20; // reject pathologically nested bodies
+const MAX_NODES = 1000; // total values inspected per request (CPU bound)
+const MAX_KEYS = 200; // per-object key fan-out cap
 
 @Injectable()
 export class AbuseDetectionGuard implements CanActivate {
   private readonly logger = new Logger('AbuseDetection');
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<MaybeAuthenticatedRequest>();
     const method = request.method;
 
     // Only inspect write operations
@@ -43,7 +46,7 @@ export class AbuseDetectionGuard implements CanActivate {
       return true;
     }
 
-    const body = request.body;
+    const body: unknown = request.body;
     if (!body || typeof body !== 'object') {
       return true;
     }
@@ -52,7 +55,13 @@ export class AbuseDetectionGuard implements CanActivate {
     return true;
   }
 
-  private inspectObject(obj: any, path: string, request: any, depth: number, budget: { count: number }): void {
+  private inspectObject(
+    obj: unknown,
+    path: string,
+    request: MaybeAuthenticatedRequest,
+    depth: number,
+    budget: { count: number },
+  ): void {
     if (obj === null || obj === undefined) return;
     // Bound total work per request (CPU DoS) and nesting depth (stack safety).
     if (depth > MAX_DEPTH || budget.count >= MAX_NODES) return;
@@ -72,17 +81,37 @@ export class AbuseDetectionGuard implements CanActivate {
     }
 
     if (typeof obj === 'object') {
-      const keys = Object.keys(obj).slice(0, MAX_KEYS);
+      const record = obj as Record<string, unknown>;
+      const keys = Object.keys(record).slice(0, MAX_KEYS);
       for (const key of keys) {
         if (budget.count >= MAX_NODES) break;
-        this.inspectObject(obj[key], path ? `${path}.${key}` : key, request, depth + 1, budget);
+        this.inspectObject(
+          record[key],
+          path ? `${path}.${key}` : key,
+          request,
+          depth + 1,
+          budget,
+        );
       }
     }
   }
 
-  private inspectString(value: string, path: string, request: any): void {
+  private inspectString(
+    value: string,
+    path: string,
+    request: MaybeAuthenticatedRequest,
+  ): void {
     // Skip known safe fields that may legitimately contain long/complex content
-    const safeFields = ['password', 'currentPassword', 'newPassword', 'accessToken', 'refreshToken', 'inviteToken', 'token', 'layoutJson'];
+    const safeFields = [
+      'password',
+      'currentPassword',
+      'newPassword',
+      'accessToken',
+      'refreshToken',
+      'inviteToken',
+      'token',
+      'layoutJson',
+    ];
     const fieldName = path.split('.').pop() || path;
     if (safeFields.includes(fieldName)) return;
 
@@ -109,8 +138,13 @@ export class AbuseDetectionGuard implements CanActivate {
     }
   }
 
-  private logAttempt(type: string, field: string, sample: string, request: any): void {
-    const ip = request.ip || request.connection?.remoteAddress || 'unknown';
+  private logAttempt(
+    type: string,
+    field: string,
+    sample: string,
+    request: MaybeAuthenticatedRequest,
+  ): void {
+    const ip = request.ip || request.socket?.remoteAddress || 'unknown';
     const userId = request.user?.id || 'anonymous';
     const url = request.originalUrl || request.url;
     this.logger.warn(

@@ -1,5 +1,11 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
 export const ADMIN_ONLY_KEY = 'ADMIN_ONLY';
 
@@ -26,10 +32,14 @@ export class AdminGuard implements CanActivate {
     // If @AdminOnly() is not applied, allow through
     if (!isAdminOnly) return true;
 
-    const { user } = context.switchToHttp().getRequest();
+    const { user } = context
+      .switchToHttp()
+      .getRequest<MaybeAuthenticatedRequest>();
 
     if (!user || !user.role || user.role.name !== 'Admin') {
-      throw new ForbiddenException('This action requires administrator privileges');
+      throw new ForbiddenException(
+        'This action requires administrator privileges',
+      );
     }
 
     return true;

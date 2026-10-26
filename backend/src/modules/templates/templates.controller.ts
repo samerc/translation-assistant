@@ -19,7 +19,12 @@ import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { randomUUID } from 'crypto';
 import { TemplatesService } from './templates.service.js';
-import { CreateTemplateDto, UpdateTemplateDto, ReorderFieldsDto, WordPlaceholdersDto } from './dto/template.dto.js';
+import {
+  CreateTemplateDto,
+  UpdateTemplateDto,
+  ReorderFieldsDto,
+  WordPlaceholdersDto,
+} from './dto/template.dto.js';
 import {
   CreateTemplateFieldDto,
   UpdateTemplateFieldDto,
@@ -72,7 +77,10 @@ export class TemplatesController {
 
   @Patch(':id')
   @RequirePermissions('templates:update')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTemplateDto) {
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateTemplateDto,
+  ) {
     return this.templatesService.update(id, dto);
   }
 
@@ -91,8 +99,10 @@ export class TemplatesController {
       storage: templateStorage,
       limits: { fileSize: 15 * 1024 * 1024 }, // 15MB cap before parse
       fileFilter: (_req, file, cb) => {
-        if (extname(file.originalname).toLowerCase() === '.docx') cb(null, true);
-        else cb(new BadRequestException('Only .docx files are accepted'), false);
+        if (extname(file.originalname).toLowerCase() === '.docx')
+          cb(null, true);
+        else
+          cb(new BadRequestException('Only .docx files are accepted'), false);
       },
     }),
   )

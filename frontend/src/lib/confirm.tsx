@@ -5,7 +5,7 @@
 // authenticated layout) renders the current request; call sites just await
 // confirmDialog(...) / alertDialog(...) from anywhere — no per-component hook.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 
 interface DialogOptions {
   title?: string;
@@ -22,19 +22,33 @@ interface DialogRequest extends DialogOptions {
 }
 
 let counter = 0;
+// Replaced (never mutated) on every change so it doubles as the store snapshot.
 let queue: DialogRequest[] = [];
-let listeners: ((reqs: DialogRequest[]) => void)[] = [];
+let listeners: (() => void)[] = [];
+const NO_REQUESTS: DialogRequest[] = [];
 
 function emit() {
-  const snapshot = [...queue];
-  listeners.forEach((l) => l(snapshot));
+  listeners.forEach((l) => l());
+}
+
+function subscribe(listener: () => void) {
+  listeners.push(listener);
+  return () => {
+    listeners = listeners.filter((l) => l !== listener);
+  };
 }
 
 function push(req: Omit<DialogRequest, 'id' | 'resolve'>): Promise<boolean> {
   return new Promise((resolve) => {
-    queue.push({ ...req, id: ++counter, resolve });
+    queue = [...queue, { ...req, id: ++counter, resolve }];
     emit();
   });
+}
+
+function settle(req: DialogRequest, value: boolean) {
+  req.resolve(value);
+  queue = queue.filter((r) => r.id !== req.id);
+  emit();
 }
 
 /** Ask the user to confirm a (usually destructive) action. Resolves true/false. */
@@ -50,36 +64,22 @@ export function alertDialog(opts: string | Omit<DialogOptions, 'danger' | 'cance
 }
 
 export function ConfirmHost() {
-  const [reqs, setReqs] = useState<DialogRequest[]>([]);
-
-  useEffect(() => {
-    listeners.push(setReqs);
-    setReqs([...queue]);
-    return () => {
-      listeners = listeners.filter((l) => l !== setReqs);
-    };
-  }, []);
-
+  const reqs = useSyncExternalStore(subscribe, () => queue, () => NO_REQUESTS);
   const current = reqs[0];
 
   useEffect(() => {
     if (!current) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') finish(false);
-      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') settle(current, false);
+      if (e.key === 'Enter') settle(current, true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id]);
+  }, [current]);
 
   if (!current) return null;
 
-  const finish = (value: boolean) => {
-    current.resolve(value);
-    queue = queue.filter((r) => r.id !== current.id);
-    emit();
-  };
+  const finish = (value: boolean) => settle(current, value);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">

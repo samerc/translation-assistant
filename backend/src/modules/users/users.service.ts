@@ -22,7 +22,10 @@ export class UsersService {
 
   /** Revoke all active sessions for a user and clear the legacy refresh token. */
   private async revokeAllSessions(userId: string): Promise<void> {
-    await this.sessionRepository.update({ userId, revoked: false }, { revoked: true });
+    await this.sessionRepository.update(
+      { userId, revoked: false },
+      { revoked: true },
+    );
     await this.userRepository.update(userId, { refreshToken: '' });
   }
 
@@ -30,8 +33,8 @@ export class UsersService {
     const users = await this.userRepository.find({
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
     // Drop the (potentially large) base64 logo from list responses — it's only
@@ -47,8 +50,8 @@ export class UsersService {
       where: { id },
       relations: {
         role: {
-          permissions: true
-        }
+          permissions: true,
+        },
       },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -83,7 +86,7 @@ export class UsersService {
   async setLogo(id: string, logo: string | null): Promise<Partial<User>> {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
-    await this.userRepository.update(id, { logo: logo as any });
+    await this.userRepository.update(id, { logo });
     return this.findOne(id);
   }
 
@@ -91,8 +94,12 @@ export class UsersService {
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
-    const passwordValid = await bcrypt.compare(dto.currentPassword, user.password);
-    if (!passwordValid) throw new BadRequestException('Current password is incorrect');
+    const passwordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password,
+    );
+    if (!passwordValid)
+      throw new BadRequestException('Current password is incorrect');
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
     await this.userRepository.update(id, { password: hashedPassword });

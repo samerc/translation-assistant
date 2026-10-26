@@ -13,7 +13,11 @@ export class Template {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'enum', enum: ['designer', 'word', 'simple'], default: 'designer' })
+  @Column({
+    type: 'enum',
+    enum: ['designer', 'word', 'simple'],
+    default: 'designer',
+  })
   type: 'designer' | 'word' | 'simple';
 
   @Column({ length: 255 })

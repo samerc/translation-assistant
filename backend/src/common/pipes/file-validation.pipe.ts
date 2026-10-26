@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  PipeTransform,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, PipeTransform, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { extname } from 'path';
@@ -26,7 +22,9 @@ export class FileValidationPipe implements PipeTransform {
       throw new BadRequestException('File is required');
     }
 
-    const settings = await this.settingsRepository.find({ take: 1 }).then(r => r[0] ?? null);
+    const settings = await this.settingsRepository
+      .find({ take: 1 })
+      .then((r) => r[0] ?? null);
 
     // Check file size
     const maxSizeMb = settings?.maxUploadSizeMb || 5;
@@ -47,7 +45,11 @@ export class FileValidationPipe implements PipeTransform {
 
     // Check the configurable allow-list (when set).
     const allowedTypes = settings?.allowedFileTypes;
-    if (allowedTypes && allowedTypes.length > 0 && !allowedTypes.includes(fileExt)) {
+    if (
+      allowedTypes &&
+      allowedTypes.length > 0 &&
+      !allowedTypes.includes(fileExt)
+    ) {
       throw new BadRequestException(
         `File type "${fileExt}" is not allowed. Allowed types: ${allowedTypes.join(', ')}`,
       );

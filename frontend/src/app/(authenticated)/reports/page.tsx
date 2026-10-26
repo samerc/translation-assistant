@@ -7,7 +7,7 @@ import { formatCurrency } from '@/lib/format';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell,
 } from 'recharts';
 
 interface RevenueData { period: string; revenue: number; }

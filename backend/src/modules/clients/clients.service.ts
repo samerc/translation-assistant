@@ -99,11 +99,20 @@ export class ClientsService {
     qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
-    await attachRelationCount(data, this.contactRepository, 'clientId', 'contactsCount');
+    await attachRelationCount(
+      data,
+      this.contactRepository,
+      'clientId',
+      'contactsCount',
+    );
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async verifyClientAccess(clientId: string, userId: string, isAdmin: boolean): Promise<void> {
+  async verifyClientAccess(
+    clientId: string,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<void> {
     if (isAdmin) return;
     const hasAccess = await this.jobRepository
       .createQueryBuilder('j')
@@ -123,7 +132,7 @@ export class ClientsService {
         phones: true,
         addresses: true,
         contacts: true,
-        passportCopies: true
+        passportCopies: true,
       },
     });
     if (!client) throw new NotFoundException('Client not found');
@@ -145,14 +154,18 @@ export class ClientsService {
 
   async remove(id: string): Promise<void> {
     const client = await this.findOne(id);
-    const jobCount = await this.jobRepository.count({ where: { clientId: id } });
+    const jobCount = await this.jobRepository.count({
+      where: { clientId: id },
+    });
     if (jobCount > 0) {
       throw new BadRequestException(
         'Cannot delete this client because jobs are linked to it',
       );
     }
     // Delete passport files from disk before cascade-deleting DB records
-    const passports = await this.passportCopyRepository.find({ where: { clientId: id } });
+    const passports = await this.passportCopyRepository.find({
+      where: { clientId: id },
+    });
     for (const pc of passports) {
       if (pc.filePath && existsSync(pc.filePath)) unlinkSync(pc.filePath);
     }
@@ -161,63 +174,96 @@ export class ClientsService {
 
   // ── Emails ──
 
-  async addEmail(clientId: string, dto: CreateClientEmailDto): Promise<ClientEmail> {
+  async addEmail(
+    clientId: string,
+    dto: CreateClientEmailDto,
+  ): Promise<ClientEmail> {
     await this.findOne(clientId);
     const email = this.emailRepository.create({ ...dto, clientId });
     return this.emailRepository.save(email);
   }
 
-  async updateEmail(clientId: string, emailId: string, dto: Partial<CreateClientEmailDto>): Promise<ClientEmail> {
-    const email = await this.emailRepository.findOne({ where: { id: emailId, clientId } });
+  async updateEmail(
+    clientId: string,
+    emailId: string,
+    dto: Partial<CreateClientEmailDto>,
+  ): Promise<ClientEmail> {
+    const email = await this.emailRepository.findOne({
+      where: { id: emailId, clientId },
+    });
     if (!email) throw new NotFoundException('Email not found');
     Object.assign(email, dto);
     return this.emailRepository.save(email);
   }
 
   async removeEmail(clientId: string, emailId: string): Promise<void> {
-    const email = await this.emailRepository.findOne({ where: { id: emailId, clientId } });
+    const email = await this.emailRepository.findOne({
+      where: { id: emailId, clientId },
+    });
     if (!email) throw new NotFoundException('Email not found');
     await this.emailRepository.remove(email);
   }
 
   // ── Phones ──
 
-  async addPhone(clientId: string, dto: CreateClientPhoneDto): Promise<ClientPhone> {
+  async addPhone(
+    clientId: string,
+    dto: CreateClientPhoneDto,
+  ): Promise<ClientPhone> {
     await this.findOne(clientId);
     const phone = this.phoneRepository.create({ ...dto, clientId });
     return this.phoneRepository.save(phone);
   }
 
-  async updatePhone(clientId: string, phoneId: string, dto: Partial<CreateClientPhoneDto>): Promise<ClientPhone> {
-    const phone = await this.phoneRepository.findOne({ where: { id: phoneId, clientId } });
+  async updatePhone(
+    clientId: string,
+    phoneId: string,
+    dto: Partial<CreateClientPhoneDto>,
+  ): Promise<ClientPhone> {
+    const phone = await this.phoneRepository.findOne({
+      where: { id: phoneId, clientId },
+    });
     if (!phone) throw new NotFoundException('Phone not found');
     Object.assign(phone, dto);
     return this.phoneRepository.save(phone);
   }
 
   async removePhone(clientId: string, phoneId: string): Promise<void> {
-    const phone = await this.phoneRepository.findOne({ where: { id: phoneId, clientId } });
+    const phone = await this.phoneRepository.findOne({
+      where: { id: phoneId, clientId },
+    });
     if (!phone) throw new NotFoundException('Phone not found');
     await this.phoneRepository.remove(phone);
   }
 
   // ── Addresses ──
 
-  async addAddress(clientId: string, dto: CreateClientAddressDto): Promise<ClientAddress> {
+  async addAddress(
+    clientId: string,
+    dto: CreateClientAddressDto,
+  ): Promise<ClientAddress> {
     await this.findOne(clientId);
     const address = this.addressRepository.create({ ...dto, clientId });
     return this.addressRepository.save(address);
   }
 
-  async updateAddress(clientId: string, addressId: string, dto: Partial<CreateClientAddressDto>): Promise<ClientAddress> {
-    const address = await this.addressRepository.findOne({ where: { id: addressId, clientId } });
+  async updateAddress(
+    clientId: string,
+    addressId: string,
+    dto: Partial<CreateClientAddressDto>,
+  ): Promise<ClientAddress> {
+    const address = await this.addressRepository.findOne({
+      where: { id: addressId, clientId },
+    });
     if (!address) throw new NotFoundException('Address not found');
     Object.assign(address, dto);
     return this.addressRepository.save(address);
   }
 
   async removeAddress(clientId: string, addressId: string): Promise<void> {
-    const address = await this.addressRepository.findOne({ where: { id: addressId, clientId } });
+    const address = await this.addressRepository.findOne({
+      where: { id: addressId, clientId },
+    });
     if (!address) throw new NotFoundException('Address not found');
     await this.addressRepository.remove(address);
   }
@@ -235,7 +281,10 @@ export class ClientsService {
     });
   }
 
-  async createContact(clientId: string, dto: CreateContactDto): Promise<Contact> {
+  async createContact(
+    clientId: string,
+    dto: CreateContactDto,
+  ): Promise<Contact> {
     const client = await this.findOne(clientId);
     if (client.type !== 'company') {
       throw new BadRequestException('Only company clients can have contacts');
@@ -244,7 +293,11 @@ export class ClientsService {
     return this.contactRepository.save(contact);
   }
 
-  async updateContact(clientId: string, contactId: string, dto: UpdateContactDto): Promise<Contact> {
+  async updateContact(
+    clientId: string,
+    contactId: string,
+    dto: UpdateContactDto,
+  ): Promise<Contact> {
     const contact = await this.contactRepository.findOne({
       where: { id: contactId, clientId },
     });
@@ -274,7 +327,12 @@ export class ClientsService {
   async createPassportCopy(
     clientId: string,
     label: string,
-    file: { path: string; originalname: string; mimetype: string; size: number },
+    file: {
+      path: string;
+      originalname: string;
+      mimetype: string;
+      size: number;
+    },
   ): Promise<PassportCopy> {
     await this.findOne(clientId);
     const pc = this.passportCopyRepository.create({
@@ -288,7 +346,10 @@ export class ClientsService {
     return this.passportCopyRepository.save(pc);
   }
 
-  async getPassportCopy(clientId: string, copyId: string): Promise<PassportCopy> {
+  async getPassportCopy(
+    clientId: string,
+    copyId: string,
+  ): Promise<PassportCopy> {
     const pc = await this.passportCopyRepository.findOne({
       where: { id: copyId, clientId },
     });

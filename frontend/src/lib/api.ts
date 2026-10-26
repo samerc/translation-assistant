@@ -26,6 +26,13 @@ function withHoneypot(method: string, body: unknown): unknown {
   return { ...(body as Record<string, unknown>), _hp: '' };
 }
 
+// Endpoints that return nothing (e.g. most DELETEs) send an empty 200 body,
+// which res.json() would reject — resolve those as undefined instead.
+async function parseBody<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
   const method = options.method || 'GET';
@@ -65,7 +72,7 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
         throw new ApiError(retryRes.status, error.message);
       }
 
-      return retryRes.json();
+      return parseBody<T>(retryRes);
     }
 
     // Refresh failed
@@ -79,7 +86,7 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
     throw new ApiError(res.status, error.message);
   }
 
-  return res.json();
+  return parseBody<T>(res);
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -121,7 +128,7 @@ async function upload<T>(endpoint: string, formData: FormData, method = 'PATCH')
     const error = await res.json().catch(() => ({ message: 'Upload failed' }));
     throw new ApiError(res.status, error.message);
   }
-  return res.json();
+  return parseBody<T>(res);
 }
 
 export const api = {

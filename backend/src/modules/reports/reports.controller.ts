@@ -14,7 +14,10 @@ export class ReportsController {
   @Get('dashboard-stats')
   @RequirePermissions('reports:read')
   getDashboardStats(@CurrentUser() user: User) {
-    return this.reportsService.getDashboardStats(user.id, user.role?.name === 'Admin');
+    return this.reportsService.getDashboardStats(
+      user.id,
+      user.role?.name === 'Admin',
+    );
   }
 
   @Get('revenue')
@@ -26,20 +29,29 @@ export class ReportsController {
     @Query('to') to?: string,
   ) {
     return this.reportsService.getRevenue(
-      user.id, user.role?.name === 'Admin',
-      period || 'monthly', from, to,
+      user.id,
+      user.role?.name === 'Admin',
+      period || 'monthly',
+      from,
+      to,
     );
   }
 
   @Get('by-client')
   @RequirePermissions('reports:read')
   getByClient(@CurrentUser() user: User) {
-    return this.reportsService.getByClient(user.id, user.role?.name === 'Admin');
+    return this.reportsService.getByClient(
+      user.id,
+      user.role?.name === 'Admin',
+    );
   }
 
   @Get('job-status')
   @RequirePermissions('reports:read')
   getJobStatus(@CurrentUser() user: User) {
-    return this.reportsService.getJobStatus(user.id, user.role?.name === 'Admin');
+    return this.reportsService.getJobStatus(
+      user.id,
+      user.role?.name === 'Admin',
+    );
   }
 }

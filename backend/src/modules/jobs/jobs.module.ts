@@ -18,7 +18,18 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Job, JobUser, JobFile, JobLineItem, AppSettings, Document, Template, Client, Language, User]),
+    TypeOrmModule.forFeature([
+      Job,
+      JobUser,
+      JobFile,
+      JobLineItem,
+      AppSettings,
+      Document,
+      Template,
+      Client,
+      Language,
+      User,
+    ]),
     forwardRef(() => NotificationsModule),
   ],
   controllers: [JobsController],

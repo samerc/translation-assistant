@@ -33,7 +33,9 @@ export class SettingsService {
   // ── App Settings ──
 
   async getSettings(): Promise<AppSettings> {
-    let settings = await this.settingsRepository.find({ take: 1 }).then(r => r[0] ?? null);
+    let settings = await this.settingsRepository
+      .find({ take: 1 })
+      .then((r) => r[0] ?? null);
     if (!settings) {
       settings = this.settingsRepository.create({});
       await this.settingsRepository.save(settings);
@@ -87,7 +89,11 @@ export class SettingsService {
       order: { category: 'ASC', sortOrder: 'ASC', value: 'ASC' },
     });
 
-    const grouped: Record<string, string[]> = { email: [], phone: [], address: [] };
+    const grouped: Record<string, string[]> = {
+      email: [],
+      phone: [],
+      address: [],
+    };
     for (const label of labels) {
       if (!grouped[label.category]) grouped[label.category] = [];
       grouped[label.category].push(label.value);
@@ -107,7 +113,10 @@ export class SettingsService {
     return this.labelOptionRepository.save(label);
   }
 
-  async updateLabel(id: string, dto: UpdateLabelOptionDto): Promise<LabelOption> {
+  async updateLabel(
+    id: string,
+    dto: UpdateLabelOptionDto,
+  ): Promise<LabelOption> {
     const label = await this.labelOptionRepository.findOne({ where: { id } });
     if (!label) throw new NotFoundException('Label option not found');
     Object.assign(label, dto);
@@ -126,20 +135,29 @@ export class SettingsService {
     return this.freeformJobTypeRepository.find({ order: { name: 'ASC' } });
   }
 
-  async createFreeformJobType(dto: CreateFreeformJobTypeDto): Promise<FreeformJobType> {
+  async createFreeformJobType(
+    dto: CreateFreeformJobTypeDto,
+  ): Promise<FreeformJobType> {
     const type = this.freeformJobTypeRepository.create(dto);
     return this.freeformJobTypeRepository.save(type);
   }
 
-  async updateFreeformJobType(id: string, dto: UpdateFreeformJobTypeDto): Promise<FreeformJobType> {
-    const type = await this.freeformJobTypeRepository.findOne({ where: { id } });
+  async updateFreeformJobType(
+    id: string,
+    dto: UpdateFreeformJobTypeDto,
+  ): Promise<FreeformJobType> {
+    const type = await this.freeformJobTypeRepository.findOne({
+      where: { id },
+    });
     if (!type) throw new NotFoundException('Freeform job type not found');
     Object.assign(type, dto);
     return this.freeformJobTypeRepository.save(type);
   }
 
   async removeFreeformJobType(id: string): Promise<void> {
-    const type = await this.freeformJobTypeRepository.findOne({ where: { id } });
+    const type = await this.freeformJobTypeRepository.findOne({
+      where: { id },
+    });
     if (!type) throw new NotFoundException('Freeform job type not found');
     await this.freeformJobTypeRepository.remove(type);
   }

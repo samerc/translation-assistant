@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
 interface BucketEntry {
   count: number;
@@ -13,7 +14,7 @@ interface BucketEntry {
 }
 
 const WINDOW_MS = 60_000; // 1 minute
-const MAX_WRITES = 120;   // 120 write operations per window
+const MAX_WRITES = 120; // 120 write operations per window
 
 /**
  * Rate-limits write operations (POST/PATCH/PUT/DELETE) to 10 per minute
@@ -33,7 +34,9 @@ export class WriteThrottleGuard implements CanActivate {
   private readonly cleanupInterval = 5 * 60_000;
 
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<MaybeAuthenticatedRequest>();
     const method = request.method;
 
     // Only throttle write operations
@@ -43,7 +46,7 @@ export class WriteThrottleGuard implements CanActivate {
 
     // Use user ID if authenticated, otherwise IP
     const userId = request.user?.id;
-    const ip = request.ip || request.connection?.remoteAddress || 'unknown';
+    const ip = request.ip || request.socket?.remoteAddress || 'unknown';
     const key = `write:${userId || ip}`;
 
     const now = Date.now();

@@ -9,7 +9,9 @@ import { Template } from '../templates/entities/template.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Client, Job, JobUser, Template, Invoice])],
+  imports: [
+    TypeOrmModule.forFeature([Client, Job, JobUser, Template, Invoice]),
+  ],
   controllers: [SearchController],
   providers: [SearchService],
 })

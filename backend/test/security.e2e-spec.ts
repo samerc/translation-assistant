@@ -1,5 +1,9 @@
 import { JwtService } from '@nestjs/jwt';
-import { UnauthorizedException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { FindOperator } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/modules/auth/auth.service.js';
@@ -9,7 +13,10 @@ import { DocumentsController } from '../src/modules/documents/documents.controll
 import { ClientsController } from '../src/modules/clients/clients.controller.js';
 import { AbuseDetectionGuard } from '../src/common/guards/abuse-detection.guard.js';
 import { InvoicesService } from '../src/modules/invoices/invoices.service.js';
-import { sniffType, sniffImageMime } from '../src/common/utils/file-signature.js';
+import {
+  sniffType,
+  sniffImageMime,
+} from '../src/common/utils/file-signature.js';
 
 /**
  * Security-layer integration tests for the audit-fixes remediation.
@@ -30,7 +37,12 @@ const UA = 'jest-agent';
 // ── Config + Jwt (real) ──
 const configService = {
   get: (key: string) =>
-    (({ 'jwt.secret': TEST_SECRET, 'jwt.accessTokenTtl': 900 }) as Record<string, unknown>)[key],
+    (
+      ({ 'jwt.secret': TEST_SECRET, 'jwt.accessTokenTtl': 900 }) as Record<
+        string,
+        unknown
+      >
+    )[key],
 } as any;
 const jwtService = new JwtService({ secret: TEST_SECRET });
 
@@ -38,7 +50,7 @@ const jwtService = new JwtService({ secret: TEST_SECRET });
 function matches(entity: any, where: any): boolean {
   return Object.entries(where).every(([k, cond]) => {
     if (cond instanceof FindOperator) {
-      if (cond.type === 'moreThan') return entity[k] > (cond.value as any);
+      if (cond.type === 'moreThan') return entity[k] > cond.value;
       return false;
     }
     return entity[k] === cond;
@@ -65,8 +77,10 @@ function makeSessionRepo() {
       }
       return Promise.resolve(entity);
     },
-    findOne: ({ where }: any) => Promise.resolve(rows.find((r) => matches(r, where)) ?? null),
-    find: ({ where }: any) => Promise.resolve(rows.filter((r) => matches(r, where))),
+    findOne: ({ where }: any) =>
+      Promise.resolve(rows.find((r) => matches(r, where)) ?? null),
+    find: ({ where }: any) =>
+      Promise.resolve(rows.filter((r) => matches(r, where))),
     update: (criteria: any, patch: any) => {
       let affected = 0;
       for (const r of rows) {
@@ -123,7 +137,8 @@ describe('Refresh-token architecture (AuthService)', () => {
     const userRepo = {
       findOne: ({ where }: any) =>
         Promise.resolve(
-          (where.id && where.id === user.id) || (where.email && where.email === user.email)
+          (where.id && where.id === user.id) ||
+            (where.email && where.email === user.email)
             ? user
             : null,
         ),
@@ -176,25 +191,38 @@ describe('Refresh-token architecture (AuthService)', () => {
       UA,
     );
 
-    const rotated = await authService.refreshTokens(user.id, login.refreshToken, IP, UA);
+    const rotated = await authService.refreshTokens(
+      user.id,
+      login.refreshToken,
+      IP,
+      UA,
+    );
     expect(rotated.refreshToken).not.toEqual(login.refreshToken);
     expect(jwtService.verify(rotated.refreshToken).type).toBe('refresh');
 
     // Re-using the OLD refresh token must now fail (rotation replaced the hash).
-    await expect(authService.refreshTokens(user.id, login.refreshToken, IP, UA)).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(
+      authService.refreshTokens(user.id, login.refreshToken, IP, UA),
+    ).rejects.toThrow(ForbiddenException);
 
     // The NEW token still works.
-    const again = await authService.refreshTokens(user.id, rotated.refreshToken, IP, UA);
+    const again = await authService.refreshTokens(
+      user.id,
+      rotated.refreshToken,
+      IP,
+      UA,
+    );
     expect(again.refreshToken).toBeDefined();
   });
 
   it('rejects an unknown / forged refresh token', async () => {
-    const forged = await jwtService.signAsync({ sub: user.id, type: 'refresh' });
-    await expect(authService.refreshTokens(user.id, forged, IP, UA)).rejects.toThrow(
-      ForbiddenException,
-    );
+    const forged = await jwtService.signAsync({
+      sub: user.id,
+      type: 'refresh',
+    });
+    await expect(
+      authService.refreshTokens(user.id, forged, IP, UA),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('revokes the session on IP/device fingerprint mismatch', async () => {
@@ -210,9 +238,9 @@ describe('Refresh-token architecture (AuthService)', () => {
     ).rejects.toThrow(ForbiddenException);
 
     // Even from the correct IP, the now-revoked session can't refresh.
-    await expect(authService.refreshTokens(user.id, login.refreshToken, IP, UA)).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(
+      authService.refreshTokens(user.id, login.refreshToken, IP, UA),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('logout revokes the session so its refresh token stops working', async () => {
@@ -222,9 +250,9 @@ describe('Refresh-token architecture (AuthService)', () => {
       UA,
     );
     await authService.logout(user.id, login.refreshToken);
-    await expect(authService.refreshTokens(user.id, login.refreshToken, IP, UA)).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(
+      authService.refreshTokens(user.id, login.refreshToken, IP, UA),
+    ).rejects.toThrow(ForbiddenException);
   });
 });
 
@@ -243,9 +271,9 @@ describe('Token-type enforcement (passport strategies)', () => {
   const refreshStrategy = new JwtRefreshStrategy(configService);
 
   it('JwtStrategy (access) refuses a refresh-type token', async () => {
-    await expect(jwtStrategy.validate({ sub: 'user-1', type: 'refresh' })).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      jwtStrategy.validate({ sub: 'user-1', type: 'refresh' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
   it('JwtStrategy accepts a valid access token for an active user', async () => {
@@ -254,21 +282,30 @@ describe('Token-type enforcement (passport strategies)', () => {
   });
 
   it('JwtStrategy rejects an unknown / inactive user', async () => {
-    await expect(jwtStrategy.validate({ sub: 'ghost', type: 'access' })).rejects.toThrow(
-      UnauthorizedException,
-    );
+    await expect(
+      jwtStrategy.validate({ sub: 'ghost', type: 'access' }),
+    ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('JwtRefreshStrategy refuses an access-type token', async () => {
-    const req = { cookies: { refresh_token: 'x' }, get: () => undefined } as any;
-    await expect(refreshStrategy.validate(req, { sub: 'user-1', type: 'access' })).rejects.toThrow(
-      UnauthorizedException,
-    );
+  it('JwtRefreshStrategy refuses an access-type token', () => {
+    const req = {
+      cookies: { refresh_token: 'x' },
+      get: () => undefined,
+    } as any;
+    expect(() =>
+      refreshStrategy.validate(req, { sub: 'user-1', type: 'access' }),
+    ).toThrow(UnauthorizedException);
   });
 
-  it('JwtRefreshStrategy accepts a refresh token and surfaces it from the cookie', async () => {
-    const req = { cookies: { refresh_token: 'cookie-token' }, get: () => undefined } as any;
-    const result = await refreshStrategy.validate(req, { sub: 'user-1', type: 'refresh' });
+  it('JwtRefreshStrategy accepts a refresh token and surfaces it from the cookie', () => {
+    const req = {
+      cookies: { refresh_token: 'cookie-token' },
+      get: () => undefined,
+    } as any;
+    const result = refreshStrategy.validate(req, {
+      sub: 'user-1',
+      type: 'refresh',
+    });
     expect(result.refreshToken).toBe('cookie-token');
     expect(result.type).toBe('refresh');
   });
@@ -281,13 +318,18 @@ describe('IDOR guards (controllers)', () => {
     it('blocks cloning a document the user cannot access', async () => {
       const documentsService = {
         verifyJobAccess: jest.fn().mockResolvedValue(undefined),
-        verifyDocumentAccess: jest.fn().mockRejectedValue(new ForbiddenException()),
+        verifyDocumentAccess: jest
+          .fn()
+          .mockRejectedValue(new ForbiddenException()),
         create: jest.fn().mockResolvedValue({ id: 'new' }),
       } as any;
       const controller = new DocumentsController(documentsService, {} as any);
 
       await expect(
-        controller.create({ jobId: 'job-1', clonedFromId: 'secret-doc' } as any, nonAdmin),
+        controller.create(
+          { jobId: 'job-1', clonedFromId: 'secret-doc' } as any,
+          nonAdmin,
+        ),
       ).rejects.toThrow(ForbiddenException);
 
       // Access to the clone source was checked, and creation never happened.
@@ -361,26 +403,44 @@ describe('IDOR guards (controllers)', () => {
       } as any;
       const controller = new ClientsController({} as any, authService);
       const res = makeRes();
-      await controller.viewPassportCopy('client-1', 'copy-1', 'garbage', res as any);
+      await controller.viewPassportCopy(
+        'client-1',
+        'copy-1',
+        'garbage',
+        res as any,
+      );
       expect(res.statusCode).toBe(401);
     });
 
     it('rejects a valid token whose owner lacks access to the client (403 IDOR guard)', async () => {
       const authService = {
         verifyFileToken: jest.fn(() => 'user-1'),
-        getProfile: jest.fn().mockResolvedValue({ id: 'user-1', role: { name: 'Translator' } }),
+        getProfile: jest
+          .fn()
+          .mockResolvedValue({ id: 'user-1', role: { name: 'Translator' } }),
       } as any;
       const clientsService = {
-        verifyClientAccess: jest.fn().mockRejectedValue(new ForbiddenException()),
+        verifyClientAccess: jest
+          .fn()
+          .mockRejectedValue(new ForbiddenException()),
         getPassportCopy: jest.fn(),
       } as any;
       const controller = new ClientsController(clientsService, authService);
       const res = makeRes();
 
-      await controller.viewPassportCopy('other-client', 'copy-1', 'valid', res as any);
+      await controller.viewPassportCopy(
+        'other-client',
+        'copy-1',
+        'valid',
+        res as any,
+      );
 
       expect(res.statusCode).toBe(403);
-      expect(clientsService.verifyClientAccess).toHaveBeenCalledWith('other-client', 'user-1', false);
+      expect(clientsService.verifyClientAccess).toHaveBeenCalledWith(
+        'other-client',
+        'user-1',
+        false,
+      );
       // Never reached file lookup / disk.
       expect(clientsService.getPassportCopy).not.toHaveBeenCalled();
     });
@@ -392,12 +452,20 @@ describe('IDOR guards (controllers)', () => {
 describe('Login lockout & account-state oracle (AuthService)', () => {
   let authService: AuthService;
   const activeUser: any = {
-    id: 'u-active', email: 'active@example.com', isActive: true,
-    firstName: 'A', lastName: 'A', role: { id: 'r', name: 'Translator', permissions: [] },
+    id: 'u-active',
+    email: 'active@example.com',
+    isActive: true,
+    firstName: 'A',
+    lastName: 'A',
+    role: { id: 'r', name: 'Translator', permissions: [] },
   };
   const inactiveUser: any = {
-    id: 'u-inactive', email: 'inactive@example.com', isActive: false,
-    firstName: 'I', lastName: 'I', role: { id: 'r', name: 'Translator', permissions: [] },
+    id: 'u-inactive',
+    email: 'inactive@example.com',
+    isActive: false,
+    firstName: 'I',
+    lastName: 'I',
+    role: { id: 'r', name: 'Translator', permissions: [] },
   };
 
   beforeAll(async () => {
@@ -409,15 +477,23 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
     const userRepo = {
       findOne: ({ where }: any) =>
         Promise.resolve(
-          where.email === activeUser.email ? activeUser
-            : where.email === inactiveUser.email ? inactiveUser
-            : null,
+          where.email === activeUser.email
+            ? activeUser
+            : where.email === inactiveUser.email
+              ? inactiveUser
+              : null,
         ),
       update: () => Promise.resolve({ affected: 1 }),
     } as any;
 
     authService = new AuthService(
-      userRepo, noopRepo, noopRepo, makeSessionRepo() as any, jwtService, configService, mailService,
+      userRepo,
+      noopRepo,
+      noopRepo,
+      makeSessionRepo() as any,
+      jwtService,
+      configService,
+      mailService,
     );
   });
 
@@ -426,13 +502,21 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
   it('does not leak account state to an attacker without the password (no oracle)', async () => {
     // Wrong password on a deactivated account → generic "Invalid credentials".
     await expect(
-      authService.login({ email: 'inactive@example.com', password: 'wrong' }, '9.9.9.9', 'ua'),
+      authService.login(
+        { email: 'inactive@example.com', password: 'wrong' },
+        '9.9.9.9',
+        'ua',
+      ),
     ).rejects.toThrow(UnauthorizedException);
   });
 
   it('only reveals "deactivated" after the correct password', async () => {
     await expect(
-      authService.login({ email: 'inactive@example.com', password: 'Right!Pass1' }, '9.9.9.8', 'ua'),
+      authService.login(
+        { email: 'inactive@example.com', password: 'Right!Pass1' },
+        '9.9.9.8',
+        'ua',
+      ),
     ).rejects.toThrow(ForbiddenException);
   });
 
@@ -440,17 +524,27 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
     const attackerIp = '203.0.113.7';
     for (let i = 0; i < 5; i++) {
       await expect(
-        authService.login({ email: 'active@example.com', password: 'nope' }, attackerIp, 'ua'),
+        authService.login(
+          { email: 'active@example.com', password: 'nope' },
+          attackerIp,
+          'ua',
+        ),
       ).rejects.toThrow(UnauthorizedException);
     }
     // 6th attempt from the attacker's IP is now locked out.
     await expect(
-      authService.login({ email: 'active@example.com', password: 'nope' }, attackerIp, 'ua'),
+      authService.login(
+        { email: 'active@example.com', password: 'nope' },
+        attackerIp,
+        'ua',
+      ),
     ).rejects.toThrow(ForbiddenException);
 
     // The real user, from a DIFFERENT IP, is unaffected (no targeted-lockout DoS).
     const ok = await authService.login(
-      { email: 'active@example.com', password: 'Right!Pass1' }, '198.51.100.2', 'ua',
+      { email: 'active@example.com', password: 'Right!Pass1' },
+      '198.51.100.2',
+      'ua',
     );
     expect(ok.accessToken).toBeDefined();
   });
@@ -459,11 +553,16 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
 describe('AbuseDetectionGuard (narrowed patterns + caps)', () => {
   const guard = new AbuseDetectionGuard();
   const ctx = (body: any, method = 'POST') =>
-    ({ switchToHttp: () => ({ getRequest: () => ({ method, body, ip: '1.1.1.1', url: '/x' }) }) }) as any;
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({ method, body, ip: '1.1.1.1', url: '/x' }),
+      }),
+    }) as any;
 
   it('allows legitimate translator text that the old patterns falsely blocked', () => {
     const body = {
-      notes: 'Please delete from the list; total &amp; tax updated. Café coûte 5€ (&#233;).',
+      notes:
+        'Please delete from the list; total &amp; tax updated. Café coûte 5€ (&#233;).',
       name: 'one=2 online store',
       description: 'char(255) column note; alert (see below)',
     };
@@ -471,15 +570,15 @@ describe('AbuseDetectionGuard (narrowed patterns + caps)', () => {
   });
 
   it('still blocks a clear SQL injection payload', () => {
-    expect(() => guard.canActivate(ctx({ q: "x' UNION SELECT password FROM users --" }))).toThrow(
-      BadRequestException,
-    );
+    expect(() =>
+      guard.canActivate(ctx({ q: "x' UNION SELECT password FROM users --" })),
+    ).toThrow(BadRequestException);
   });
 
   it('still blocks a clear script-injection payload', () => {
-    expect(() => guard.canActivate(ctx({ notes: '<script>steal()</script>' }))).toThrow(
-      BadRequestException,
-    );
+    expect(() =>
+      guard.canActivate(ctx({ notes: '<script>steal()</script>' })),
+    ).toThrow(BadRequestException);
   });
 
   it('does not choke on deeply nested / large bodies (depth + node caps)', () => {
@@ -490,11 +589,19 @@ describe('AbuseDetectionGuard (narrowed patterns + caps)', () => {
 });
 
 describe('File signature detection (magic bytes)', () => {
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0]);
-  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const png = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]);
+  const jpeg = Buffer.from([
+    0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]);
   const pdf = Buffer.from('%PDF-1.7 rest', 'latin1');
-  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  const exe = Buffer.from([0x4d, 0x5a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const zip = Buffer.from([
+    0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]);
+  const exe = Buffer.from([
+    0x4d, 0x5a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ]);
 
   it('identifies real types by content', () => {
     expect(sniffType(png)).toBe('png');
@@ -509,27 +616,38 @@ describe('File signature detection (magic bytes)', () => {
     expect(sniffImageMime(jpeg)).toBe('image/jpeg');
     expect(sniffImageMime(pdf)).toBeNull();
     // An SVG/HTML payload mislabeled image/png has no PNG signature → rejected.
-    expect(sniffImageMime(Buffer.from('<svg onload=alert(1)>', 'latin1'))).toBeNull();
+    expect(
+      sniffImageMime(Buffer.from('<svg onload=alert(1)>', 'latin1')),
+    ).toBeNull();
   });
 });
 
 describe('Invoice create — IDOR guard on linked jobs', () => {
   it('rejects creating an invoice that links a job the caller cannot access', async () => {
     const clientRepo = { findOne: jest.fn().mockResolvedValue({ id: 'C' }) };
-    const jobRepo = { find: jest.fn().mockResolvedValue([{ id: 'J', clientId: 'C' }]) };
+    const jobRepo = {
+      find: jest.fn().mockResolvedValue([{ id: 'J', clientId: 'C' }]),
+    };
     const settingsRepo = { find: jest.fn().mockResolvedValue([]) };
     const jobUserRepo = { findOne: jest.fn().mockResolvedValue(null) }; // no assignment → no access
     const dataSource = { transaction: jest.fn() };
 
     const svc = new InvoicesService(
-      {} as any, {} as any, jobRepo as any, jobUserRepo as any,
-      clientRepo as any, settingsRepo as any, dataSource as any,
+      {} as any,
+      {} as any,
+      jobRepo as any,
+      jobUserRepo as any,
+      clientRepo as any,
+      settingsRepo as any,
+      dataSource as any,
     );
 
     await expect(
       svc.create(
         {
-          clientId: 'C', issueDate: '2026-07-30', dueDate: '2026-08-30',
+          clientId: 'C',
+          issueDate: '2026-07-30',
+          dueDate: '2026-08-30',
           items: [{ jobId: 'J', description: 'x', quantity: 1, unitPrice: 1 }],
         } as any,
         'user-1',
