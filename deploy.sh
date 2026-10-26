@@ -31,7 +31,7 @@ echo "  Upload complete"
 
 # Step 4: Extract, install deps if needed, copy static, restart ONLY our apps
 echo "[4/4] Deploying on server..."
-ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR && tar xzf backend-deploy.tar.gz -C backend && tar xzf frontend-deploy.tar.gz -C frontend && del backend-deploy.tar.gz frontend-deploy.tar.gz 2>nul && xcopy /E /I /Y frontend\.next\static frontend\.next\standalone\frontend\.next\static >nul 2>&1 && cd backend && npm install --omit=dev --prefer-offline 2>&1 && cd .. && pm2 restart ta-backend ta-frontend --update-env 2>&1 && pm2 save 2>&1 && echo DEPLOY_OK" 2>&1 | grep -E "DEPLOY_OK|added|up to date|restarted|error|Error" | head -5
+ssh $SSH_OPTS "$SERVER" "cd $REMOTE_DIR && (if exist frontend\.next\standalone rmdir /s /q frontend\.next\standalone) && (if exist backend\dist rmdir /s /q backend\dist) &&tar xzf backend-deploy.tar.gz -C backend && tar xzf frontend-deploy.tar.gz -C frontend && del backend-deploy.tar.gz frontend-deploy.tar.gz 2>nul && xcopy /E /I /Y frontend\.next\static frontend\.next\standalone\frontend\.next\static >nul 2>&1 && cd backend && npm install --omit=dev --prefer-offline 2>&1 && cd .. && pm2 restart ta-backend ta-frontend --update-env 2>&1 && pm2 save 2>&1 && echo DEPLOY_OK" 2>&1 | grep -E "DEPLOY_OK|added|up to date|restarted|error|Error" | head -5
 
 echo ""
 echo "========================================="
