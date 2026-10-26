@@ -192,6 +192,8 @@ Light + dark mode supported (separate toggle from palette).
 - **Template** — type (designer/word/simple), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive
   - **Designer type**: layout built with block-based designer, stored in layoutJson
   - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
+    - Repeatable groups: `{#group_key}` … `{/group_key}` repeats the enclosed paragraphs/table row once per entry (no nesting). One scanner (`templates/word-placeholders.ts`) validates upload + preview; "Create Fields for All" puts fields found inside a loop into that group; preview warns when a loop field has a different `groupKey`. A group field used outside any loop exports its first entry
+  - **Designer type** export: `field`/`field-row` blocks showing group fields repeat once per entry (`collectFieldValues()` in export.service)
   - **Simple type**: pricing only, no fields or layout (used for freeform jobs)
 - **TemplateField** — fieldKey, fieldType (text/textarea/number/date/image), sortOrder, required, groupKey
   - Fields with same `groupKey` form a repeatable set (e.g., family extract rows)

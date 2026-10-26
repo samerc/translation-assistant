@@ -9,6 +9,7 @@ import { readFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
+import { scanWordPlaceholders } from './word-placeholders.js';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
@@ -138,32 +139,16 @@ export class TemplatesService {
         'The uploaded file could not be read as a Word document',
       );
     });
-    const rawText = result.value.replace(/<[^>]*>/g, '');
+    const scan = scanWordPlaceholders(result.value.replace(/<[^>]*>/g, ''));
 
-    const validRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-    const placeholders: string[] = [];
-    let match;
-    while ((match = validRegex.exec(rawText)) !== null) {
-      if (!placeholders.includes(match[1])) placeholders.push(match[1]);
-    }
-
-    // Check for malformed placeholders
-    const allBracesRegex = /\{([^}]*)\}/g;
-    const malformed: string[] = [];
-    while ((match = allBracesRegex.exec(rawText)) !== null) {
-      const inner = match[1];
-      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(inner)) {
-        malformed.push(`{${inner}}`);
-      }
-    }
-
-    if (malformed.length > 0) {
+    if (scan.malformed.length > 0) {
+      const list = scan.malformed.map((m) => `${m.text} (${m.reason})`);
       throw new BadRequestException(
-        `Word file contains malformed placeholders: ${malformed.join(', ')}. Fix them and re-upload.`,
+        `Word file contains malformed placeholders: ${list.join('; ')}. Fix them and re-upload.`,
       );
     }
 
-    if (placeholders.length === 0) {
+    if (scan.fields.length === 0) {
       throw new BadRequestException(
         'No placeholders found in the Word file. Add placeholders like {full_name} where field values should go.',
       );
@@ -194,48 +179,20 @@ export class TemplatesService {
 
     const buffer = readFileSync(template.wordFilePath);
     const result = await mammoth.convertToHtml({ buffer });
-    const rawText = result.value.replace(/<[^>]*>/g, ''); // strip HTML tags for scanning
+    const scan = scanWordPlaceholders(result.value.replace(/<[^>]*>/g, ''));
+    const foundValid = scan.fields;
+    const malformed = [...scan.malformed];
 
-    // Find valid placeholders: {valid_field_key}
-    const validRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
-    const foundValid: string[] = [];
-    let match;
-    while ((match = validRegex.exec(rawText)) !== null) {
-      if (!foundValid.includes(match[1])) {
-        foundValid.push(match[1]);
+    // A field used inside {#group}…{/group} must belong to that group, or the
+    // loop would render it empty on every row.
+    for (const field of template.fields) {
+      const loop = scan.groupOf[field.fieldKey];
+      if (loop && field.groupKey !== loop) {
+        malformed.push({
+          text: `{${field.fieldKey}}`,
+          reason: `Used inside {#${loop}} but the field's group is ${field.groupKey ? `"${field.groupKey}"` : 'not set'} — set its group to "${loop}"`,
+        });
       }
-    }
-
-    // Find malformed placeholders: anything with braces that doesn't match the valid pattern
-    const allBracesRegex = /\{([^}]*)\}/g;
-    const malformed: { text: string; reason: string }[] = [];
-    while ((match = allBracesRegex.exec(rawText)) !== null) {
-      const inner = match[1];
-      if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(inner)) continue; // valid, skip
-
-      let reason: string;
-      if (!inner.trim()) {
-        reason = 'Empty placeholder';
-      } else if (/\s/.test(inner)) {
-        reason = `Contains spaces — use underscores instead (e.g., {${inner.replace(/\s+/g, '_')}})`;
-      } else if (/^[0-9]/.test(inner)) {
-        reason = 'Cannot start with a number';
-      } else {
-        reason =
-          'Contains invalid characters — use only letters, numbers, and underscores';
-      }
-
-      malformed.push({ text: `{${inner}}`, reason });
-    }
-
-    // Check for unclosed braces
-    const openCount = (rawText.match(/\{/g) || []).length;
-    const closeCount = (rawText.match(/\}/g) || []).length;
-    if (openCount !== closeCount) {
-      malformed.push({
-        text: '{...}',
-        reason: `Mismatched braces: ${openCount} opening and ${closeCount} closing braces found`,
-      });
     }
 
     // Split valid into linked (has matching field) and unlinked
@@ -268,6 +225,13 @@ export class TemplatesService {
     if (template.type !== 'word' || !template.wordFilePath) {
       throw new BadRequestException('Not a Word template or no file uploaded');
     }
+    // Fields that sit inside a {#group} loop in the file are created in that group.
+    const result = await mammoth.convertToHtml({
+      buffer: readFileSync(template.wordFilePath),
+    });
+    const { groupOf } = scanWordPlaceholders(
+      result.value.replace(/<[^>]*>/g, ''),
+    );
 
     // Create/update fields based on placeholders
     for (const ph of placeholders) {
@@ -276,6 +240,7 @@ export class TemplatesService {
         await this.addField(id, {
           fieldKey: ph.fieldKey,
           fieldType: 'text',
+          groupKey: groupOf[ph.fieldKey],
         });
       }
     }

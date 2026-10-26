@@ -42,6 +42,41 @@ interface LayoutBlock {
   valueAlignment?: 'left' | 'center' | 'right';
 }
 
+type GroupRow = Record<string, string>;
+
+/**
+ * Split saved values into fixed fields and repeatable-group rows.
+ * Group fields (groupKey set) are stored once per entry (entryIndex 0..n-1);
+ * rows come back in entry order, with empty entries dropped.
+ */
+export function collectFieldValues(doc: Document): {
+  fixed: Map<string, string>;
+  groups: Map<string, GroupRow[]>;
+  groupOf: Map<string, string>;
+} {
+  const fixed = new Map<string, string>();
+  const byEntry = new Map<string, GroupRow[]>();
+  const groupOf = new Map<string, string>();
+  for (const f of doc.template.fields ?? []) {
+    if (f.groupKey) groupOf.set(f.fieldKey, f.groupKey);
+  }
+  for (const fv of doc.fieldValues) {
+    const field = fv.templateField;
+    if (!field) continue;
+    const group = groupOf.get(field.fieldKey);
+    if (group && fv.entryIndex !== null && fv.entryIndex !== undefined) {
+      const rows = byEntry.get(group) ?? [];
+      (rows[fv.entryIndex] ??= {})[field.fieldKey] = fv.value;
+      byEntry.set(group, rows);
+    } else {
+      fixed.set(field.fieldKey, fv.value);
+    }
+  }
+  const groups = new Map<string, GroupRow[]>();
+  for (const [group, rows] of byEntry) groups.set(group, rows.filter(Boolean));
+  return { fixed, groups, groupOf };
+}
+
 @Injectable()
 export class ExportService {
   constructor(
@@ -107,11 +142,15 @@ export class ExportService {
       nullGetter: () => '',
     });
 
-    // Build replacement data from field values
-    const data: Record<string, string> = {};
-    for (const fv of doc.fieldValues) {
-      if (fv.templateField) {
-        data[fv.templateField.fieldKey] = fv.value;
+    // Fixed fields by key; each group as an array of rows for {#group}…{/group}.
+    // A group field used outside a loop (templates written before loops were
+    // supported) gets the first entry's value.
+    const { fixed, groups } = collectFieldValues(doc);
+    const data: Record<string, string | GroupRow[]> = Object.fromEntries(fixed);
+    for (const [group, rows] of groups) {
+      data[group] = rows;
+      for (const [key, value] of Object.entries(rows[0] ?? {})) {
+        if (!(key in data)) data[key] = value;
       }
     }
 
@@ -154,15 +193,19 @@ export class ExportService {
     const blocks = (doc.template.layoutJson as LayoutBlock[]) || [];
     // Render right-to-left when the job's target language is RTL (e.g. Arabic).
     const isRtl = doc.job?.targetLanguage?.direction === 'rtl';
-    const valueMap = new Map<string, string>();
-
-    for (const fv of doc.fieldValues) {
-      if (fv.templateField) {
-        valueMap.set(fv.templateField.fieldKey, fv.value);
-      }
-    }
+    const { fixed, groups, groupOf } = collectFieldValues(doc);
 
     const paragraphs: Paragraph[] = [];
+
+    // A field / field-row block that shows repeatable-group fields is rendered
+    // once per entry of that group; everything else once, from fixed values.
+    const rowsFor = (keys: string[]): (GroupRow | null)[] => {
+      const group = keys.map((k) => groupOf.get(k)).find(Boolean);
+      const rows = group ? groups.get(group) : undefined;
+      return rows?.length ? rows : [null];
+    };
+    const valueOf = (key: string, row: GroupRow | null) =>
+      row?.[key] ?? fixed.get(key) ?? '';
 
     for (const block of blocks) {
       const alignment = this.getAlignment(block.alignment, isRtl);
@@ -230,80 +273,34 @@ export class ExportService {
       }
 
       if (block.type === 'field') {
-        const value = valueMap.get(block.fieldKey || '') || '';
-        const runs: TextRun[] = [];
-
-        if (block.showLabel !== false) {
-          const label = block.labelText || block.fieldKey || '';
-          const sep = block.separator || '';
-          runs.push(
-            new TextRun({
-              text: `${label}${sep}`,
-              size: fontSize,
-              bold: block.labelBold !== false,
-              color,
-            }),
-          );
-
-          if (block.labelPosition !== 'top') {
-            runs.push(new TextRun({ text: '\t', size: fontSize }));
-          } else {
-            paragraphs.push(
-              new Paragraph({
-                alignment,
-                bidirectional: isRtl,
-                children: [...runs],
-              }),
-            );
-            runs.length = 0;
-          }
-        }
-
-        runs.push(
-          new TextRun({
-            text: value,
-            size: fontSize,
-            bold: block.bold,
-            italics: block.italic,
-            color,
-          }),
-        );
-
-        paragraphs.push(
-          new Paragraph({
-            alignment:
-              block.showLabel !== false && block.labelPosition !== 'top'
-                ? alignment
-                : this.getAlignment(
-                    block.valueAlignment || block.alignment,
-                    isRtl,
-                  ),
-            bidirectional: isRtl,
-            tabStops: [{ type: TabStopType.RIGHT, position: 9000 }],
-            children: runs,
-          }),
-        );
-        continue;
-      }
-
-      if (block.type === 'field-row') {
-        const keys = block.fieldKeys || [];
-        const runs: TextRun[] = [];
-
-        for (let i = 0; i < keys.length; i++) {
-          const key = keys[i];
-          const value = valueMap.get(key) || '';
+        for (const row of rowsFor([block.fieldKey || ''])) {
+          const value = valueOf(block.fieldKey || '', row);
+          const runs: TextRun[] = [];
 
           if (block.showLabel !== false) {
+            const label = block.labelText || block.fieldKey || '';
             const sep = block.separator || '';
             runs.push(
               new TextRun({
-                text: `${key}${sep} `,
+                text: `${label}${sep}`,
                 size: fontSize,
                 bold: block.labelBold !== false,
                 color,
               }),
             );
+
+            if (block.labelPosition !== 'top') {
+              runs.push(new TextRun({ text: '\t', size: fontSize }));
+            } else {
+              paragraphs.push(
+                new Paragraph({
+                  alignment,
+                  bidirectional: isRtl,
+                  children: [...runs],
+                }),
+              );
+              runs.length = 0;
+            }
           }
 
           runs.push(
@@ -316,14 +313,64 @@ export class ExportService {
             }),
           );
 
-          if (i < keys.length - 1) {
-            runs.push(new TextRun({ text: '\t', size: fontSize }));
-          }
+          paragraphs.push(
+            new Paragraph({
+              alignment:
+                block.showLabel !== false && block.labelPosition !== 'top'
+                  ? alignment
+                  : this.getAlignment(
+                      block.valueAlignment || block.alignment,
+                      isRtl,
+                    ),
+              bidirectional: isRtl,
+              tabStops: [{ type: TabStopType.RIGHT, position: 9000 }],
+              children: runs,
+            }),
+          );
         }
+        continue;
+      }
 
-        paragraphs.push(
-          new Paragraph({ alignment, bidirectional: isRtl, children: runs }),
-        );
+      if (block.type === 'field-row') {
+        const keys = block.fieldKeys || [];
+        for (const row of rowsFor(keys)) {
+          const runs: TextRun[] = [];
+
+          for (let i = 0; i < keys.length; i++) {
+            const key = keys[i];
+            const value = valueOf(key, row);
+
+            if (block.showLabel !== false) {
+              const sep = block.separator || '';
+              runs.push(
+                new TextRun({
+                  text: `${key}${sep} `,
+                  size: fontSize,
+                  bold: block.labelBold !== false,
+                  color,
+                }),
+              );
+            }
+
+            runs.push(
+              new TextRun({
+                text: value,
+                size: fontSize,
+                bold: block.bold,
+                italics: block.italic,
+                color,
+              }),
+            );
+
+            if (i < keys.length - 1) {
+              runs.push(new TextRun({ text: '\t', size: fontSize }));
+            }
+          }
+
+          paragraphs.push(
+            new Paragraph({ alignment, bidirectional: isRtl, children: runs }),
+          );
+        }
         continue;
       }
     }
