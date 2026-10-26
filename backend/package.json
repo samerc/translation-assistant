@@ -120,5 +120,8 @@
   },
   "overrides": {
     "multer": "^2.5.0"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }
