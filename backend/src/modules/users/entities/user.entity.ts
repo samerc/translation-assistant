@@ -7,7 +7,6 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Exclude } from 'class-transformer';
 import { Role } from '../../roles/entities/role.entity.js';
 
 @Entity('users')
@@ -18,8 +17,9 @@ export class User {
   @Column({ length: 255, unique: true })
   email: string;
 
-  @Column({ length: 255 })
-  @Exclude()
+  // select: false — never loaded unless asked for explicitly (eager JobUser.user
+  // and every other relation load would otherwise send the hash to clients).
+  @Column({ length: 255, select: false })
   password: string;
 
   @Column({ length: 100 })
@@ -59,8 +59,7 @@ export class User {
   @Column({ name: 'role_id' })
   roleId: string;
 
-  @Column({ length: 512, nullable: true })
-  @Exclude()
+  @Column({ length: 512, nullable: true, select: false })
   refreshToken: string;
 
   @CreateDateColumn()

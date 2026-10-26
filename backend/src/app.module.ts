@@ -3,12 +3,13 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { appConfig } from './config/app.config.js';
 import { databaseConfig } from './config/database.config.js';
 import { HoneypotGuard } from './common/guards/honeypot.guard.js';
 import { AbuseDetectionGuard } from './common/guards/abuse-detection.guard.js';
 import { WriteThrottleGuard } from './common/guards/write-throttle.guard.js';
+import { UploadCleanupInterceptor } from './common/interceptors/upload-cleanup.interceptor.js';
 // AdminGuard is imported per-controller, not globally
 import { HealthModule } from './modules/health/health.module.js';
 import { MailModule } from './modules/mail/mail.module.js';
@@ -71,6 +72,8 @@ import { SearchModule } from './modules/search/search.module.js';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     // 4. Write throttle — 120 writes/min per user/IP
     { provide: APP_GUARD, useClass: WriteThrottleGuard },
+    // Deletes multer disk uploads when the request fails (validation, 403, 404…)
+    { provide: APP_INTERCEPTOR, useClass: UploadCleanupInterceptor },
     // AdminGuard is NOT global — it's added per-controller via @UseGuards()
     // because it needs req.user which is set by AuthGuard('jwt') at controller level
   ],

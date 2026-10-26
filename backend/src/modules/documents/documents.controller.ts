@@ -90,6 +90,7 @@ export class DocumentsController {
       dto.jobId,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     // Cloning copies field values from the source — require access to it too (IDOR guard).
     if (dto.clonedFromId) {
@@ -113,6 +114,7 @@ export class DocumentsController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.documentsService.saveFieldValues(id, dto.values);
   }
@@ -128,6 +130,7 @@ export class DocumentsController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.documentsService.updateStatus(id, dto.status);
   }
@@ -149,6 +152,7 @@ export class DocumentsController {
       dto.jobId,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.documentsService.clone(id, dto.jobId);
   }
@@ -194,6 +198,7 @@ export class DocumentsController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.documentsService.remove(id);
   }

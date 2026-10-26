@@ -1225,8 +1225,13 @@ function RolesSettings() {
               <div className="text-xs text-text-muted mt-1">{r.permissions.length} permission{r.permissions.length !== 1 ? 's' : ''}</div>
             </div>
             <div className="flex gap-3 flex-shrink-0">
-              <button onClick={() => startEdit(r)} className="text-xs text-primary hover:underline">Edit</button>
-              {r.name !== 'Admin' && <button onClick={() => remove(r)} className="text-xs text-danger hover:underline">Delete</button>}
+              {/* Admin is fixed server-side (name + all permissions) */}
+              {r.name !== 'Admin' && (
+                <>
+                  <button onClick={() => startEdit(r)} className="text-xs text-primary hover:underline">Edit</button>
+                  <button onClick={() => remove(r)} className="text-xs text-danger hover:underline">Delete</button>
+                </>
+              )}
             </div>
           </div>
         ))}

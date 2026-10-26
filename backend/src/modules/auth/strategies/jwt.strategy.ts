@@ -31,8 +31,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: JwtPayload): Promise<User> {
-    // Refresh tokens must never be accepted as access tokens (same signing secret).
-    if (payload.type === 'refresh') {
+    // Only access tokens authenticate API calls. Refresh and file-access tokens
+    // share the signing secret, and file tokens travel in URLs (logs, history).
+    if (payload.type !== 'access') {
       throw new UnauthorizedException();
     }
 

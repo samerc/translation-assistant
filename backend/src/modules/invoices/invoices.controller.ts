@@ -16,6 +16,7 @@ import {
 import type { Response } from 'express';
 import { existsSync, unlinkSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { streamThenDelete } from '../../common/utils/stream-then-delete.js';
 import { InvoicesService } from './invoices.service.js';
 import { InvoiceExportService } from './invoice-export.service.js';
@@ -118,6 +119,7 @@ export class InvoicesController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.invoicesService.update(id, dto, user.id, this.isAdmin(user));
   }
@@ -133,6 +135,7 @@ export class InvoicesController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.invoicesService.updateStatus(id, dto.status);
   }
@@ -148,6 +151,7 @@ export class InvoicesController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.invoicesService.recordPayment(id, dto);
   }
@@ -203,8 +207,11 @@ export class InvoicesController {
     streamThenDelete(filePath, res);
   }
 
+  // Sends company-branded mail to any address — a write, and rate-limited so it
+  // cannot be used as a relay.
   @Post(':id/email')
-  @RequirePermissions('invoices:read')
+  @RequirePermissions('invoices:update')
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
   async emailInvoice(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SendInvoiceEmailDto,
@@ -214,6 +221,7 @@ export class InvoicesController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     const recipient =
       dto.email || (await this.invoicesService.getClientEmail(id));
@@ -250,6 +258,7 @@ export class InvoicesController {
       id,
       user.id,
       this.isAdmin(user),
+      'edit',
     );
     return this.invoicesService.remove(id);
   }

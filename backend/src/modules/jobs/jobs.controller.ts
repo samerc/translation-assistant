@@ -32,7 +32,10 @@ import { JobAccessGuard } from '../../common/guards/job-access.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
-import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
+import {
+  FileValidationPipe,
+  UPLOAD_HARD_LIMIT_BYTES,
+} from '../../common/pipes/file-validation.pipe.js';
 
 const jobFileStorage = diskStorage({
   destination: join(process.cwd(), 'uploads', 'jobs'),
@@ -167,7 +170,12 @@ export class JobsController {
 
   @Post(':id/files')
   @RequirePermissions('jobs:update')
-  @UseInterceptors(FileInterceptor('file', { storage: jobFileStorage }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: jobFileStorage,
+      limits: { fileSize: UPLOAD_HARD_LIMIT_BYTES },
+    }),
+  )
   uploadFile(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('category') category: 'source' | 'translated',

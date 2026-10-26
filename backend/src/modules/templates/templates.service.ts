@@ -106,6 +106,7 @@ export class TemplatesService {
     id: string,
     file: Express.Multer.File,
   ): Promise<Template> {
+    if (!file) throw new BadRequestException('File is required');
     const template = await this.findOne(id);
     if (template.type !== 'word') {
       throw new BadRequestException(
@@ -118,13 +119,15 @@ export class TemplatesService {
     // A real .docx is a ZIP (PK signature) — reject spoofed/renamed content
     // before handing it to the parser.
     if (sniffType(buffer.subarray(0, 16)) !== 'zip') {
-      const { unlinkSync } = await import('fs');
-      unlinkSync(file.path);
       throw new BadRequestException(
         'The uploaded file is not a valid .docx document',
       );
     }
-    const result = await mammoth.convertToHtml({ buffer });
+    const result = await mammoth.convertToHtml({ buffer }).catch(() => {
+      throw new BadRequestException(
+        'The uploaded file could not be read as a Word document',
+      );
+    });
     const rawText = result.value.replace(/<[^>]*>/g, '');
 
     const validRegex = /\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
@@ -145,32 +148,26 @@ export class TemplatesService {
     }
 
     if (malformed.length > 0) {
-      const { unlinkSync } = await import('fs');
-      unlinkSync(file.path);
       throw new BadRequestException(
         `Word file contains malformed placeholders: ${malformed.join(', ')}. Fix them and re-upload.`,
       );
     }
 
     if (placeholders.length === 0) {
-      const { unlinkSync } = await import('fs');
-      unlinkSync(file.path);
       throw new BadRequestException(
         'No placeholders found in the Word file. Add placeholders like {full_name} where field values should go.',
       );
     }
 
-    // Delete old word file if replacing
-    if (
-      template.wordFilePath &&
-      template.wordFilePath !== file.path &&
-      existsSync(template.wordFilePath)
-    ) {
-      unlinkSync(template.wordFilePath);
-    }
+    // Save first, then delete the replaced file — a failed save must not
+    // leave the template pointing at a deleted file.
+    const oldPath = template.wordFilePath;
     template.wordFilePath = file.path;
     template.wordFileName = file.originalname;
     await this.templateRepository.save(template);
+    if (oldPath && oldPath !== file.path && existsSync(oldPath)) {
+      unlinkSync(oldPath);
+    }
     return this.findOne(id);
   }
 

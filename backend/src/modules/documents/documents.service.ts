@@ -22,10 +22,12 @@ export class DocumentsService {
     private readonly jobUserRepository: Repository<JobUser>,
   ) {}
 
+  // 'edit' for any write: view-only assignees may read but not change documents.
   async verifyJobAccess(
     jobId: string,
     userId: string,
     isAdmin: boolean,
+    level: 'view' | 'edit' = 'view',
   ): Promise<void> {
     if (isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
@@ -34,15 +36,19 @@ export class DocumentsService {
     if (!assignment) {
       throw new ForbiddenException('You do not have access to this job');
     }
+    if (level === 'edit' && assignment.permissionLevel !== 'edit') {
+      throw new ForbiddenException('You have view-only access to this job');
+    }
   }
 
   async verifyDocumentAccess(
     documentId: string,
     userId: string,
     isAdmin: boolean,
+    level: 'view' | 'edit' = 'view',
   ): Promise<Document> {
     const doc = await this.findOne(documentId);
-    await this.verifyJobAccess(doc.jobId, userId, isAdmin);
+    await this.verifyJobAccess(doc.jobId, userId, isAdmin, level);
     return doc;
   }
 

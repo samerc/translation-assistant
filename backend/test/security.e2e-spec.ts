@@ -4,7 +4,16 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { FindOperator } from 'typeorm';
+import { FindOperator, getMetadataArgsStorage } from 'typeorm';
+import { existsSync, mkdtempSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { lastValueFrom, of, throwError } from 'rxjs';
+import { User } from '../src/modules/users/entities/user.entity.js';
+import { SettingsController } from '../src/modules/settings/settings.controller.js';
+import { DocumentsService } from '../src/modules/documents/documents.service.js';
+import { RolesService } from '../src/modules/roles/roles.service.js';
+import { UploadCleanupInterceptor } from '../src/common/interceptors/upload-cleanup.interceptor.js';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../src/modules/auth/auth.service.js';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy.js';
@@ -276,6 +285,21 @@ describe('Token-type enforcement (passport strategies)', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
+  it('JwtStrategy refuses a file-access token (travels in URLs, no type claim)', async () => {
+    const fileToken = new AuthService(
+      noopRepo,
+      noopRepo,
+      noopRepo,
+      noopRepo,
+      jwtService,
+      configService,
+      mailService,
+    ).generateFileToken('user-1');
+    await expect(
+      jwtStrategy.validate(jwtService.verify(fileToken)),
+    ).rejects.toThrow(UnauthorizedException);
+  });
+
   it('JwtStrategy accepts a valid access token for an active user', async () => {
     const u = await jwtStrategy.validate({ sub: 'user-1', type: 'access' });
     expect(u.id).toBe('user-1');
@@ -477,11 +501,9 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
     const userRepo = {
       findOne: ({ where }: any) =>
         Promise.resolve(
-          where.email === activeUser.email
-            ? activeUser
-            : where.email === inactiveUser.email
-              ? inactiveUser
-              : null,
+          [activeUser, inactiveUser].find(
+            (u) => u.email === where.email || u.id === where.id,
+          ) ?? null,
         ),
       update: () => Promise.resolve({ affected: 1 }),
     } as any;
@@ -657,5 +679,154 @@ describe('Invoice create — IDOR guard on linked jobs', () => {
 
     // Blocked before any persistence.
     expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('Sensitive columns are never loaded by default', () => {
+  it('User.password and User.refreshToken are select: false', () => {
+    const cols = getMetadataArgsStorage().columns.filter(
+      (c) => c.target === User,
+    );
+    for (const name of ['password', 'refreshToken']) {
+      const col = cols.find((c) => c.propertyName === name);
+      expect(col?.options.select).toBe(false);
+    }
+  });
+
+  it('PATCH /settings response never contains the SMTP password', async () => {
+    const settingsService = {
+      updateSettings: jest.fn().mockResolvedValue({
+        companyName: 'X',
+        smtpHost: 'smtp.example.com',
+        smtpPass: 'hunter2',
+      }),
+    } as any;
+    const controller = new SettingsController(settingsService);
+    const res = await controller.updateSettings({}, {
+      role: { name: 'Admin' },
+    } as any);
+    expect(res).not.toHaveProperty('smtpPass');
+    expect(res).toMatchObject({
+      smtpHost: 'smtp.example.com',
+      smtpPassSet: true,
+    });
+  });
+});
+
+describe('View-only job assignments grant read, never write', () => {
+  const viewOnly = {
+    findOne: jest.fn().mockResolvedValue({ permissionLevel: 'view' }),
+  };
+
+  it('DocumentsService.verifyJobAccess: view passes, edit is refused', async () => {
+    const svc = new DocumentsService({} as any, {} as any, viewOnly as any);
+    await expect(
+      svc.verifyJobAccess('job-1', 'user-1', false),
+    ).resolves.toBeUndefined();
+    await expect(
+      svc.verifyJobAccess('job-1', 'user-1', false, 'edit'),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('DocumentsController write endpoints ask for edit access', async () => {
+    const documentsService = {
+      verifyDocumentAccess: jest.fn().mockResolvedValue({}),
+      saveFieldValues: jest.fn(),
+      remove: jest.fn(),
+    } as any;
+    const controller = new DocumentsController(documentsService, {} as any);
+    const user = { id: 'user-1', role: { name: 'Translator' } } as any;
+    await controller.saveFieldValues('doc-1', { values: [] }, user);
+    await controller.remove('doc-1', user);
+    for (const call of documentsService.verifyDocumentAccess.mock.calls) {
+      expect(call[3]).toBe('edit');
+    }
+    expect(documentsService.verifyDocumentAccess).toHaveBeenCalledTimes(2);
+  });
+
+  it('InvoicesService.verifyInvoiceAccess(edit) only matches edit assignments', async () => {
+    const jobUserRepo = { findOne: jest.fn().mockResolvedValue(null) };
+    const svc = new InvoicesService(
+      {} as any,
+      {} as any,
+      {} as any,
+      jobUserRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    );
+    jest.spyOn(svc, 'findOne').mockResolvedValue({
+      createdByUserId: 'someone-else',
+      items: [{ jobId: 'job-1' }],
+    } as any);
+    await expect(
+      svc.verifyInvoiceAccess('inv-1', 'user-1', false, 'edit'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(jobUserRepo.findOne.mock.calls[0][0].where).toMatchObject({
+      userId: 'user-1',
+      permissionLevel: 'edit',
+    });
+  });
+});
+
+describe('Admin role is fixed', () => {
+  const adminRole = { id: 'r-admin', name: 'Admin', permissions: [] };
+  const otherRole = { id: 'r-t', name: 'Translator', permissions: [] };
+  const roleRepo = {
+    findOne: ({ where }: any) =>
+      Promise.resolve(
+        [adminRole, otherRole].find((r) => r.id === where.id) ?? null,
+      ),
+    save: (r: any) => Promise.resolve(r),
+    remove: jest.fn(),
+  };
+  const permRepo = { findBy: () => Promise.resolve([]) };
+  const svc = new RolesService(roleRepo as any, permRepo as any);
+
+  it('cannot be renamed, stripped of permissions or deleted', async () => {
+    await expect(
+      svc.update('r-admin', { name: 'Administrator' }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(svc.update('r-admin', { permissionIds: [] })).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(svc.remove('r-admin')).rejects.toThrow(BadRequestException);
+    expect(roleRepo.remove).not.toHaveBeenCalled();
+  });
+
+  it('other roles can still be renamed and edited', async () => {
+    const r = await svc.update('r-t', {
+      name: 'Senior Translator',
+      permissionIds: [],
+    });
+    expect(r.name).toBe('Senior Translator');
+  });
+});
+
+describe('UploadCleanupInterceptor', () => {
+  const ctx = (req: any) =>
+    ({ switchToHttp: () => ({ getRequest: () => req }) }) as any;
+
+  it('deletes the stored upload when the request fails', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'upl-')), 'f.bin');
+    writeFileSync(path, 'x');
+    const interceptor = new UploadCleanupInterceptor();
+    const result = interceptor.intercept(ctx({ file: { path } }), {
+      handle: () => throwError(() => new BadRequestException('nope')),
+    });
+    await expect(lastValueFrom(result)).rejects.toThrow(BadRequestException);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it('keeps the upload when the request succeeds', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'upl-')), 'f.bin');
+    writeFileSync(path, 'x');
+    const interceptor = new UploadCleanupInterceptor();
+    const result = interceptor.intercept(ctx({ file: { path } }), {
+      handle: () => of({ ok: true }),
+    });
+    await expect(lastValueFrom(result)).resolves.toEqual({ ok: true });
+    expect(existsSync(path)).toBe(true);
   });
 });

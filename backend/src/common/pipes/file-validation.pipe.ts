@@ -10,6 +10,10 @@ import {
   ALWAYS_BLOCKED_EXTENSIONS,
 } from '../utils/file-signature.js';
 
+/** Hard multer cap for disk uploads — the highest maxUploadSizeMb the settings
+ *  allow (100). The configured, usually lower, limit is enforced below. */
+export const UPLOAD_HARD_LIMIT_BYTES = 100 * 1024 * 1024;
+
 @Injectable()
 export class FileValidationPipe implements PipeTransform {
   constructor(
