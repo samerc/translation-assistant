@@ -3,12 +3,13 @@
 import { useState, FormEvent, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api';
+import { useAuth } from '@/lib/auth-context';
+import { ApiError } from '@/lib/api';
 
 function RegisterForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { register } = useAuth();
   const token = searchParams.get('token') || '';
 
   const [email, setEmail] = useState('');
@@ -30,23 +31,12 @@ function RegisterForm() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email, firstName, lastName, password, inviteToken: token }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = Array.isArray(data.message) ? data.message[0] : data.message;
-        setError(msg || 'Registration failed');
-        return;
-      }
-      // Register logs the user in (access token in body, refresh cookie set) — go home.
-      if (data.accessToken) localStorage.setItem('accessToken', data.accessToken);
+      // Goes through the auth context so the app sees the new user immediately
+      // (and an admin who opened the invite link is replaced, not left in the UI).
+      await register({ email, firstName, lastName, password, inviteToken: token });
       router.push('/');
-    } catch {
-      setError('Network error. Please try again.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Network error. Please try again.');
     } finally {
       setLoading(false);
     }

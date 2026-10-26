@@ -71,7 +71,9 @@ export function ConfirmHost() {
     if (!current) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') settle(current, false);
-      if (e.key === 'Enter') settle(current, true);
+      // A focused button handles Enter itself (natively) — otherwise Enter on a
+      // focused Cancel would settle `true` here first and confirm the action.
+      if (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement)) settle(current, true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);

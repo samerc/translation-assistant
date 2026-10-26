@@ -3,11 +3,12 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import DOMPurify from 'dompurify';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { uid } from '@/lib/uid';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog, alertDialog } from '@/lib/confirm';
+import { toast } from '@/lib/toast';
 
 interface Language { id: string; code: string; name: string; direction: string; isActive: boolean; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -40,7 +41,7 @@ export default function TemplateDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('fields');
 
   const loadTemplate = () => { api.get<Template>(`/templates/${id}`).then(setTemplate).catch((err) => { logger.error('Failed to load template', err, 'templates'); router.push('/templates'); }); };
-  const loadLanguages = () => { api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive))); };
+  const loadLanguages = () => { api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive))).catch((err) => { logger.error('Failed to load languages', err, 'templates'); toast.error(err instanceof ApiError ? err.message : 'Failed to load languages.'); }); };
 
   useEffect(() => { loadTemplate(); loadLanguages(); }, [id]);
 
@@ -50,8 +51,13 @@ export default function TemplateDetailPage() {
 
   const handleDelete = async () => {
     if (!(await confirmDialog(`Delete template "${template.name}"?`))) return;
-    await api.delete(`/templates/${id}`);
-    router.push('/templates');
+    try {
+      await api.delete(`/templates/${id}`);
+      router.push('/templates');
+    } catch (err) {
+      logger.error('Failed to delete template', err, 'templates');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete template.');
+    }
   };
 
   const tabs: { id: Tab; label: string; show: boolean }[] = [
@@ -136,22 +142,28 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   };
 
   const saveNewRow = async () => {
-    if (!newRow || !newRow.fieldKey.trim()) return;
+    if (saving || !newRow || !newRow.fieldKey.trim()) return;
     setSaving(true);
     const labels = languages
       .map((l) => ({ languageId: l.id, label: (newRow[`label_${l.id}`] || '').trim() }))
       .filter((l) => l.label);
 
-    await api.post(`/templates/${template.id}/fields`, {
-      fieldKey: newRow.fieldKey.trim(),
-      fieldType: newRow.fieldType,
-      required: newRow.required === 'true',
-      groupKey: newRow.groupKey || null,
-      labels,
-    });
-    setNewRow(null);
-    setSaving(false);
-    onUpdate();
+    try {
+      await api.post(`/templates/${template.id}/fields`, {
+        fieldKey: newRow.fieldKey.trim(),
+        fieldType: newRow.fieldType,
+        required: newRow.required === 'true',
+        groupKey: newRow.groupKey || null,
+        labels,
+      });
+      setNewRow(null);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to create field', err, 'templates');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to create field.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Inline edit ──
@@ -172,22 +184,28 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   };
 
   const saveEdit = async () => {
-    if (editingId === null) return;
+    if (saving || editingId === null) return;
     setSaving(true);
     const labels = languages
       .map((l) => ({ languageId: l.id, label: (editForm[`label_${l.id}`] || '').trim() }))
       .filter((l) => l.label);
 
-    await api.patch(`/templates/${template.id}/fields/${editingId}`, {
-      fieldKey: editForm.fieldKey.trim(),
-      fieldType: editForm.fieldType,
-      required: editForm.required === 'true',
-      groupKey: editForm.groupKey || null,
-      labels,
-    });
-    setEditingId(null);
-    setSaving(false);
-    onUpdate();
+    try {
+      await api.patch(`/templates/${template.id}/fields/${editingId}`, {
+        fieldKey: editForm.fieldKey.trim(),
+        fieldType: editForm.fieldType,
+        required: editForm.required === 'true',
+        groupKey: editForm.groupKey || null,
+        labels,
+      });
+      setEditingId(null);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to update field', err, 'templates');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update field.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const cancelEdit = () => { setEditingId(null); setNewRow(null); };
@@ -533,11 +551,17 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
 
   const handleSave = async () => {
     setSaving(true);
-    await api.patch(`/templates/${template.id}`, { layoutJson: blocks });
-    setSaving(false);
-    setMessage('Layout saved');
-    setTimeout(() => setMessage(''), 3000);
-    onUpdate();
+    try {
+      await api.patch(`/templates/${template.id}`, { layoutJson: blocks });
+      setMessage('Layout saved');
+      setTimeout(() => setMessage(''), 3000);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to save layout', err, 'templates');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save layout.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const selected = selectedIdx !== null ? blocks[selectedIdx] : null;
@@ -875,21 +899,23 @@ interface WordPreview {
 function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<WordPreview | null>(null);
-  const [previewFor, setPreviewFor] = useState<string | null>(null); // wordFilePath the preview was loaded for
+  const [previewFor, setPreviewFor] = useState<string | null>(null); // previewKey the preview was loaded for
+  const [previewVersion, setPreviewVersion] = useState(0); // bumped to refetch when fields change but the file doesn't
   const [error, setError] = useState('');
-  const loadingPreview = Boolean(template.wordFilePath) && previewFor !== template.wordFilePath;
+  const [syncing, setSyncing] = useState(false);
+  const previewKey = template.wordFilePath ? `${template.wordFilePath}#${previewVersion}` : null;
+  const loadingPreview = previewKey !== null && previewFor !== previewKey;
 
   useEffect(() => {
-    const filePath = template.wordFilePath;
-    if (!filePath) return;
+    if (!previewKey) return;
     api.get<WordPreview>(`/templates/${template.id}/word-preview`)
       .then(setPreview)
       .catch((err) => {
         logger.error('Failed to load preview', err, 'templates');
         setError('Failed to load preview');
       })
-      .finally(() => setPreviewFor(filePath));
-  }, [template.id, template.wordFilePath]);
+      .finally(() => setPreviewFor(previewKey));
+  }, [template.id, previewKey]);
 
   const handleUpload = async (e: FormEvent) => {
     e.preventDefault();
@@ -903,33 +929,33 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
     formData.append('file', fileInput.files[0]);
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/templates/${template.id}/upload-word`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Upload failed' }));
-        setError(Array.isArray(data.message) ? data.message.join(', ') : data.message);
-      } else {
-        fileInput.value = '';
-        onUpdate();
-      }
+      await api.upload(`/templates/${template.id}/upload-word`, formData, 'POST');
+      fileInput.value = '';
+      onUpdate();
     } catch (err) {
       logger.error('Word template upload failed', err, 'templates');
-      setError('Upload failed');
+      setError(err instanceof ApiError ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleSyncPlaceholders = async () => {
-    if (!preview) return;
-    await api.post(`/templates/${template.id}/word-placeholders`, {
-      placeholders: preview.unlinked.map((p) => ({ find: p, fieldKey: p })),
-    });
-    onUpdate();
+    if (!preview || syncing) return;
+    setSyncing(true);
+    setError('');
+    try {
+      await api.post(`/templates/${template.id}/word-placeholders`, {
+        placeholders: preview.unlinked.map((p) => ({ find: p, fieldKey: p })),
+      });
+      setPreviewVersion((v) => v + 1);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to create fields from placeholders', err, 'templates');
+      setError(err instanceof ApiError ? err.message : 'Failed to create fields.');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const totalPlaceholders = preview ? preview.valid.length + preview.unlinked.length : 0;
@@ -1032,8 +1058,8 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
                         </div>
                       ))}
                     </div>
-                    <button onClick={handleSyncPlaceholders}
-                      className="w-full px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover">
+                    <button onClick={handleSyncPlaceholders} disabled={syncing}
+                      className="w-full px-3 py-2 bg-primary text-white rounded-lg text-xs font-medium hover:bg-primary-hover disabled:opacity-50">
                       Create Fields for All ({preview.unlinked.length})
                     </button>
                   </div>
@@ -1082,17 +1108,23 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await api.patch(`/templates/${template.id}`, {
-      name: form.name,
-      description: form.description || undefined,
-      pricePerPage: parseFloat(form.pricePerPage) || 0,
-      discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : null,
-      isActive: form.isActive,
-    });
-    setSaving(false);
-    setMessage('Saved');
-    setTimeout(() => setMessage(''), 3000);
-    onUpdate();
+    try {
+      await api.patch(`/templates/${template.id}`, {
+        name: form.name,
+        description: form.description || undefined,
+        pricePerPage: parseFloat(form.pricePerPage) || 0,
+        discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : null,
+        isActive: form.isActive,
+      });
+      setMessage('Saved');
+      setTimeout(() => setMessage(''), 3000);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to save template settings', err, 'templates');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save template.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

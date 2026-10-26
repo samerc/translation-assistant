@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { api, ApiError } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 
 export default function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const { logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -32,10 +34,10 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
     try {
       await api.post('/users/change-password', { currentPassword, newPassword });
       setSuccess(true);
-      setTimeout(onClose, 1500);
+      // The server revoked every session, this one included — sign in again.
+      setTimeout(() => void logout(), 2000); // AuthGuard redirects to /login
     } catch (err) {
-      const raw = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.';
-      setError(Array.isArray(raw) ? raw.join(' ') : String(raw));
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
 
         {success ? (
           <div className="p-3 bg-success-light text-success rounded-lg text-sm text-center">
-            Password changed successfully.
+            Password changed. Signing you out — please log in with your new password.
           </div>
         ) : (
           <form onSubmit={handleSubmit}>

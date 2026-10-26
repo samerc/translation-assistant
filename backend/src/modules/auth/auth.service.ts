@@ -10,9 +10,10 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { MoreThan } from 'typeorm';
 import { User } from '../users/entities/user.entity.js';
+import { Role } from '../roles/entities/role.entity.js';
 import { InviteToken } from './entities/invite-token.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { Session } from './entities/session.entity.js';
@@ -31,6 +32,9 @@ const MAX_FAILURES = 5;
 const LOCKOUT_DURATION_MS = 15 * 60_000; // 15 minutes
 const ATTEMPT_WINDOW_MS = 60_000; // Reset counter after 1 minute of no attempts
 const REFRESH_TOKEN_DAYS = 7;
+
+// Role given to invitees when the admin leaves the role on "Default".
+const DEFAULT_INVITE_ROLE = 'Translator';
 
 @Injectable()
 export class AuthService {
@@ -123,7 +127,7 @@ export class AuthService {
 
     if (!invite)
       throw new BadRequestException('Invalid or expired invite token');
-    if (invite.email !== dto.email)
+    if (invite.email.toLowerCase() !== dto.email.toLowerCase())
       throw new BadRequestException('Email does not match the invite');
 
     const existingUser = await this.userRepository.findOne({
@@ -133,7 +137,7 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
     const user = this.userRepository.create({
-      email: dto.email,
+      email: invite.email, // the address the admin invited (match is case-insensitive)
       password: hashedPassword,
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -265,14 +269,20 @@ export class AuthService {
 
   // ── Active Sessions ──
 
-  async getActiveSessions(userId: string) {
+  // currentRefreshToken (the caller's cookie) marks this device's session, so the
+  // UI can label it and treat revoking it as a logout.
+  async getActiveSessions(userId: string, currentRefreshToken?: string) {
     const sessions = await this.sessionRepository.find({
       where: { userId, revoked: false, expiresAt: MoreThan(new Date()) },
       order: { lastUsedAt: 'DESC' },
     });
+    const currentHash = currentRefreshToken
+      ? this.hashRefreshToken(currentRefreshToken)
+      : null;
 
     return sessions.map((s) => ({
       id: s.id,
+      current: s.refreshTokenHash === currentHash,
       ipAddress: s.ipAddress,
       userAgent: s.userAgentRaw ? s.userAgentRaw.slice(0, 100) : 'Unknown',
       createdAt: s.createdAt,
@@ -310,6 +320,19 @@ export class AuthService {
     email: string,
     roleId?: string,
   ): Promise<{ token: string; expiresAt: Date }> {
+    // users.role_id is NOT NULL: resolve the role now, so a bad or missing role
+    // fails here instead of at registration. No role picked = Translator.
+    const role = await this.userRepository.manager.findOne(Role, {
+      where: roleId ? { id: roleId } : { name: DEFAULT_INVITE_ROLE },
+    });
+    if (!role) {
+      throw new BadRequestException(
+        roleId
+          ? 'Role not found'
+          : `The default role "${DEFAULT_INVITE_ROLE}" does not exist — pick a role`,
+      );
+    }
+    roleId = role.id;
     const token = randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -493,7 +516,13 @@ export class AuthService {
   }
 
   private async generateRefreshToken(user: User): Promise<string> {
-    const payload: JwtPayload = { sub: user.id, type: 'refresh' };
+    // jti: tokens issued to the same user in the same second would otherwise be
+    // identical and share one session hash (logout on one device kills the other).
+    const payload: JwtPayload = {
+      sub: user.id,
+      type: 'refresh',
+      jti: randomUUID(),
+    };
     return this.jwtService.signAsync(payload, {
       expiresIn: `${REFRESH_TOKEN_DAYS}d`,
     });

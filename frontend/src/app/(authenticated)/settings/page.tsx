@@ -5,6 +5,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useTheme, type Palette } from '@/lib/theme-context';
 import { confirmDialog } from '@/lib/confirm';
+import { toast } from '@/lib/toast';
 
 interface AppSettings {
   id: string;
@@ -99,9 +100,11 @@ function GeneralSettings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    api.get<AppSettings>('/settings').then(setSettings);
+    api.get<AppSettings>('/settings').then(setSettings)
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Failed to load settings.'));
   }, []);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -119,12 +122,14 @@ function GeneralSettings() {
       setSettings(updated);
       setMessage('Settings saved');
       setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save settings.');
     } finally {
       setSaving(false);
     }
   };
 
-  if (!settings) return <LoadingSpinner />;
+  if (!settings) return loadError ? <div className="max-w-4xl p-3 bg-danger-light text-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
 
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl">
@@ -179,22 +184,27 @@ function LanguagesSettings() {
   const [form, setForm] = useState({ code: '', name: '', direction: 'ltr' as 'ltr' | 'rtl' });
 
   const loadLanguages = () => {
-    api.get<Language[]>('/settings/languages').then(setLanguages);
+    api.get<Language[]>('/settings/languages').then(setLanguages)
+      .catch((err) => toast.error(err instanceof ApiError ? err.message : 'Failed to load languages.'));
   };
 
   useEffect(() => { loadLanguages(); }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-      await api.patch(`/settings/languages/${editingId}`, { name: form.name, direction: form.direction });
-    } else {
-      await api.post('/settings/languages', form);
+    try {
+      if (editingId) {
+        await api.patch(`/settings/languages/${editingId}`, { name: form.name, direction: form.direction });
+      } else {
+        await api.post('/settings/languages', form);
+      }
+      setShowForm(false);
+      setEditingId(null);
+      setForm({ code: '', name: '', direction: 'ltr' });
+      loadLanguages();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save language.');
     }
-    setShowForm(false);
-    setEditingId(null);
-    setForm({ code: '', name: '', direction: 'ltr' });
-    loadLanguages();
   };
 
   const handleEdit = (lang: Language) => {
@@ -205,13 +215,21 @@ function LanguagesSettings() {
 
   const handleDelete = async (id: string) => {
     if (!(await confirmDialog('Delete this language?'))) return;
-    await api.delete(`/settings/languages/${id}`);
-    loadLanguages();
+    try {
+      await api.delete(`/settings/languages/${id}`);
+      loadLanguages();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete language.');
+    }
   };
 
   const handleToggleActive = async (lang: Language) => {
-    await api.patch(`/settings/languages/${lang.id}`, { isActive: !lang.isActive });
-    loadLanguages();
+    try {
+      await api.patch(`/settings/languages/${lang.id}`, { isActive: !lang.isActive });
+      loadLanguages();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update language.');
+    }
   };
 
   return (
@@ -352,29 +370,41 @@ function LabelsSettings() {
       ),
     ).then((results) => {
       setLabels(results.flat());
-    });
+    }).catch((err) => toast.error(err instanceof ApiError ? err.message : 'Failed to load labels.'));
   };
 
   useEffect(() => { loadLabels(); }, []);
 
   const handleAdd = async (category: string) => {
     if (!newValue.trim()) return;
-    await api.post('/settings/labels', { category, value: newValue.trim() });
-    setNewValue('');
-    setAdding(null);
-    loadLabels();
+    try {
+      await api.post('/settings/labels', { category, value: newValue.trim() });
+      setNewValue('');
+      setAdding(null);
+      loadLabels();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to add label.');
+    }
   };
 
   const handleDelete = async (id: string) => {
-    await api.delete(`/settings/labels/${id}`);
-    loadLabels();
+    try {
+      await api.delete(`/settings/labels/${id}`);
+      loadLabels();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete label.');
+    }
   };
 
   const handleEditSave = async (id: string) => {
     if (!editValue.trim()) return;
-    await api.patch(`/settings/labels/${id}`, { value: editValue.trim() });
-    setEditingId(null);
-    loadLabels();
+    try {
+      await api.patch(`/settings/labels/${id}`, { value: editValue.trim() });
+      setEditingId(null);
+      loadLabels();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update label.');
+    }
   };
 
   return (
@@ -473,24 +503,30 @@ function UploadSettings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [allowedInput, setAllowedInput] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     api.get<AppSettings>('/settings').then((s) => {
       setSettings(s);
-    });
+    }).catch((err) => setLoadError(err instanceof ApiError ? err.message : 'Failed to load settings.'));
   }, []);
 
   const handleSaveSize = async () => {
     if (!settings) return;
     setSaving(true);
     setMessage('');
-    const updated = await api.patch<AppSettings>('/settings', {
-      maxUploadSizeMb: settings.maxUploadSizeMb,
-    });
-    setSettings(updated);
-    setSaving(false);
-    setMessage('Saved');
-    setTimeout(() => setMessage(''), 3000);
+    try {
+      const updated = await api.patch<AppSettings>('/settings', {
+        maxUploadSizeMb: settings.maxUploadSizeMb,
+      });
+      setSettings(updated);
+      setMessage('Saved');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save upload size.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addFileType = async (list: 'allowedFileTypes', input: string, setInput: (v: string) => void) => {
@@ -498,24 +534,32 @@ function UploadSettings() {
     const value = input.trim().startsWith('.') ? input.trim() : `.${input.trim()}`;
     const current = settings[list] || [];
     if (current.includes(value)) { setInput(''); return; }
-    const updated = await api.patch<AppSettings>('/settings', {
-      [list]: [...current, value],
-    });
-    setSettings(updated);
-    setInput('');
+    try {
+      const updated = await api.patch<AppSettings>('/settings', {
+        [list]: [...current, value],
+      });
+      setSettings(updated);
+      setInput('');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to add file type.');
+    }
   };
 
   const removeFileType = async (list: 'allowedFileTypes', value: string) => {
     if (!settings) return;
     const current = settings[list] || [];
     const filtered = current.filter((t) => t !== value);
-    const updated = await api.patch<AppSettings>('/settings', {
-      [list]: filtered.length ? filtered : null,
-    });
-    setSettings(updated);
+    try {
+      const updated = await api.patch<AppSettings>('/settings', {
+        [list]: filtered.length ? filtered : null,
+      });
+      setSettings(updated);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to remove file type.');
+    }
   };
 
-  if (!settings) return <LoadingSpinner />;
+  if (!settings) return loadError ? <div className="max-w-4xl p-3 bg-danger-light text-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -734,6 +778,7 @@ function LoadingSpinner() {
 
 interface SessionInfo {
   id: string;
+  current: boolean;
   ipAddress: string;
   userAgent: string;
   createdAt: string;
@@ -741,7 +786,7 @@ interface SessionInfo {
 }
 
 function SecuritySettings() {
-  const { logoutEverywhere } = useAuth();
+  const { logout, logoutEverywhere } = useAuth();
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [revoking, setRevoking] = useState(false);
@@ -760,11 +805,18 @@ function SecuritySettings() {
     window.location.href = '/login';
   };
 
-  const handleRevokeSession = async (sessionId: string) => {
+  const handleRevokeSession = async (session: SessionInfo) => {
+    if (session.current) {
+      if (!(await confirmDialog('This is the session you are using now. Revoking it logs you out. Continue?'))) return;
+      await logout(); // AuthGuard redirects to /login
+      return;
+    }
     try {
-      await api.delete(`/auth/sessions/${sessionId}`);
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    } catch { /* ignore */ }
+      await api.delete(`/auth/sessions/${session.id}`);
+      setSessions((prev) => prev.filter((s) => s.id !== session.id));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to revoke session');
+    }
   };
 
   return (
@@ -796,14 +848,17 @@ function SecuritySettings() {
             {sessions.map((s) => (
               <div key={s.id} className="flex items-center justify-between border border-border rounded-lg p-3">
                 <div>
-                  <div className="text-sm font-medium text-text">{s.ipAddress}</div>
+                  <div className="text-sm font-medium text-text">
+                    {s.ipAddress}
+                    {s.current && <span className="ml-2 text-xs font-medium text-primary">This device</span>}
+                  </div>
                   <div className="text-xs text-text-muted mt-0.5">{s.userAgent}</div>
                   <div className="text-xs text-text-muted mt-0.5">
                     Last used: {new Date(s.lastUsedAt).toLocaleString()}
                   </div>
                 </div>
                 <button
-                  onClick={() => handleRevokeSession(s.id)}
+                  onClick={() => handleRevokeSession(s)}
                   className="text-xs text-danger hover:text-danger/80 font-medium"
                 >
                   Revoke
@@ -903,7 +958,7 @@ function UsersSettings() {
           <div className="sm:w-48">
             <label htmlFor="inviteRole" className="block text-sm font-medium text-text mb-1.5">Role</label>
             <select id="inviteRole" value={inviteRoleId} onChange={(e) => setInviteRoleId(e.target.value)} className={inputClass}>
-              <option value="">Default</option>
+              <option value="">Default (Translator)</option>
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
@@ -1261,7 +1316,7 @@ function BusinessSettings() {
 
   useEffect(() => {
     if (!user) return;
-    api.get<UserBranding>(`/users/${user.id}`)
+    api.get<UserBranding>('/users/profile/me')
       .then((u) => {
         setBusinessName(u.businessName || '');
         setBusinessAddress(u.businessAddress || '');
@@ -1392,7 +1447,7 @@ function FreeformTypesSettings() {
   const [form, setForm] = useState({ name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
   const [error, setError] = useState('');
 
-  const load = () => { api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setTypes); };
+  const load = () => { api.get<FreeformJobType[]>('/settings/freeform-job-types').then(setTypes).catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load freeform job types.')); };
   useEffect(() => { load(); }, []);
 
   const reset = () => {
@@ -1430,13 +1485,23 @@ function FreeformTypesSettings() {
 
   const remove = async (id: string) => {
     if (!(await confirmDialog('Delete this freeform job type?'))) return;
-    await api.delete(`/settings/freeform-job-types/${id}`);
-    load();
+    setError('');
+    try {
+      await api.delete(`/settings/freeform-job-types/${id}`);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to delete');
+    }
   };
 
   const toggle = async (t: FreeformJobType) => {
-    await api.patch(`/settings/freeform-job-types/${t.id}`, { isActive: !t.isActive });
-    load();
+    setError('');
+    try {
+      await api.patch(`/settings/freeform-job-types/${t.id}`, { isActive: !t.isActive });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to update');
+    }
   };
 
   return (

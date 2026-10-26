@@ -2,12 +2,13 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { JOB_STATUS_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
+import { toast } from '@/lib/toast';
 
 interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
 interface ClientPhone { id: string; phone: string; label: string | null; isPrimary: boolean; }
@@ -55,8 +56,13 @@ export default function ClientDetailPage() {
 
   const handleDelete = async () => {
     if (!(await confirmDialog(`Delete client "${client.name}"? This cannot be undone.`))) return;
-    await api.delete(`/clients/${id}`);
-    router.push('/clients');
+    try {
+      await api.delete(`/clients/${id}`);
+      router.push('/clients');
+    } catch (err) {
+      logger.error('Failed to delete client', err, 'clients');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete client.');
+    }
   };
 
   return (
@@ -77,7 +83,7 @@ export default function ClientDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => router.push(`/jobs?clientId=${client.id}`)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
+          <button onClick={() => router.push(`/jobs/new?clientId=${client.id}`)} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
             + New Job
           </button>
           <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">
@@ -118,16 +124,22 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
   const [labels, setLabels] = useState<Record<string, string[]>>({ email: [], phone: [], address: [] });
 
   useEffect(() => {
-    api.get<Record<string, string[]>>('/settings/labels').then(setLabels);
+    api.get<Record<string, string[]>>('/settings/labels').then(setLabels).catch((err) => logger.error('Failed to load labels', err, 'clients'));
   }, []);
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await api.patch(`/clients/${client.id}`, form);
-    setSaving(false);
-    setEditing(false);
-    onUpdate();
+    try {
+      await api.patch(`/clients/${client.id}`, form);
+      setEditing(false);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to save client', err, 'clients');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save client.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -250,26 +262,48 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
   const [value, setValue] = useState('');
   const [label, setLabel] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const handleAdd = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await onAdd(value, label);
-    setValue('');
-    setLabel('');
-    setAdding(false);
-    setSaving(false);
+    setError('');
+    try {
+      await onAdd(value, label);
+      setValue('');
+      setLabel('');
+      setAdding(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (editingId === null) return;
     setSaving(true);
-    await onEdit(editingId, value, label);
-    setValue('');
-    setLabel('');
-    setEditingId(null);
-    setSaving(false);
+    setError('');
+    try {
+      await onEdit(editingId, value, label);
+      setValue('');
+      setLabel('');
+      setEditingId(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to save.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemove = async (itemId: string) => {
+    setError('');
+    try {
+      await onRemove(itemId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to remove.');
+    }
   };
 
   const startEdit = (item: { id: string; value: string; label: string | null }) => {
@@ -284,6 +318,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
     setEditingId(null);
     setValue('');
     setLabel('');
+    setError('');
   };
 
   const isFormOpen = adding || editingId !== null;
@@ -316,7 +351,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
               <button onClick={() => startEdit(item)} className="text-xs text-primary hover:text-primary-hover">
                 Edit
               </button>
-              <button onClick={() => onRemove(item.id)} className="text-xs text-danger hover:text-danger/80">
+              <button onClick={() => handleRemove(item.id)} className="text-xs text-danger hover:text-danger/80">
                 Remove
               </button>
             </div>
@@ -358,6 +393,7 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
           </div>
         </form>
       )}
+      {error && <div className="mt-3 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
     </div>
   );
 }
@@ -368,6 +404,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' });
+  const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -377,15 +414,23 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
     if (form.role) body.role = form.role;
     if (form.notes) body.notes = form.notes;
 
-    if (editingId) {
-      await api.patch(`/clients/${clientId}/contacts/${editingId}`, body);
-    } else {
-      await api.post(`/clients/${clientId}/contacts`, body);
+    setSaving(true);
+    try {
+      if (editingId) {
+        await api.patch(`/clients/${clientId}/contacts/${editingId}`, body);
+      } else {
+        await api.post(`/clients/${clientId}/contacts`, body);
+      }
+      setShowForm(false);
+      setEditingId(null);
+      setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' });
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to save contact', err, 'clients');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save contact.');
+    } finally {
+      setSaving(false);
     }
-    setShowForm(false);
-    setEditingId(null);
-    setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' });
-    onUpdate();
   };
 
   const handleEdit = (c: Contact) => {
@@ -396,8 +441,13 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
 
   const handleDelete = async (contactId: string) => {
     if (!(await confirmDialog('Delete this contact?'))) return;
-    await api.delete(`/clients/${clientId}/contacts/${contactId}`);
-    onUpdate();
+    try {
+      await api.delete(`/clients/${clientId}/contacts/${contactId}`);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to delete contact', err, 'clients');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to delete contact.');
+    }
   };
 
   return (
@@ -417,7 +467,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
             <Field label="Role/Title" value={form.role} onChange={(v) => setForm({ ...form, role: v })} />
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">{editingId ? 'Update' : 'Add Contact'}</button>
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">{saving ? 'Saving...' : editingId ? 'Update' : 'Add Contact'}</button>
             <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm">Cancel</button>
           </div>
         </form>
@@ -469,35 +519,28 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
     formData.append('label', label || 'Passport');
 
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Upload failed' }));
-        const msg = Array.isArray(data.message) ? data.message.join(', ') : data.message;
-        setError(msg);
-        setUploading(false);
-        return;
-      }
-
+      await api.upload(`/clients/${clientId}/passports`, formData, 'POST');
       setLabel('');
       fileInput.value = '';
       onUpdate();
     } catch (err) {
       logger.error('Upload failed', err, 'clients');
-      setError('Upload failed. Please try again.');
+      setError(err instanceof ApiError ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleDelete = async (copyId: string) => {
     if (!(await confirmDialog('Delete this passport copy?'))) return;
-    await api.delete(`/clients/${clientId}/passports/${copyId}`);
-    onUpdate();
+    setError('');
+    try {
+      await api.delete(`/clients/${clientId}/passports/${copyId}`);
+      onUpdate();
+    } catch (err) {
+      logger.error('Failed to delete passport copy', err, 'clients');
+      setError(err instanceof ApiError ? err.message : 'Failed to delete passport copy.');
+    }
   };
 
   const formatSize = (bytes: number) => {
@@ -548,7 +591,7 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
                     const { token } = await api.post<{ token: string }>('/auth/file-token');
                     const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/clients/${clientId}/passports/${pc.id}/file`;
                     window.open(`${url}?token=${token}`, '_blank');
-                  } catch { /* ignore */ }
+                  } catch (err) { toast.error(err instanceof ApiError ? err.message : 'Failed to open file.'); }
                 }}
                 className="text-xs text-primary hover:text-primary-hover font-medium"
               >
@@ -571,7 +614,7 @@ function JobsTab({ clientId }: { clientId: string }) {
   const router = useRouter();
 
   useEffect(() => {
-    api.get<{ data: typeof jobs }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => setJobs(res.data));
+    api.get<{ data: typeof jobs }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => setJobs(res.data)).catch((err) => logger.error('Failed to load client jobs', err, 'clients'));
   }, [clientId]);
 
   const statusColor = JOB_STATUS_BADGE;

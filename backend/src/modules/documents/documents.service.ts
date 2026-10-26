@@ -9,8 +9,12 @@ import { Repository } from 'typeorm';
 import { Document } from './entities/document.entity.js';
 import { DocumentFieldValue } from './entities/document-field-value.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
+import { Job } from '../jobs/entities/job.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { CreateDocumentDto, FieldValueDto } from './dto/document.dto.js';
+
+// Mirrors JobsService.LOCKED_STATUSES.
+const LOCKED_JOB_STATUSES = ['delivered', 'invoiced', 'paid'];
 
 @Injectable()
 export class DocumentsService {
@@ -23,13 +27,25 @@ export class DocumentsService {
     private readonly jobUserRepository: Repository<JobUser>,
   ) {}
 
-  // 'edit' for any write: view-only assignees may read but not change documents.
+  // 'edit' for any write: view-only assignees may read but not change documents,
+  // and nobody (admins included) changes the documents of a locked job.
   async verifyJobAccess(
     jobId: string,
     userId: string,
     isAdmin: boolean,
     level: 'view' | 'edit' = 'view',
   ): Promise<void> {
+    if (level === 'edit') {
+      const job = await this.documentRepository.manager.findOne(Job, {
+        where: { id: jobId },
+        select: { id: true, status: true },
+      });
+      if (job && LOCKED_JOB_STATUSES.includes(job.status)) {
+        throw new BadRequestException(
+          'This job is locked (delivered, invoiced or paid). Reopen it to change its documents.',
+        );
+      }
+    }
     if (isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
       where: { jobId, userId },

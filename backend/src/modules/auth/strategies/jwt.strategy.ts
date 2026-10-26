@@ -10,6 +10,7 @@ export interface JwtPayload {
   sub: string;
   email?: string;
   type?: 'access' | 'refresh';
+  jti?: string;
 }
 
 @Injectable()

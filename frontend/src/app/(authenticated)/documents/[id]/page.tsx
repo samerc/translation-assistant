@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { useUnsavedChangesGuard, confirmLeave } from '@/lib/unsaved-changes';
 import { logger } from '@/lib/logger';
 
 interface Language { id: string; code: string; name: string; direction: string; }
@@ -28,19 +29,16 @@ export default function DocumentFillPage() {
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
   const [dirty, setDirty] = useState(false);
 
-  // Warn on unsaved changes
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      if (dirty) { e.preventDefault(); }
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+  // Warn on unsaved changes (browser close, sidebar links, search, notifications)
+  useUnsavedChangesGuard(dirty);
 
   useEffect(() => {
     api.get<Doc>(`/documents/${id}`).then((d) => {
       setDoc(d);
-      api.get<Job>(`/jobs/${d.jobId}`).then(setJob);
+      api.get<Job>(`/jobs/${d.jobId}`).then(setJob).catch((err) => {
+        logger.error('Failed to load job for document', err, 'documents');
+        router.push('/jobs');
+      });
       // Build values map: "fieldId_pageNum_entryIdx" => value
       const map: Record<string, string> = {};
       d.fieldValues.forEach((fv) => {
@@ -109,7 +107,8 @@ export default function DocumentFillPage() {
     };
   };
 
-  const handleSave = async () => {
+  // Resolves false (with the error shown) if the save failed.
+  const handleSave = async (): Promise<boolean> => {
     setSaving(true);
     const fieldValues = Object.entries(values)
       .filter(([, v]) => v.trim())
@@ -123,50 +122,41 @@ export default function DocumentFillPage() {
         };
       });
 
-    await api.post(`/documents/${doc.id}/save-values`, { values: fieldValues });
-    setMessage('Saved');
-    setSaving(false);
-    setDirty(false);
-    setTimeout(() => setMessage(''), 3000);
+    try {
+      await api.post(`/documents/${doc.id}/save-values`, { values: fieldValues });
+      setDirty(false);
+      setMessage('Saved');
+      setTimeout(() => setMessage(''), 3000);
+      return true;
+    } catch (err) {
+      logger.error('Failed to save document', err, 'documents');
+      setMessage(err instanceof ApiError ? `Save failed: ${err.message}` : 'Save failed');
+      return false;
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleMarkComplete = async () => {
-    await handleSave();
-    await api.patch(`/documents/${doc.id}/status`, { status: 'completed' });
-    router.push(`/jobs/${doc.jobId}`);
+    if (!(await handleSave())) return;
+    try {
+      await api.patch(`/documents/${doc.id}/status`, { status: 'completed' });
+      router.push(`/jobs/${doc.jobId}`);
+    } catch (err) {
+      logger.error('Failed to complete document', err, 'documents');
+      setMessage(err instanceof ApiError ? err.message : 'Could not mark the document complete');
+    }
   };
 
   const handleExport = async () => {
-    await handleSave();
-    const token = localStorage.getItem('accessToken');
-    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3005/api'}/documents/${doc.id}/export`;
-
+    if (!(await handleSave())) return;
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ message: 'Export failed' }));
-        setMessage(data.message || 'Export failed');
-        return;
-      }
-
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'export.docx';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
+      await api.download(`/documents/${doc.id}/export`, 'export.docx');
       setMessage('Exported successfully');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       logger.error('Export failed', err, 'documents');
-      setMessage('Export failed');
+      setMessage(err instanceof ApiError ? err.message : 'Export failed');
     }
   };
 
@@ -236,7 +226,7 @@ export default function DocumentFillPage() {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={() => router.push(`/jobs/${doc.jobId}`)} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">
+          <button onClick={async () => { if (await confirmLeave()) router.push(`/jobs/${doc.jobId}`); }} className="text-sm text-text-secondary hover:text-primary mb-2 inline-block">
             ← Back to {job.jobNumber} — {job.title}
           </button>
           <h1 className="text-2xl font-bold text-text">{doc.template.name}</h1>
@@ -333,17 +323,24 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
   const [sourceText, setSourceText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleTranslate = async () => {
     if (!sourceText.trim()) return;
     setLoading(true);
-    const result = await api.post<{ translatedText: string }>('/translate', {
-      text: sourceText,
-      from: sourceLanguage.code,
-      to: targetLanguage?.code || 'en',
-    });
-    setTranslatedText(result.translatedText);
-    setLoading(false);
+    setError('');
+    try {
+      const result = await api.post<{ translatedText: string }>('/translate', {
+        text: sourceText,
+        from: sourceLanguage.code,
+        to: targetLanguage?.code || 'en',
+      });
+      setTranslatedText(result.translatedText);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Translation failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -375,6 +372,7 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
             {loading ? 'Translating...' : 'Translate ↓'}
           </button>
         </div>
+        {error && <div className="mb-4 p-3 bg-danger-light text-danger rounded-lg text-sm">{error}</div>}
 
         <div className="mb-5">
           <label className="block text-sm font-medium text-text mb-1.5">

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
+import { useClientOptions } from '@/lib/use-client-options';
 
 interface ClientOption { id: string; name: string; }
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
@@ -14,13 +15,13 @@ export default function NewInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefillJobId = searchParams.get('jobId');
-  const [clients, setClients] = useState<ClientOption[]>([]);
   const [clientJobs, setClientJobs] = useState<{ clientId: string; jobs: JobOption[] }>({ clientId: '', jobs: [] });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const prefilled = useRef(false);
 
   const [clientId, setClientId] = useState('');
+  const clients = useClientOptions<ClientOption>(clientId);
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState(() => {
     const due = new Date();
@@ -33,8 +34,6 @@ export default function NewInvoicePage() {
   const [items, setItems] = useState<LineItem[]>([{ description: '', jobId: '', quantity: 1, unitPrice: 0 }]);
 
   useEffect(() => {
-    api.get<{ data: ClientOption[] }>('/clients?limit=100').then((res) => setClients(res.data));
-
     // Pre-fill from job if jobId is in URL
     if (prefillJobId && !prefilled.current) {
       prefilled.current = true;
@@ -62,6 +61,9 @@ export default function NewInvoicePage() {
         clientId,
         jobs: res.data.filter((j) => ['delivered', 'in_progress', 'accepted'].includes(j.status)),
       });
+    }).catch((err) => {
+      logger.error('Failed to load client jobs', err, 'invoices');
+      toast.error(err instanceof ApiError ? err.message : 'Failed to load jobs for this client.');
     });
   }, [clientId]);
 

@@ -2,12 +2,14 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { uid } from '@/lib/uid';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency } from '@/lib/format';
+import { useClientOptions } from '@/lib/use-client-options';
 
-interface Client { id: string; name: string; type: string; contacts: { id: string; firstName: string; lastName: string }[]; }
+interface Client { id: string; name: string; type: string; }
+interface Contact { id: string; firstName: string; lastName: string; }
 interface Language { id: string; code: string; name: string; isActive: boolean; }
 interface Template { id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
 interface FreeformJobType { id: string; name: string; description: string | null; pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean; }
@@ -27,7 +29,6 @@ export default function NewJobPage() {
   const { baseCurrency } = useSettings();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [clients, setClients] = useState<Client[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [freeformTypes, setFreeformTypes] = useState<FreeformJobType[]>([]);
@@ -55,16 +56,32 @@ export default function NewJobPage() {
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
   useEffect(() => {
-    api.get<{ data: Client[] }>('/clients?limit=1000').then((res) => setClients(res.data));
-    api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive)));
-    api.get<Template[]>('/templates?isActive=true').then(setTemplates);
+    api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive)))
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load languages.'));
+    api.get<Template[]>('/templates?isActive=true').then(setTemplates)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Failed to load templates.'));
     api.get<FreeformJobType[]>('/settings/freeform-job-types')
       .then((ts) => setFreeformTypes(ts.filter((t) => t.isActive)))
       .catch(() => setFreeformTypes([]));
   }, []);
 
+  const clients = useClientOptions<Client>(form.clientId);
   const selectedClient = clients.find((c) => c.id === form.clientId);
-  const contacts = selectedClient?.contacts || [];
+
+  // The client list doesn't include contacts — load them for the selected company.
+  // Keyed by client so a previous client's contacts are never offered.
+  const [clientContacts, setClientContacts] = useState<{ clientId: string; contacts: Contact[] }>({ clientId: '', contacts: [] });
+  const contacts = clientContacts.clientId === form.clientId ? clientContacts.contacts : [];
+  const isCompany = selectedClient?.type === 'company';
+
+  useEffect(() => {
+    if (!isCompany) return;
+    let ignore = false;
+    api.get<Contact[]>(`/clients/${form.clientId}/contacts`)
+      .then((cs) => { if (!ignore) setClientContacts({ clientId: form.clientId, contacts: cs }); })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, [form.clientId, isCompany]);
 
   const addLineItem = () => {
     setLineItems([...lineItems, {
@@ -165,8 +182,9 @@ export default function NewJobPage() {
       router.push(`/jobs/${job.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create job');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const inputClass = "w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary";
@@ -220,7 +238,7 @@ export default function NewJobPage() {
                 {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-            {selectedClient?.type === 'company' && contacts.length > 0 && (
+            {isCompany && contacts.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-text mb-1.5">Contact Person</label>
                 <select value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })} className={inputClass}>

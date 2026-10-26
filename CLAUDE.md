@@ -59,16 +59,16 @@ translation-assistant/
 - JWT access tokens (15 min TTL, returned in body → localStorage) + refresh tokens (7 days)
 - **Refresh token delivered as an httpOnly, SameSite=Strict cookie** (`refresh_token`, path `/api/auth`, `secure` in prod) — never exposed in the response body. Requires `cookie-parser` (wired in `main.ts`) and CORS `credentials: true`.
 - Refresh token rotation with bcrypt hashing
-- **Session tracking**: each login/refresh records a `Session` (IP, user-agent, lastUsed). Users can list active sessions (`GET /auth/sessions`), revoke one (`DELETE /auth/sessions/:id`), or `logout-everywhere` (revokes all + clears cookie). Password reset revokes all sessions.
+- **Session tracking**: each login/refresh records a `Session` (IP, user-agent, lastUsed). Users can list active sessions (`GET /auth/sessions`, the caller's own marked `current`), revoke one (`DELETE /auth/sessions/:id`), or `logout-everywhere` (revokes all + clears cookie). Password reset and password change revoke all sessions (the change-password modal then signs the user out). Refresh JWTs carry a random `jti`, so concurrent logins never share a session hash.
 - **Password reset flow**: `forgot-password` → `verify-reset-token` → `reset-password`. Tokens are 32-byte random, single-use, 30-min expiry (`PasswordResetToken`). No email service yet — in **non-production** the token is returned in the response for testing; in production only a generic message is returned (see `requestPasswordReset` TODO to wire email).
 - Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run)
-- 3 default roles: Admin (all permissions), Translator (CRUD on core resources), Viewer (read-only)
+- 3 default roles: Admin (all permissions), Translator (create/read/update on core resources + `settings:read`, needed for languages/labels/job types), Viewer (read-only). Existing DBs get Translator `settings:read` via migration `*-TranslatorSettingsRead` (applied by hand on prod — see docs/OPS.md §5)
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
 - **`@AdminOnly()` + `AdminGuard`**: hard role-name check (DB) on top of RBAC for privilege-sensitive endpoints (e.g. invite, role management) — prevents a `roles:update` holder from self-escalating
 - **The Admin role is fixed** (`roles.service.ts`): it cannot be renamed, deleted or have its permissions changed — every admin check matches the literal name `Admin`, so changing it would lock admins out with no way back in the app
 - `JwtStrategy` accepts only `type: 'access'` tokens — refresh and file-access tokens (same secret; file tokens travel in URLs) are refused as API bearers
 - Invite-only registration: admin generates invite tokens via `POST /api/auth/invite`
-- Invite tokens are email-bound, one-time use, 7-day expiry
+- Invite tokens are email-bound (case-insensitive), one-time use, 7-day expiry. The role is resolved when the invite is created: none picked = Translator; an unknown role id is a 400 then, not at registration
 
 ## Security
 - All IDs are UUIDs (not sequential integers) — prevents enumeration
@@ -106,7 +106,7 @@ translation-assistant/
 - Frontend: `ErrorBoundary` component wraps the app (`layout.tsx`) — graceful fallback UI on render errors
 - Frontend: sidebar items hidden based on user permissions (no Invoices/Reports for Translator role)
 - Frontend: dashboard gracefully handles 403 for non-admin users
-- Frontend: unsaved changes warning on document fill page
+- Frontend: unsaved changes warning on document fill page — `useUnsavedChangesGuard(dirty)` (`lib/unsaved-changes.ts`) covers browser close and in-app links; shell code that navigates with `router.push` (Topbar search/notifications) calls `confirmLeave()` first
 - Frontend: status transitions enforced (only valid next states selectable)
 - Frontend: fully responsive (mobile hamburger menu, table scroll, stacked forms)
 
@@ -146,6 +146,8 @@ translation-assistant/
 - Backend request typing: `getRequest<AuthenticatedRequest>()` behind the `jwt` guard, `MaybeAuthenticatedRequest` in global guards (they run before auth, so `req.user` is absent there), `RefreshRequest` on `/auth/refresh` — all in `common/types/authenticated-request.ts`. Raw queries: always `getRawOne<{...}>()` + `Number()`.
 - Temp export downloads: `streamThenDelete(filePath, res)` (deletes on success, error and client abort).
 - Frontend: no setState directly in effects or `Date.now()` in render (React Compiler lint) — derive state, use `useNow()` + `formatTimeAgo()`, `uid()` for client ids, `useSyncExternalStore` for module stores (see `lib/toast.tsx`, `lib/confirm.tsx`). `api.*` resolves empty response bodies as `undefined`.
+- Frontend API calls: always `api.*` — including uploads (`api.upload(path, formData, 'POST')`) and file exports (`api.download(path, fallbackName)`); never raw `fetch` with the token, which skips refresh. `authedFetch` refreshes at most once at a time (shared promise + `navigator.locks` across tabs, because refresh tokens are one-time use) and never refreshes on `/auth/login|register|…` (there a 401 means bad credentials). `ApiError.message` is always a string (validation arrays joined).
+- Async click/submit handlers: `try/catch/finally` — busy flags reset in `finally`, errors shown (`toast.error` or the form's error area). Client `<select>`s use `useClientOptions(selectedId)` (API caps lists at 100; a preselected client outside that page is fetched separately).
 - All API routes prefixed with `/api/`
 - RBAC permissions follow `resource:action` format (e.g., `clients:create`)
 - Database migrations managed via ORM (synchronize in dev, migrations in prod)
@@ -199,7 +201,7 @@ Light + dark mode supported (separate toggle from palette).
 ### Jobs
 - **Job** — jobNumber (auto: JOB-0001), type (template/freeform), title, description, clientId, contactId, sourceLanguageId, targetLanguageId (nullable for non-translation), status, deadline, calculatedTotal, finalPrice, isFreeOfCharge, freeOfChargeReason, paymentCurrency, paymentAmount, notes
   - Status flow: quote → accepted → in_progress → delivered → invoiced → paid (+ lost, cancelled)
-  - Locked when delivered/invoiced/paid — reopen to edit
+  - Locked when delivered/invoiced/paid — reopen to edit. The lock covers the job's files and documents too (reads/exports still allowed; invoicing is unaffected)
   - Documents auto-created for non-simple template line items
 - **JobLineItem** — jobId, templateId, description, pageCount, pricePerPage, discountedPricePerPage, useDiscountedPrice, lineTotal
 - **JobUser** — jobId, userId, permissionLevel (view/edit). Controls job access.
@@ -239,7 +241,7 @@ Light + dark mode supported (separate toggle from palette).
 
 ### Users (`/api/users`)
 - Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`
-- `PATCH /profile/me` — Self-update (no role/active change)
+- `GET /profile/me` + `PATCH /profile/me` — Read / self-update own profile, no `users:*` permission needed (no role/active change)
 - `POST /change-password`
 
 ### Roles (`/api/roles`)

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { toast } from '@/lib/toast';
 import { SortIcon } from '@/components/ui/SortIcon';
 import { useAuth } from '@/lib/auth-context';
 import { formatDate } from '@/lib/format';
@@ -33,6 +34,7 @@ export default function ClientsPage() {
   const { hasPermission } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -74,13 +76,21 @@ export default function ClientsPage() {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const body: Record<string, string> = { type: form.type, name: form.name };
     if (form.taxId) body.taxId = form.taxId;
     if (form.notes) body.notes = form.notes;
-    await api.post('/clients', body);
-    setShowForm(false);
-    setForm({ type: 'company', name: '', taxId: '', notes: '' });
-    loadClients();
+    setSaving(true);
+    try {
+      await api.post('/clients', body);
+      setShowForm(false);
+      setForm({ type: 'company', name: '', taxId: '', notes: '' });
+      loadClients();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to create client.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -133,8 +143,8 @@ export default function ClientsPage() {
           </div>
           <p className="text-xs text-text-muted mt-3">Emails, phones, and addresses can be added after creating the client.</p>
           <div className="flex gap-2 mt-4">
-            <button type="submit" className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover">
-              Create Client
+            <button type="submit" disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-hover disabled:opacity-50">
+              {saving ? 'Creating...' : 'Create Client'}
             </button>
             <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 bg-bg border border-border text-text-secondary rounded-lg text-sm hover:bg-border/50">
               Cancel

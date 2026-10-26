@@ -193,6 +193,17 @@ describe('Refresh-token architecture (AuthService)', () => {
     expect(sessionRepo.rows[0].refreshTokenHash).toHaveLength(64); // sha256 hex
   });
 
+  it('two logins in the same second get distinct refresh tokens (jti)', async () => {
+    const creds = { email: 'alice@example.com', password: 'Str0ng!Pass' };
+    const [a, b] = await Promise.all([
+      authService.login(creds, IP, UA),
+      authService.login(creds, IP, UA),
+    ]);
+    expect(a.refreshToken).not.toEqual(b.refreshToken);
+    const hashes = sessionRepo.rows.map((r) => r.refreshTokenHash);
+    expect(new Set(hashes).size).toBe(hashes.length);
+  });
+
   it('refresh rotates the token and invalidates the old one (one-time use)', async () => {
     const login = await authService.login(
       { email: 'alice@example.com', password: 'Str0ng!Pass' },
@@ -718,8 +729,19 @@ describe('View-only job assignments grant read, never write', () => {
     findOne: jest.fn().mockResolvedValue({ permissionLevel: 'view' }),
   };
 
+  const openJobRepo = (status: string) =>
+    ({
+      manager: {
+        findOne: jest.fn().mockResolvedValue({ id: 'job-1', status }),
+      },
+    }) as any;
+
   it('DocumentsService.verifyJobAccess: view passes, edit is refused', async () => {
-    const svc = new DocumentsService({} as any, {} as any, viewOnly as any);
+    const svc = new DocumentsService(
+      openJobRepo('in_progress'),
+      {} as any,
+      viewOnly as any,
+    );
     await expect(
       svc.verifyJobAccess('job-1', 'user-1', false),
     ).resolves.toBeUndefined();
@@ -828,6 +850,66 @@ describe('UploadCleanupInterceptor', () => {
     });
     await expect(lastValueFrom(result)).resolves.toEqual({ ok: true });
     expect(existsSync(path)).toBe(true);
+  });
+});
+
+describe('Invites resolve their role up front', () => {
+  const make = (role: unknown) => {
+    const inviteRepo = {
+      create: (e: any) => e,
+      save: jest.fn((e: any) => Promise.resolve(e)),
+    };
+    const userRepo = {
+      manager: { findOne: jest.fn().mockResolvedValue(role) },
+    };
+    const svc = new AuthService(
+      userRepo as any,
+      inviteRepo as any,
+      noopRepo,
+      noopRepo,
+      jwtService,
+      configService,
+      mailService,
+    );
+    return { svc, inviteRepo, userRepo };
+  };
+
+  it('no role picked → stores the Translator role id', async () => {
+    const { svc, inviteRepo, userRepo } = make({ id: 'r-translator' });
+    await svc.createInvite('new@example.com');
+    expect(userRepo.manager.findOne.mock.calls[0][1]).toEqual({
+      where: { name: 'Translator' },
+    });
+    expect(inviteRepo.save.mock.calls[0][0].roleId).toBe('r-translator');
+  });
+
+  it('unknown role id → 400 at invite time, nothing stored', async () => {
+    const { svc, inviteRepo } = make(null);
+    await expect(
+      svc.createInvite('new@example.com', 'no-such-role'),
+    ).rejects.toThrow(BadRequestException);
+    expect(inviteRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('Locked jobs (Batch C)', () => {
+  it('document writes on a delivered job are refused, even for admins', async () => {
+    const svc = new DocumentsService(
+      {
+        manager: {
+          findOne: jest.fn().mockResolvedValue({ status: 'delivered' }),
+        },
+      } as any,
+      {} as any,
+      {} as any,
+    );
+    await expect(
+      svc.verifyJobAccess('job-1', 'admin', true, 'edit'),
+    ).rejects.toThrow(BadRequestException);
+    // reading a locked job's documents is still fine
+    await expect(
+      svc.verifyJobAccess('job-1', 'admin', true),
+    ).resolves.toBeUndefined();
   });
 });
 
