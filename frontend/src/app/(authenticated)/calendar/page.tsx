@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { todayLocal } from '@/lib/format';
+import { humanize, todayLocal } from '@/lib/format';
+import { isJobOverdue } from '@/lib/status';
 import { useNow } from '@/lib/use-now';
 
 interface CalendarEvent {
@@ -91,6 +92,8 @@ export default function CalendarPage() {
   const nextMonth = () => (month === 12 ? changeMonth(1, year + 1) : changeMonth(month + 1, year));
 
   const todayStr = todayLocal(now.getTime());
+  const isOverdue = (ev: CalendarEvent) =>
+    ev.type === 'job_deadline' ? isJobOverdue({ status: ev.status, deadline: ev.date }, todayStr) : ev.status === 'overdue';
 
   const getDateKey = (d: { day: number; month: number; year: number }) =>
     `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
@@ -159,7 +162,7 @@ export default function CalendarPage() {
                       {dayEvents.slice(0, 3).map((ev) => (
                         <div key={ev.id} className="flex items-center gap-1">
                           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${colorMap[ev.color] || 'bg-primary'}`} />
-                          <span className="text-xs text-text-secondary truncate">{ev.title.split(' — ')[0]}</span>
+                          <span className={`text-xs truncate ${isOverdue(ev) ? 'text-danger font-semibold' : 'text-text-secondary'}`}>{ev.title.split(' — ')[0]}</span>
                         </div>
                       ))}
                       {dayEvents.length > 3 && (
@@ -198,8 +201,8 @@ export default function CalendarPage() {
                     </div>
                     <div className="text-sm font-medium text-text">{ev.title}</div>
                     <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold
-                      ${ev.status === 'overdue' ? 'tone tone-danger' : ev.type === 'job_deadline' ? 'tone tone-primary' : 'tone tone-warning'}
-                    `}>{ev.status}</span>
+                      ${isOverdue(ev) ? 'tone tone-danger' : ev.type === 'job_deadline' ? 'tone tone-primary' : 'tone tone-warning'}
+                    `}>{isOverdue(ev) && ev.status !== 'overdue' ? `Overdue · ${humanize(ev.status)}` : humanize(ev.status)}</span>
                   </button>
                 ))}
               </div>

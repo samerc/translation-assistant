@@ -29,7 +29,7 @@ export class UpdateSettingsDto {
 
   @IsOptional()
   @Matches(/^[A-Z]{3}$/, {
-    message: 'baseCurrency must be a 3-letter ISO code (e.g. USD)',
+    message: 'Base currency must be a 3-letter code, like USD, EUR or AED',
   })
   baseCurrency?: string;
 
@@ -87,4 +87,10 @@ export class UpdateSettingsDto {
   @IsString()
   @MaxLength(255)
   appBaseUrl?: string;
+
+  // '' = leave unchanged (GET never returns it); null = remove the stored key.
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  googleTranslateApiKey?: string | null;
 }

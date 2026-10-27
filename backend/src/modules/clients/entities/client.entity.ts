@@ -29,6 +29,11 @@ export class Client {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  // Who added the client — a non-admin sees the clients they created even
+  // before any job uses them. Null for clients that predate this column.
+  @Column({ name: 'created_by_user_id', type: 'uuid', nullable: true })
+  createdByUserId: string | null;
+
   @OneToMany(() => ClientEmail, (e) => e.client, { cascade: true })
   emails: ClientEmail[];
 

@@ -108,7 +108,10 @@ export class UsersService {
       throw new BadRequestException('Current password is incorrect');
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
-    await this.userRepository.update(id, { password: hashedPassword });
+    await this.userRepository.update(id, {
+      password: hashedPassword,
+      mustChangePassword: false,
+    });
     // Force re-login everywhere after a password change (a stolen session must not survive).
     await this.revokeAllSessions(id);
   }

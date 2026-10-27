@@ -34,6 +34,8 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3080',
     credentials: true,
+    // Lets the frontend read export/download file names cross-origin (dev).
+    exposedHeaders: ['Content-Disposition'],
   });
 
   // Global exception filter — sanitizes all error responses, logs details server-side

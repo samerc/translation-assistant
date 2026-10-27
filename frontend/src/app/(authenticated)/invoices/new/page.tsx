@@ -8,12 +8,13 @@ import { toast } from '@/lib/toast';
 import { useClientOptions } from '@/lib/use-client-options';
 import { useSettings } from '@/lib/settings-context';
 import { localDateString, todayLocal } from '@/lib/format';
+import { RequirePermission } from '@/components/RequirePermission';
 
 interface ClientOption { id: string; name: string; }
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
 interface LineItem { description: string; jobId: string; quantity: number; unitPrice: number; }
 
-export default function NewInvoicePage() {
+function NewInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefillJobId = searchParams.get('jobId');
@@ -275,4 +276,8 @@ export default function NewInvoicePage() {
       </form>
     </div>
   );
+}
+
+export default function NewInvoicePageGate() {
+  return <RequirePermission permission="invoices:create"><NewInvoicePage /></RequirePermission>;
 }

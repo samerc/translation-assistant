@@ -40,6 +40,7 @@ import {
   FileValidationPipe,
   UPLOAD_HARD_LIMIT_BYTES,
 } from '../../common/pipes/file-validation.pipe.js';
+import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 const jobFileStorage = diskStorage({
   destination: join(process.cwd(), 'uploads', 'jobs'),
@@ -61,6 +62,7 @@ export class JobsController {
     @Query('status') status?: string,
     @Query('clientId') clientId?: string,
     @Query('type') type?: string,
+    @Query('hasDeadline') hasDeadline?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
     @Query('page') page?: string,
@@ -70,6 +72,7 @@ export class JobsController {
       search,
       status,
       type,
+      hasDeadline: hasDeadline === 'true',
       sortBy,
       sortOrder,
       clientId: clientId || undefined,
@@ -89,7 +92,7 @@ export class JobsController {
   @Post()
   @RequirePermissions('jobs:create')
   create(@Body() dto: CreateJobDto, @CurrentUser() user: User) {
-    return this.jobsService.create(dto, user.id);
+    return this.jobsService.create(dto, user.id, user.role?.name === 'Admin');
   }
 
   @Patch(':id')
@@ -225,11 +228,10 @@ export class JobsController {
     @Res() res: Response,
   ) {
     const file = await this.jobsService.getFileForDownload(id, fileId);
-    const safeName = file.fileName.replace(/[^\w.-]/g, '_');
     // Always an attachment with a generic type: uploaded content is never
     // rendered inline by the browser.
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('Content-Disposition', contentDisposition(file.fileName));
     res.setHeader('X-Content-Type-Options', 'nosniff');
     pipeline(createReadStream(file.filePath), res, () => {
       /* client aborted or file vanished mid-stream — nothing to clean up */

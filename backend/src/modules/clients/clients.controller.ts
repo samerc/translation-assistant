@@ -41,6 +41,7 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 const uploadStorage = diskStorage({
   destination: join(process.cwd(), 'uploads', 'passports'),
@@ -103,8 +104,8 @@ export class ClientsController {
 
   @Post()
   @RequirePermissions('clients:create')
-  create(@Body() dto: CreateClientDto) {
-    return this.clientsService.create(dto);
+  create(@Body() dto: CreateClientDto, @CurrentUser() user: User) {
+    return this.clientsService.create(dto, user.id);
   }
 
   @Patch(':id')
@@ -434,9 +435,11 @@ export class ClientsController {
     const safeMimeType = allowedMimeTypes.includes(pc.mimeType)
       ? pc.mimeType
       : 'application/octet-stream';
-    const safeName = basename(pc.originalName).replace(/[^\w.-]/g, '_');
     res.setHeader('Content-Type', safeMimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition(basename(pc.originalName), 'inline'),
+    );
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // pipeline handles a read error or client abort instead of an unhandled 'error'
     pipeline(createReadStream(pc.filePath), res, () => {

@@ -5,6 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useUnsavedChangesGuard, confirmLeave } from '@/lib/unsaved-changes';
 import { logger } from '@/lib/logger';
+import { useAuth } from '@/lib/auth-context';
+import { toast } from '@/lib/toast';
+import { humanize } from '@/lib/format';
+import { Button } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Alert';
+import { TranslateKeyForm } from '@/components/TranslateKeyForm';
 
 interface Language { id: string; code: string; name: string; direction: string; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -15,22 +21,35 @@ interface Doc {
   template: { id: string; name: string; type: string; fields: TemplateField[] };
   fieldValues: FieldValue[];
 }
-interface Job { id: string; title: string; jobNumber: string; sourceLanguage: Language; targetLanguage: Language | null; }
+interface Job { id: string; title: string; jobNumber: string; status: string; sourceLanguage: Language; targetLanguage: Language | null; }
+
+const LOCKED_JOB_STATUSES = ['delivered', 'invoiced', 'paid'];
 
 export default function DocumentFillPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role?.name === 'Admin';
   const [doc, setDoc] = useState<Doc | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<{ text: string; tone: 'success' | 'danger' } | null>(null);
+  // null until known; false = no Google Translate key, GT buttons open the set-up prompt
+  const [gtConfigured, setGtConfigured] = useState<boolean | null>(null);
+  const [gtSetupOpen, setGtSetupOpen] = useState(false);
   const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string; page: number; entry?: number } | null>(null);
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
   const [dirty, setDirty] = useState(false);
 
   // Warn on unsaved changes (browser close, sidebar links, search, notifications)
   useUnsavedChangesGuard(dirty);
+
+  useEffect(() => {
+    api.get<{ configured: boolean }>('/translate/status')
+      .then((s) => setGtConfigured(s.configured))
+      .catch(() => setGtConfigured(null));
+  }, []);
 
   useEffect(() => {
     api.get<Doc>(`/documents/${id}`).then((d) => {
@@ -67,13 +86,18 @@ export default function DocumentFillPage() {
         counts[gk] = Math.max(max + 1, 1);
       });
       setGroupEntries(counts);
-    }).catch((err) => { logger.error('Failed to load document', err, 'documents'); router.push('/jobs'); });
+    }).catch((err) => {
+      logger.error('Failed to load document', err, 'documents');
+      toast.error(err instanceof ApiError && err.status === 403 ? "You don't have access to that document." : "Couldn't open that document.");
+      router.push('/jobs');
+    });
   }, [id]);
 
   if (!doc || !job) {
     return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
   }
 
+  const locked = LOCKED_JOB_STATUSES.includes(job.status);
   const targetLang = job.targetLanguage;
   const sourceLang = job.sourceLanguage;
   const fields = [...doc.template.fields].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -90,6 +114,11 @@ export default function DocumentFillPage() {
   const getValue = (fieldId: string, page: number, entry?: number) =>
     values[getValueKey(fieldId, page, entry)] || '';
 
+  const flash = (text: string, tone: 'success' | 'danger' = 'success') => {
+    setMessage({ text, tone });
+    if (tone === 'success') setTimeout(() => setMessage(null), 3000);
+  };
+
   const setValue = (fieldId: string, page: number, value: string, entry?: number) => {
     const key = getValueKey(fieldId, page, entry);
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -102,7 +131,7 @@ export default function DocumentFillPage() {
       : field.labels[0]?.label;
     const sourceLabel = field.labels.find((l) => l.languageId === sourceLang.id)?.label;
     return {
-      target: targetLabel || field.fieldKey,
+      target: targetLabel || humanize(field.fieldKey),
       source: sourceLabel || '',
     };
   };
@@ -125,12 +154,11 @@ export default function DocumentFillPage() {
     try {
       await api.post(`/documents/${doc.id}/save-values`, { values: fieldValues });
       setDirty(false);
-      setMessage('Saved');
-      setTimeout(() => setMessage(''), 3000);
+      flash('Saved');
       return true;
     } catch (err) {
       logger.error('Failed to save document', err, 'documents');
-      setMessage(err instanceof ApiError ? `Save failed: ${err.message}` : 'Save failed');
+      flash(err instanceof ApiError ? `Save failed: ${err.message}` : 'Save failed', 'danger');
       return false;
     } finally {
       setSaving(false);
@@ -144,19 +172,19 @@ export default function DocumentFillPage() {
       router.push(`/jobs/${doc.jobId}`);
     } catch (err) {
       logger.error('Failed to complete document', err, 'documents');
-      setMessage(err instanceof ApiError ? err.message : 'Could not mark the document complete');
+      flash(err instanceof ApiError ? err.message : 'Could not mark the document complete', 'danger');
     }
   };
 
   const handleExport = async () => {
-    if (!(await handleSave())) return;
+    // A locked job's document can't be saved, only exported as it stands.
+    if (!locked && dirty && !(await handleSave())) return;
     try {
-      await api.download(`/documents/${doc.id}/export`, 'export.docx');
-      setMessage('Exported successfully');
-      setTimeout(() => setMessage(''), 3000);
+      await api.download(`/documents/${doc.id}/export`, `${job.jobNumber} ${doc.template.name}.docx`);
+      flash('Exported successfully');
     } catch (err) {
       logger.error('Export failed', err, 'documents');
-      setMessage(err instanceof ApiError ? err.message : 'Export failed');
+      flash(err instanceof ApiError ? err.message : 'Export failed', 'danger');
     }
   };
 
@@ -171,24 +199,33 @@ export default function DocumentFillPage() {
     const val = getValue(field.id, pageNum, entryIdx);
     const key = getValueKey(field.id, pageNum, entryIdx);
 
+    const inputId = `f-${key}`;
+
     return (
       <div key={key} className="mb-4">
         <div className="flex justify-between items-baseline mb-1">
-          <div>
+          <label htmlFor={inputId}>
             <span className="text-sm font-medium text-text">{labels.target}</span>
             {labels.source && <span className="text-xs text-text-muted ml-2">{labels.source}</span>}
-          </div>
-          <button
-            type="button"
-            onClick={() => setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id, page: pageNum, entry: entryIdx })}
-            className="px-2 py-0.5 tone tone-primary rounded text-xs font-medium hover:bg-primary/20"
-          >
-            GT
-          </button>
+          </label>
+          {!locked && field.fieldType !== 'date' && field.fieldType !== 'number' && (
+            <button
+              type="button"
+              onClick={() => gtConfigured === false
+                ? setGtSetupOpen(true)
+                : setGtOpen({ fieldKey: field.fieldKey, fieldId: field.id, page: pageNum, entry: entryIdx })}
+              title={gtConfigured === false ? 'Google Translate is not set up' : 'Google Translate helper'}
+              className={`px-2 py-0.5 tone rounded text-xs font-medium ${gtConfigured === false ? 'tone-neutral opacity-70' : 'tone-primary hover:bg-primary/20'}`}
+            >
+              GT
+            </button>
+          )}
         </div>
         {field.fieldType === 'textarea' ? (
           <textarea
+            id={inputId}
             value={val}
+            disabled={locked}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             rows={3}
             dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
@@ -197,21 +234,27 @@ export default function DocumentFillPage() {
         ) : field.fieldType === 'date' ? (
           <input
             type="date"
+            id={inputId}
             value={val}
+            disabled={locked}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             className="input w-full"
           />
         ) : field.fieldType === 'number' ? (
           <input
             type="number"
+            id={inputId}
             value={val}
+            disabled={locked}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             className="input w-full"
           />
         ) : (
           <input
             type="text"
+            id={inputId}
             value={val}
+            disabled={locked}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
             className="input w-full"
@@ -237,25 +280,39 @@ export default function DocumentFillPage() {
             }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
           </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={handleSave} disabled={saving}
-            className="px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/80 disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button onClick={handleMarkComplete}
-            className="btn btn-primary">
-            Save & Complete
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {!locked && (
+            <>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+              <Button variant="primary" onClick={handleMarkComplete} disabled={saving}>
+                Save & Complete
+              </Button>
+            </>
+          )}
           {doc.template.type !== 'simple' && (
-            <button onClick={handleExport}
-              className="btn btn-secondary">
+            <Button variant={locked ? 'primary' : 'secondary'} onClick={handleExport}>
               Export .docx
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
-      {message && <div className="mb-4 p-3 tone tone-success rounded-lg text-sm">{message}</div>}
+      {locked && (
+        <Alert tone="warning" className="mb-4 max-w-2xl">
+          This job is {job.status}, so its documents are read-only. Reopen the job to make changes.
+        </Alert>
+      )}
+      {!locked && gtConfigured === false && (
+        <Alert tone="info" className="mb-4 max-w-2xl">
+          Google Translate isn&apos;t set up, so the GT helper is off.{' '}
+          {isAdmin
+            ? <button type="button" onClick={() => setGtSetupOpen(true)} className="font-semibold underline">Add an API key</button>
+            : 'Ask an admin to add an API key in Settings.'}
+        </Alert>
+      )}
+      {message && <Alert tone={message.tone} className="mb-4 max-w-2xl">{message.text}</Alert>}
 
       {/* Fields */}
       <div className="max-w-2xl">
@@ -273,13 +330,14 @@ export default function DocumentFillPage() {
             <div key={groupKey} className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-text text-sm">{groupKey}</h3>
+                  <h3 className="font-semibold text-text text-sm">{humanize(groupKey)}</h3>
                   <span className="px-2 py-0.5 tone tone-accent rounded text-xs font-medium">Repeatable</span>
                 </div>
-                <button type="button" onClick={() => addGroupEntry(groupKey)}
-                  className="btn btn-primary btn-sm">
-                  + Add Entry
-                </button>
+                {!locked && (
+                  <Button size="sm" onClick={() => addGroupEntry(groupKey)}>
+                    + Add Entry
+                  </Button>
+                )}
               </div>
 
               {Array.from({ length: entryCount }, (_, entryIdx) => (
@@ -307,6 +365,25 @@ export default function DocumentFillPage() {
           }}
           onClose={() => setGtOpen(null)}
         />
+      )}
+
+      {gtSetupOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setGtSetupOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="gt-setup-title" className="card p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h3 id="gt-setup-title" className="font-semibold text-text mb-2">Google Translate isn&apos;t set up</h3>
+            {isAdmin ? (
+              <>
+                <p className="text-sm text-text-secondary mb-4">Add a Google Cloud Translation API key to turn on the GT helper for everyone.</p>
+                <TranslateKeyForm keySet={false} onSaved={(keySet) => { setGtConfigured(keySet); if (keySet) setGtSetupOpen(false); }} />
+              </>
+            ) : (
+              <p className="text-sm text-text-secondary">The GT helper needs a Google Translate API key. Ask an admin to add one in Settings &gt; General.</p>
+            )}
+            <div className="flex justify-end mt-5">
+              <Button onClick={() => setGtSetupOpen(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -388,14 +465,11 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
         </div>
 
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-secondary">
-            Close
-          </button>
+          <Button onClick={onClose}>Close</Button>
           {translatedText && (
-            <button onClick={() => onCopy(translatedText)}
-              className="px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/80">
+            <Button variant="primary" onClick={() => onCopy(translatedText)}>
               Copy to Field
-            </button>
+            </Button>
           )}
         </div>
       </div>

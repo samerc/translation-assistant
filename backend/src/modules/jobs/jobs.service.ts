@@ -21,6 +21,7 @@ import { InvoiceItem } from '../invoices/entities/invoice-item.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
+import { clientVisibleSql } from '../clients/client-access.js';
 
 @Injectable()
 export class JobsService {
@@ -108,6 +109,7 @@ export class JobsService {
     status?: string;
     clientId?: string;
     type?: string;
+    hasDeadline?: boolean;
     sortBy?: string;
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
@@ -148,8 +150,13 @@ export class JobsService {
         { search: `%${search}%` },
       );
     }
-    if (status) {
-      qb.andWhere('job.status = :status', { status });
+    // One status, or several comma-separated ("quote,accepted,in_progress")
+    const statuses = (status ?? '').split(',').filter(Boolean).slice(0, 8);
+    if (statuses.length) {
+      qb.andWhere('job.status IN (:...statuses)', { statuses });
+    }
+    if (query.hasDeadline) {
+      qb.andWhere('job.deadline IS NOT NULL');
     }
     if (clientId) {
       qb.andWhere('job.client_id = :clientId', { clientId });
@@ -211,7 +218,11 @@ export class JobsService {
     return job;
   }
 
-  async create(dto: CreateJobDto, userId: string): Promise<Job> {
+  async create(
+    dto: CreateJobDto,
+    userId: string,
+    isAdmin = false,
+  ): Promise<Job> {
     // Validate referenced entities in parallel
     const templateIds = (dto.lineItems || [])
       .map((li) => li.templateId)
@@ -231,6 +242,16 @@ export class JobsService {
     ]);
 
     if (!client) throw new BadRequestException('Client not found');
+    // A non-admin can only open jobs for clients they can already see —
+    // otherwise any client id would grant access to that client.
+    if (!isAdmin) {
+      const visible = await this.clientRepository
+        .createQueryBuilder('client')
+        .where('client.id = :clientId', { clientId: dto.clientId })
+        .andWhere(clientVisibleSql('client'), { accessUserId: userId })
+        .getCount();
+      if (!visible) throw new BadRequestException('Client not found');
+    }
     if (!sourceLang) throw new BadRequestException('Source language not found');
     if (!sourceLang.isActive)
       throw new BadRequestException('Source language is not active');

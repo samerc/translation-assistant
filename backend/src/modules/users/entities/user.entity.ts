@@ -40,6 +40,11 @@ export class User {
   @Column({ default: false })
   darkMode: boolean;
 
+  // Set for the seeded admin while it still has the documented default
+  // password; cleared by any password change or reset. The app nags until then.
+  @Column({ default: false })
+  mustChangePassword: boolean;
+
   // ── Per-user invoice branding (appears on invoices this user issues) ──
   @Column({ length: 150, nullable: true })
   businessName: string;

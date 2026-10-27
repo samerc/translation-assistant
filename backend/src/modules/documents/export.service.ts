@@ -17,6 +17,10 @@ import {
   BorderStyle,
   HeadingLevel,
   TabStopType,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
 } from 'docx';
 import { Document } from './entities/document.entity.js';
 
@@ -43,6 +47,29 @@ interface LayoutBlock {
 }
 
 type GroupRow = Record<string, string>;
+
+/** "holder_name" → "Holder name" — last resort when a field has no label. */
+function humanizeKey(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-.]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : key;
+}
+
+/** Field label in the job's target language, else any label, else the humanized key. */
+export function fieldLabelResolver(doc: Document): (key: string) => string {
+  const targetId = doc.job?.targetLanguage?.id;
+  const labels = new Map<string, string>();
+  for (const f of doc.template.fields ?? []) {
+    const own =
+      f.labels?.find((l) => l.languageId === targetId)?.label ||
+      f.labels?.find((l) => l.label)?.label;
+    labels.set(f.fieldKey, own || humanizeKey(f.fieldKey));
+  }
+  return (key) => labels.get(key) ?? humanizeKey(key);
+}
 
 /**
  * Split saved values into fixed fields and repeatable-group rows.
@@ -86,7 +113,7 @@ export class ExportService {
 
   async exportDocument(
     documentId: string,
-  ): Promise<{ filePath: string; fileName: string }> {
+  ): Promise<{ filePath: string; fileName: string; downloadName: string }> {
     const doc = await this.documentRepository.findOne({
       where: { id: documentId },
       relations: {
@@ -110,10 +137,12 @@ export class ExportService {
 
     if (!doc) throw new NotFoundException('Document not found');
 
+    // What the user's browser saves it as, e.g. "JOB-0001 Birth Certificate.docx"
+    const downloadName = `${doc.job.jobNumber} ${doc.template.name}.docx`;
     if (doc.template.type === 'word') {
-      return this.exportWordTemplate(doc);
+      return { ...(await this.exportWordTemplate(doc)), downloadName };
     } else if (doc.template.type === 'designer') {
-      return this.exportDesignerTemplate(doc);
+      return { ...(await this.exportDesignerTemplate(doc)), downloadName };
     } else {
       throw new BadRequestException('Simple templates cannot be exported');
     }
@@ -194,8 +223,9 @@ export class ExportService {
     // Render right-to-left when the job's target language is RTL (e.g. Arabic).
     const isRtl = doc.job?.targetLanguage?.direction === 'rtl';
     const { fixed, groups, groupOf } = collectFieldValues(doc);
+    const labelOf = fieldLabelResolver(doc);
 
-    const paragraphs: Paragraph[] = [];
+    const paragraphs: (Paragraph | Table)[] = [];
 
     // A field / field-row block that shows repeatable-group fields is rendered
     // once per entry of that group; everything else once, from fixed values.
@@ -280,7 +310,7 @@ export class ExportService {
           const runs: TextRun[] = [];
 
           if (block.showLabel !== false) {
-            const label = block.labelText || block.fieldKey || '';
+            const label = block.labelText || labelOf(block.fieldKey || '');
             const sep = block.separator || '';
             runs.push(
               new TextRun({
@@ -346,7 +376,7 @@ export class ExportService {
               const sep = block.separator || '';
               runs.push(
                 new TextRun({
-                  text: `${key}${sep} `,
+                  text: `${labelOf(key)}${sep} `,
                   size: fontSize,
                   bold: block.labelBold !== false,
                   color,
@@ -377,26 +407,12 @@ export class ExportService {
       }
     }
 
-    // If no layout blocks, just output all field values
+    // No layout designed yet: a plain default — title, fixed fields in template
+    // order, then one table per repeatable group (a row per entry).
     if (blocks.length === 0) {
-      for (const fv of doc.fieldValues) {
-        if (fv.templateField) {
-          paragraphs.push(
-            new Paragraph({
-              alignment: isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
-              bidirectional: isRtl,
-              children: [
-                new TextRun({
-                  text: `${fv.templateField.fieldKey}: `,
-                  bold: true,
-                  size: 24,
-                }),
-                new TextRun({ text: fv.value, size: 24 }),
-              ],
-            }),
-          );
-        }
-      }
+      paragraphs.push(
+        ...this.defaultLayout(doc, fixed, groups, labelOf, isRtl),
+      );
     }
 
     const docxDoc = new DocxDocument({
@@ -412,6 +428,91 @@ export class ExportService {
     writeFileSync(filePath, buffer);
 
     return { filePath, fileName };
+  }
+
+  private defaultLayout(
+    doc: Document,
+    fixed: Map<string, string>,
+    groups: Map<string, GroupRow[]>,
+    labelOf: (key: string) => string,
+    isRtl: boolean,
+  ): (Paragraph | Table)[] {
+    const out: (Paragraph | Table)[] = [];
+    const align = isRtl ? AlignmentType.RIGHT : AlignmentType.LEFT;
+    const fields = [...(doc.template.fields ?? [])].sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+    const para = (runs: TextRun[], after = 120) =>
+      new Paragraph({
+        alignment: align,
+        bidirectional: isRtl,
+        spacing: { after },
+        children: runs,
+      });
+
+    out.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        bidirectional: isRtl,
+        heading: HeadingLevel.HEADING_1,
+        spacing: { after: 240 },
+        children: [new TextRun({ text: doc.template.name, bold: true })],
+      }),
+    );
+
+    for (const f of fields.filter((x) => !x.groupKey)) {
+      out.push(
+        para([
+          new TextRun({ text: `${labelOf(f.fieldKey)}: `, bold: true }),
+          new TextRun({ text: fixed.get(f.fieldKey) ?? '' }),
+        ]),
+      );
+    }
+
+    const groupKeys = [
+      ...new Set(fields.map((x) => x.groupKey).filter(Boolean)),
+    ] as string[];
+    for (const group of groupKeys) {
+      const cols = fields.filter((x) => x.groupKey === group);
+      const rows = groups.get(group) ?? [];
+      if (rows.length === 0) continue;
+      out.push(
+        para(
+          [new TextRun({ text: humanizeKey(group), bold: true, size: 26 })],
+          80,
+        ),
+      );
+      const cell = (text: string, bold = false) =>
+        new TableCell({
+          children: [
+            new Paragraph({
+              alignment: align,
+              bidirectional: isRtl,
+              children: [new TextRun({ text, bold })],
+            }),
+          ],
+        });
+      const ordered = isRtl ? [...cols].reverse() : cols;
+      out.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              tableHeader: true,
+              children: ordered.map((c) => cell(labelOf(c.fieldKey), true)),
+            }),
+            ...rows.map(
+              (row) =>
+                new TableRow({
+                  children: ordered.map((c) => cell(row[c.fieldKey] ?? '')),
+                }),
+            ),
+          ],
+        }),
+        para([], 200),
+      );
+    }
+    return out;
   }
 
   private getAlignment(

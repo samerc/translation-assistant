@@ -16,6 +16,7 @@ import { Pagination, RowChevron, SortableTh, TableCard } from '@/components/ui/D
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { PlusIcon, ReceiptIcon } from '@/components/ui/icons';
+import { RequirePermission } from '@/components/RequirePermission';
 
 interface Invoice {
   id: string;
@@ -45,7 +46,7 @@ const STATUSES = [
   { value: 'cancelled', label: 'Cancelled', color: INVOICE_STATUS_BADGE.cancelled },
 ];
 
-export default function InvoicesPage() {
+function InvoicesPage() {
   const { hasPermission } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loadError, setLoadError] = useState(false);
@@ -182,4 +183,8 @@ export default function InvoicesPage() {
       </TableCard>
     </div>
   );
+}
+
+export default function InvoicesPageGate() {
+  return <RequirePermission permission="invoices:read"><InvoicesPage /></RequirePermission>;
 }

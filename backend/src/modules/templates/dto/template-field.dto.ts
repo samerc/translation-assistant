@@ -12,8 +12,16 @@ import {
   Min,
   Max,
   ArrayMaxSize,
+  Matches,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+// Same rule as Word placeholders ({holder_name}), so every key can be used in a
+// Word template: letters, digits and underscores, not starting with a digit.
+export const FIELD_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const FIELD_KEY_MESSAGE =
+  'Keys can only use letters, numbers and underscores, and cannot start with a number (e.g. holder_name)';
 
 export class FieldLabelDto {
   @IsUUID()
@@ -29,6 +37,7 @@ export class CreateTemplateFieldDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(FIELD_KEY_PATTERN, { message: FIELD_KEY_MESSAGE })
   fieldKey: string;
 
   @IsIn(['text', 'textarea', 'number', 'date', 'image'])
@@ -47,6 +56,9 @@ export class CreateTemplateFieldDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
+  // '' clears the group
+  @ValidateIf((_o, v) => v !== '')
+  @Matches(FIELD_KEY_PATTERN, { message: FIELD_KEY_MESSAGE })
   groupKey?: string;
 
   @IsOptional()
@@ -62,6 +74,7 @@ export class UpdateTemplateFieldDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Matches(FIELD_KEY_PATTERN, { message: FIELD_KEY_MESSAGE })
   fieldKey?: string;
 
   @IsOptional()
@@ -81,6 +94,9 @@ export class UpdateTemplateFieldDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
+  // '' clears the group
+  @ValidateIf((_o, v) => v !== '')
+  @Matches(FIELD_KEY_PATTERN, { message: FIELD_KEY_MESSAGE })
   groupKey?: string;
 
   @IsOptional()

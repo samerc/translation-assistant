@@ -9,6 +9,7 @@ import {
   BarChart, Bar,
   PieChart, Pie, Cell,
 } from 'recharts';
+import { RequirePermission } from '@/components/RequirePermission';
 
 interface RevenueData { period: string; revenue: number; }
 interface ClientData { clientId: string; clientName: string; invoiceCount: number; totalRevenue: number; }
@@ -36,7 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
-export default function ReportsPage() {
+function ReportsPage() {
   const { baseCurrency } = useSettings();
   const [activeTab, setActiveTab] = useState('revenue');
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
@@ -224,4 +225,8 @@ export default function ReportsPage() {
       )}
     </div>
   );
+}
+
+export default function ReportsPageGate() {
+  return <RequirePermission permission="reports:read"><ReportsPage /></RequirePermission>;
 }

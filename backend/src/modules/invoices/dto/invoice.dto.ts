@@ -65,7 +65,7 @@ export class CreateInvoiceDto {
 
   @IsOptional()
   @Matches(/^[A-Z]{3}$/, {
-    message: 'currency must be a 3-letter ISO code (e.g. USD)',
+    message: 'Currency must be a 3-letter code, like USD, EUR or AED',
   })
   currency?: string;
 
@@ -100,7 +100,7 @@ export class UpdateInvoiceDto {
 
   @IsOptional()
   @Matches(/^[A-Z]{3}$/, {
-    message: 'currency must be a 3-letter ISO code (e.g. USD)',
+    message: 'Currency must be a 3-letter code, like USD, EUR or AED',
   })
   currency?: string;
 

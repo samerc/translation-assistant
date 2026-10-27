@@ -448,6 +448,7 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(newPassword, 12);
     await this.userRepository.update(user.id, {
       password: hashedPassword,
+      mustChangePassword: false,
       refreshToken: '',
     });
 
@@ -626,6 +627,7 @@ export class AuthService {
       isActive: user.isActive,
       colorPalette: user.colorPalette,
       darkMode: user.darkMode,
+      mustChangePassword: user.mustChangePassword,
       role: {
         id: user.role.id,
         name: user.role.name,

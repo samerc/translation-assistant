@@ -58,3 +58,13 @@ export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter((w) => /^\p{L}/u.test(w));
   return words.slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 }
+
+/** "holder_name" / "familyMembers" → "Holder name" / "Family members". */
+export function humanize(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-.]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? words[0].toUpperCase() + words.slice(1) : key;
+}

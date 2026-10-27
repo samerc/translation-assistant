@@ -169,7 +169,7 @@ export class UpdateJobDto {
 
   @IsOptional()
   @Matches(/^[A-Z]{3}$/, {
-    message: 'paymentCurrency must be a 3-letter ISO code (e.g. USD)',
+    message: 'Payment currency must be a 3-letter code, like USD, EUR or AED',
   })
   paymentCurrency?: string;
 

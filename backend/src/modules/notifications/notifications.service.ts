@@ -7,6 +7,18 @@ import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
 import { User } from '../users/entities/user.entity.js';
 
+const JOB_STATUS_LABELS: Record<string, string> = {
+  quote: 'Quote',
+  accepted: 'Accepted',
+  in_progress: 'In Progress',
+  delivered: 'Delivered',
+  invoiced: 'Invoiced',
+  paid: 'Paid',
+  lost: 'Lost',
+  cancelled: 'Cancelled',
+};
+const statusLabel = (s: string) => JOB_STATUS_LABELS[s] ?? s;
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -75,17 +87,23 @@ export class NotificationsService {
     const assignments = await this.jobUserRepository.find({
       where: { jobId: job.id },
     });
-    const notifications = assignments
-      .filter((a) => a.userId !== changedByUserId)
-      .map((a) =>
-        this.notificationRepository.create({
-          userId: a.userId,
-          type: 'job_status_change',
-          title: `Job status updated`,
-          message: `${job.jobNumber} "${job.title}" changed from ${oldStatus} to ${newStatus}`,
-          link: `/jobs/${job.id}`,
-        }),
-      );
+    const recipients = assignments.filter((a) => a.userId !== changedByUserId);
+    if (recipients.length === 0) return;
+    const changer = changedByUserId
+      ? await this.notificationRepository.manager
+          .getRepository(User)
+          .findOne({ where: { id: changedByUserId } })
+      : null;
+    const by = changer ? ` by ${changer.firstName} ${changer.lastName}` : '';
+    const notifications = recipients.map((a) =>
+      this.notificationRepository.create({
+        userId: a.userId,
+        type: 'job_status_change',
+        title: `Job status updated`,
+        message: `${job.jobNumber} "${job.title}" moved from ${statusLabel(oldStatus)} to ${statusLabel(newStatus)}${by}`,
+        link: `/jobs/${job.id}`,
+      }),
+    );
     if (notifications.length > 0) {
       await this.notificationRepository.save(notifications);
     }

@@ -41,18 +41,27 @@ export class InvoiceExportService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  // ── Per-user invoice branding (name/address/logo of the invoice's creator) ──
+  // ── Invoice branding: the creator's "My Business" details, falling back to
+  // the company details in Settings > General so an invoice always has a sender ──
 
   private async getBranding(invoice: Invoice): Promise<InvoiceBranding> {
-    const creator = invoice.createdByUserId
-      ? await this.userRepository.findOne({
-          where: { id: invoice.createdByUserId },
-        })
-      : null;
+    const [creator, settings] = await Promise.all([
+      invoice.createdByUserId
+        ? this.userRepository.findOne({
+            where: { id: invoice.createdByUserId },
+          })
+        : Promise.resolve(null),
+      this.getSettings(),
+    ]);
+    const ownName = creator?.businessName?.trim();
     return {
-      businessName: creator?.businessName?.trim() || '',
-      businessAddress: creator?.businessAddress?.trim() || '',
-      logo: this.parseLogo(creator?.logo),
+      businessName: ownName || settings?.companyName?.trim() || '',
+      // The address follows the name it belongs to.
+      businessAddress: ownName
+        ? creator?.businessAddress?.trim() || ''
+        : settings?.companyAddress?.trim() || '',
+      logo:
+        this.parseLogo(creator?.logo) ?? this.parseLogo(settings?.companyLogo),
     };
   }
 

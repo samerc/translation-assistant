@@ -95,10 +95,9 @@ export default function ClientsPage() {
     if (form.notes) body.notes = form.notes;
     setSaving(true);
     try {
-      await api.post('/clients', body);
-      setShowForm(false);
-      setForm({ type: 'company', name: '', taxId: '', notes: '' });
-      loadClients();
+      const created = await api.post<{ id: string }>('/clients', body);
+      // Straight to the new client, where emails, phones and addresses are added.
+      router.push(`/clients/${created.id}`);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to create client.');
     } finally {
@@ -134,7 +133,7 @@ export default function ClientsPage() {
               <Input id="client-tax" value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} />
             </Field>
           </div>
-          <p className="text-xs text-text-muted mt-3">Emails, phones, and addresses can be added after creating the client.</p>
+          <p className="text-xs text-text-muted mt-3">You can add emails, phones and addresses on the next screen.</p>
           <div className="flex gap-2 mt-4">
             <Button type="submit" variant="primary" disabled={saving}>{saving ? 'Creating…' : 'Create client'}</Button>
             <Button onClick={() => setShowForm(false)}>Cancel</Button>

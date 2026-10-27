@@ -19,6 +19,8 @@ interface AuthUser {
   isActive: boolean;
   colorPalette: string;
   darkMode: boolean;
+  /** Seeded admin still on the documented default password. */
+  mustChangePassword?: boolean;
   role: UserRole;
 }
 

@@ -9,6 +9,7 @@ import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { formatDate, todayLocal } from '@/lib/format';
 import { useNow } from '@/lib/use-now';
+import { RequirePermission } from '@/components/RequirePermission';
 
 interface InvoiceItem {
   id: string;
@@ -71,7 +72,7 @@ function balanceDue(invoice: Invoice): number {
   return Math.max(0, Math.round(owed * 100) / 100);
 }
 
-export default function InvoiceDetailPage() {
+function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -272,8 +273,8 @@ export default function InvoiceDetailPage() {
       {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-6">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 mb-6">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-text">{invoice.invoiceNumber}</h1>
           <p className="text-text-secondary mt-1">{invoice.client.name}</p>
         </div>
@@ -299,13 +300,13 @@ export default function InvoiceDetailPage() {
           )}
           {canPay && (
             <button onClick={openPaymentModal}
-              className="px-3 py-1.5 bg-success text-white rounded-lg text-sm font-medium hover:opacity-90">
+              className="btn btn-primary btn-sm">
               Record Payment
             </button>
           )}
           {nextStatuses.length > 0 && (
             <select value="" onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
-              className="input h-8 px-2">
+              aria-label="Change invoice status" className="input h-8 px-2 w-auto">
               <option value="">Change status...</option>
               {nextStatuses.map((s) => {
                 const st = STATUSES.find((x) => x.value === s);
@@ -315,7 +316,7 @@ export default function InvoiceDetailPage() {
           )}
           {invoice.status === 'draft' && (
             <button onClick={handleDelete}
-              className="px-3 py-1.5 tone tone-danger rounded-lg text-sm hover:bg-danger hover:text-white">
+              className="btn btn-danger btn-sm">
               Delete
             </button>
           )}
@@ -560,4 +561,8 @@ function ExportIcon({ className }: { className?: string }) {
       <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
     </svg>
   );
+}
+
+export default function InvoiceDetailPageGate() {
+  return <RequirePermission permission="invoices:read"><InvoiceDetailPage /></RequirePermission>;
 }

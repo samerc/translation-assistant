@@ -57,6 +57,7 @@ export class SettingsController {
     // Never expose the stored SMTP password; signal only whether one is set.
     const {
       smtpPass,
+      googleTranslateApiKey,
       smtpHost,
       smtpPort,
       smtpUser,
@@ -77,6 +78,7 @@ export class SettingsController {
         smtpSecure,
         appBaseUrl,
         smtpPassSet: Boolean(smtpPass),
+        googleTranslateKeySet: Boolean(googleTranslateApiKey),
       };
     }
     return safe;

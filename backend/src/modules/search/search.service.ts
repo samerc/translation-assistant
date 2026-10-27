@@ -6,6 +6,7 @@ import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
+import { clientVisibleSql } from '../clients/client-access.js';
 
 @Injectable()
 export class SearchService {
@@ -25,26 +26,20 @@ export class SearchService {
   async search(q: string, userId: string, isAdmin: boolean) {
     const like = `%${q}%`;
 
-    // Build client query - non-admins can only see clients they have jobs with
+    // Build client query - non-admins only see clients they created or have jobs with
     const clientQb = this.clientRepository
       .createQueryBuilder('c')
       .select(['c.id', 'c.name', 'c.type'])
       .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like });
     if (!isAdmin) {
-      clientQb.andWhere(
-        `EXISTS (SELECT 1 FROM jobs j INNER JOIN job_users ju ON ju.job_id = j.id AND ju.user_id = :userId WHERE j.client_id = c.id)`,
-        { userId },
-      );
+      clientQb.andWhere(clientVisibleSql('c'), { accessUserId: userId });
     }
 
     const clientCountQb = this.clientRepository
       .createQueryBuilder('c')
       .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like });
     if (!isAdmin) {
-      clientCountQb.andWhere(
-        `EXISTS (SELECT 1 FROM jobs j INNER JOIN job_users ju ON ju.job_id = j.id AND ju.user_id = :userId WHERE j.client_id = c.id)`,
-        { userId },
-      );
+      clientCountQb.andWhere(clientVisibleSql('c'), { accessUserId: userId });
     }
 
     // Build job query
@@ -53,7 +48,10 @@ export class SearchService {
       .select(['j.id', 'j.jobNumber', 'j.title', 'j.status'])
       .leftJoin('j.client', 'client')
       .addSelect(['client.name'])
-      .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
+      .where(
+        '(j.title LIKE :q OR j.jobNumber LIKE :q OR j.description LIKE :q)',
+        { q: like },
+      );
     if (!isAdmin) {
       jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
@@ -62,7 +60,10 @@ export class SearchService {
 
     const jobCountQb = this.jobRepository
       .createQueryBuilder('j')
-      .where('(j.title LIKE :q OR j.jobNumber LIKE :q)', { q: like });
+      .where(
+        '(j.title LIKE :q OR j.jobNumber LIKE :q OR j.description LIKE :q)',
+        { q: like },
+      );
     if (!isAdmin) {
       jobCountQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,

@@ -10,6 +10,7 @@ import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
+import { Button } from '@/components/ui/Button';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -58,18 +59,33 @@ interface LinkedInvoice { id: string; invoiceNumber: string; status: string; tot
 export default function JobDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { hasPermission } = useAuth();
+  const canReadInvoices = hasPermission('invoices:read');
   const [job, setJob] = useState<Job | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('details');
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([]);
 
-  const loadJob = () => { api.get<Job>(`/jobs/${id}`).then(setJob).catch((err) => { logger.error('Failed to load job', err, 'jobs'); router.push('/jobs'); }); };
+  const loadJob = () => {
+    api.get<Job>(`/jobs/${id}`).then(setJob).catch((err) => {
+      logger.error('Failed to load job', err, 'jobs');
+      // Say why instead of silently bouncing back to the list.
+      toast.error(
+        err instanceof ApiError && err.status === 403 ? "You aren't assigned to that job."
+          : err instanceof ApiError && (err.status === 404 || err.status === 400) ? 'That job no longer exists.'
+            : "Couldn't open that job.",
+      );
+      router.push('/jobs');
+    });
+  };
   useEffect(() => { loadJob(); }, [id]);
 
   useEffect(() => {
+    // Translators have no invoice access — don't ask (it would 403 on every load).
+    if (!canReadInvoices) return;
     api.get<LinkedInvoice[]>(`/invoices/by-job/${id}`)
       .then(setLinkedInvoices)
       .catch(() => setLinkedInvoices([]));
-  }, [id]);
+  }, [id, canReadInvoices]);
 
   if (!job) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -85,6 +101,17 @@ export default function JobDetailPage() {
   };
 
   const handleStatusChange = async (status: string) => {
+    if (status === 'delivered') {
+      // Delivering locks the documents — catch unfinished ones first.
+      const docs = await api.get<{ status: string }[]>(`/documents/by-job/${id}`).catch(() => []);
+      const drafts = docs.filter((d) => d.status !== 'completed').length;
+      if (drafts > 0 && !(await confirmDialog({
+        title: 'Deliver with unfinished documents?',
+        message: `${drafts} document${drafts === 1 ? ' is' : 's are'} still a draft. Delivering locks the job, so they can't be edited until it is reopened.`,
+        confirmText: 'Deliver anyway',
+        danger: false,
+      }))) return;
+    }
     try {
       await api.patch(`/jobs/${id}/status`, { status });
       loadJob();
@@ -119,23 +146,23 @@ export default function JobDetailPage() {
     <div>
       {/* Locked banner */}
       {isLocked && (
-        <div className="mb-4 p-3 bg-warning-light border border-warning/30 rounded-lg flex justify-between items-center">
-          <span className="text-sm text-warning font-medium">
+        <div className="mb-4 px-3.5 py-2.5 tone tone-warning rounded-lg flex flex-wrap gap-2 justify-between items-center">
+          <span className="text-sm font-medium">
             This job is locked ({STATUSES.find((s) => s.value === job.status)?.label}). Reopen to make changes.
           </span>
-          <button onClick={handleReopen} className="btn btn-primary btn-sm">
-            Reopen Job
-          </button>
+          {hasPermission('jobs:update') && (
+            <Button size="sm" onClick={handleReopen}>Reopen Job</Button>
+          )}
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
-        <div className="min-w-0">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-end gap-4 mb-6">
+        <div className="min-w-0 flex-1">
           <button onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Jobs</button>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono text-text-muted">{job.jobNumber}</span>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-text">{job.title}</h1>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-text break-words min-w-0">{job.title}</h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor(job.status)}`}>
               {STATUSES.find((s) => s.value === job.status)?.label}
             </span>
@@ -147,7 +174,7 @@ export default function JobDetailPage() {
               <span className="ml-3">
                 {linkedInvoices.map((inv) => (
                   <button key={inv.id} onClick={() => router.push(`/invoices/${inv.id}`)}
-                    className="inline-flex items-center gap-1 text-xs font-mono text-primary hover:underline">
+                    className="inline-flex items-center gap-1 text-xs font-mono text-primary-text hover:underline mr-2">
                     {inv.invoiceNumber} [{inv.status}]
                   </button>
                 ))}
@@ -155,21 +182,23 @@ export default function JobDetailPage() {
             )}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {job.status === 'delivered' && (
-            <button onClick={() => router.push(`/invoices/new?jobId=${job.id}`)}
-              className="px-4 py-2 bg-success text-white rounded-lg text-sm font-medium hover:bg-success/90">
+        <div className="flex gap-2 flex-wrap lg:flex-nowrap items-center flex-shrink-0">
+          {job.status === 'delivered' && hasPermission('invoices:create') && (
+            <Button variant="primary" onClick={() => router.push(`/invoices/new?jobId=${job.id}`)}>
               Create Invoice
-            </button>
+            </Button>
           )}
           <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
-            className="input">
+            aria-label="Job status" disabled={!hasPermission('jobs:update')}
+            className="input w-auto min-w-[10rem]">
             {STATUSES.map((s) => {
               const allowed = s.value === job.status || (VALID_TRANSITIONS[job.status] || []).includes(s.value);
               return <option key={s.value} value={s.value} disabled={!allowed}>{s.label}{!allowed ? ' (N/A)' : ''}</option>;
             })}
           </select>
-          <button onClick={handleDelete} className="px-4 py-2 bg-bg border border-danger text-danger rounded-lg text-sm hover:bg-danger-light">Delete</button>
+          {hasPermission('jobs:delete') && (
+            <Button variant="danger" onClick={handleDelete}>Delete</Button>
+          )}
         </div>
       </div>
 
@@ -184,7 +213,7 @@ export default function JobDetailPage() {
       </div>
 
       {activeTab === 'details' && <DetailsTab job={job} locked={isLocked} onUpdate={loadJob} />}
-      {activeTab === 'documents' && <DocumentsTab job={job} />}
+      {activeTab === 'documents' && <DocumentsTab job={job} locked={isLocked} />}
       {activeTab === 'source-files' && <FilesTab job={job} category="source" files={sourceFiles} locked={isLocked} onUpdate={loadJob} />}
       {activeTab === 'translated-files' && <FilesTab job={job} category="translated" files={translatedFiles} locked={isLocked} onUpdate={loadJob} />}
     </div>
@@ -369,7 +398,6 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
     } finally { setBusy(false); }
   };
 
-  const inputClass = 'px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
 
   return (
     <div className="card p-6">
@@ -395,11 +423,11 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
       )}
       {isAdmin && (
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <select value={pickUser} onChange={(e) => setPickUser(e.target.value)} className={`${inputClass} flex-1`} aria-label="Select user to assign">
+          <select value={pickUser} onChange={(e) => setPickUser(e.target.value)} className="input flex-1" aria-label="Select user to assign">
             <option value="">Select a user…</option>
             {available.map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>)}
           </select>
-          <select value={pickLevel} onChange={(e) => setPickLevel(e.target.value as 'view' | 'edit')} className={inputClass} aria-label="Permission level">
+          <select value={pickLevel} onChange={(e) => setPickLevel(e.target.value as 'view' | 'edit')} className="input w-auto" aria-label="Permission level">
             <option value="edit">Edit</option>
             <option value="view">View</option>
           </select>
@@ -429,8 +457,8 @@ interface CloneResult {
   job: { jobNumber: string; title: string; client?: { name: string } };
 }
 
-function DocumentsTab({ job }: { job: Job }) {
-  const [docs, setDocs] = useState<DocSummary[]>([]);
+function DocumentsTab({ job, locked }: { job: Job; locked: boolean }) {
+  const [docs, setDocs] = useState<DocSummary[] | null>(null);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -440,7 +468,7 @@ function DocumentsTab({ job }: { job: Job }) {
   const [cloning, setCloning] = useState(false);
   const router = useRouter();
 
-  const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs).catch((err) => { logger.error('Failed to load documents', err, 'jobs'); toast.error(err instanceof ApiError ? err.message : 'Failed to load documents.'); }); };
+  const loadDocs = () => { api.get<DocSummary[]>(`/documents/by-job/${job.id}`).then(setDocs).catch((err) => { setDocs([]); logger.error('Failed to load documents', err, 'jobs'); toast.error(err instanceof ApiError ? err.message : 'Failed to load documents.'); }); };
 
   useEffect(() => {
     loadDocs();
@@ -495,18 +523,18 @@ function DocumentsTab({ job }: { job: Job }) {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex justify-end gap-2 mb-4">
-        <button onClick={() => { setShowClone(true); setShowAdd(false); }}
-          className="btn btn-secondary">Clone existing</button>
-        <button onClick={() => { setShowAdd(true); setShowClone(false); }}
-          className="btn btn-primary">+ Add Document</button>
-      </div>
+      {!locked && (
+        <div className="flex justify-end gap-2 mb-4">
+          <Button onClick={() => { setShowClone(true); setShowAdd(false); }}>Clone existing</Button>
+          <Button variant="primary" onClick={() => { setShowAdd(true); setShowClone(false); }}>+ Add Document</Button>
+        </div>
+      )}
 
-      {showClone && (
+      {showClone && !locked && (
         <div className="card p-5 mb-4">
           <div className="flex justify-between items-center mb-3">
             <h4 className="font-semibold text-text">Clone from an existing document</h4>
-            <button onClick={() => setShowClone(false)} className="text-xs text-text-secondary">Cancel</button>
+            <Button size="sm" onClick={() => setShowClone(false)}>Cancel</Button>
           </div>
           <input value={cloneSearch} onChange={(e) => setCloneSearch(e.target.value)} placeholder="Search by template or client…" aria-label="Search documents to clone"
             className="input w-full mb-3" />
@@ -527,7 +555,7 @@ function DocumentsTab({ job }: { job: Job }) {
         </div>
       )}
 
-      {showAdd && (
+      {showAdd && !locked && (
         <div className="card p-5 mb-4">
           <h4 className="font-semibold text-text mb-3">Create Document from Template</h4>
           <div className="flex gap-3 items-end">
@@ -539,20 +567,22 @@ function DocumentsTab({ job }: { job: Job }) {
                 {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <button onClick={handleCreate} disabled={!selectedTemplateId}
-              className="btn btn-primary">Create</button>
-            <button onClick={() => setShowAdd(false)}
-              className="btn btn-secondary">Cancel</button>
+            <Button variant="primary" onClick={handleCreate} disabled={!selectedTemplateId}>Create</Button>
+            <Button onClick={() => setShowAdd(false)}>Cancel</Button>
           </div>
         </div>
       )}
 
-      {docs.length === 0 && !showAdd && (
-        <div className="card p-8 text-center text-text-muted">No documents yet. Add one above.</div>
+      {docs === null ? (
+        <div className="flex justify-center py-8"><div className="w-6 h-6 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>
+      ) : docs.length === 0 && !showAdd && (
+        <div className="card p-8 text-center text-text-muted">
+          {locked ? 'No documents on this job.' : 'No documents yet. Add one above.'}
+        </div>
       )}
 
       <div className="space-y-3">
-        {docs.map((doc) => (
+        {(docs ?? []).map((doc) => (
           <div key={doc.id} className="card p-4 flex justify-between items-center hover:border-primary/40 transition-colors">
             <div className="cursor-pointer flex-1" onClick={() => router.push(`/documents/${doc.id}`)}>
               <div className="flex items-center gap-3">
@@ -566,8 +596,8 @@ function DocumentsTab({ job }: { job: Job }) {
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => router.push(`/documents/${doc.id}`)} className="text-xs text-primary hover:text-primary-hover font-medium">Edit</button>
-              <button onClick={() => handleDelete(doc.id)} className="text-xs text-danger hover:text-danger/80">Delete</button>
+              <button onClick={() => router.push(`/documents/${doc.id}`)} className="text-xs text-primary-text hover:underline font-medium">{locked ? 'View' : 'Edit'}</button>
+              {!locked && <button onClick={() => handleDelete(doc.id)} className="text-xs font-medium text-danger hover:underline">Delete</button>}
             </div>
           </div>
         ))}

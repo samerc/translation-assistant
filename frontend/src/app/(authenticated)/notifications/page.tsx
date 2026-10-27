@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatTimeAgo } from '@/lib/format';
 import { useNow } from '@/lib/use-now';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 
 interface NotificationItem {
   id: string;
@@ -71,8 +72,8 @@ export default function NotificationsPage() {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-text">Notifications</h1>
+      <div className="flex justify-between items-center gap-3 mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-text">Notifications</h1>
         <button onClick={handleMarkAllRead}
           className="btn btn-secondary">
           Mark all as read
@@ -80,15 +81,13 @@ export default function NotificationsPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 mb-4 bg-bg border border-border rounded-lg p-1 w-fit">
-        <button onClick={() => { setFilter('all'); setPage(1); }}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${filter === 'all' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>
-          All
-        </button>
-        <button onClick={() => { setFilter('unread'); setPage(1); }}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${filter === 'unread' ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'}`}>
-          Unread
-        </button>
+      <div className="mb-4">
+        <SegmentedControl
+          label="Show"
+          value={filter}
+          onChange={(v) => { setFilter(v); setPage(1); }}
+          options={[{ value: 'all', label: 'All' }, { value: 'unread', label: 'Unread' }]}
+        />
       </div>
 
       <span className="text-sm text-text-muted mb-4 block">{total} notification{total !== 1 ? 's' : ''}</span>
