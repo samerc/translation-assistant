@@ -10,7 +10,9 @@
       "Bash(npx next:*)",
       "Bash(npx nest:*)",
       "Bash(npx tsc:*)",
-      "Bash(bash scripts/test-integration.sh)"
+      "Bash(bash scripts/test-integration.sh)",
+      "Read(//c/Users/Administrator/Documents/coding/Translation Assistant/**)",
+      "Bash(gh pr *)"
     ]
   }
 }
