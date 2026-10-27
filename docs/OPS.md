@@ -69,6 +69,11 @@ Wired on both sides; nothing is sent until a DSN is configured.
     `authorized_keys` (generate a dedicated deploy keypair; don't reuse a personal key).
 - The deploy job uses `pm2 restart` (code only). **If you changed the ecosystem env
   block, deploy won't reload it** — do a manual `pm2 delete` + `pm2 start` for env changes.
+- **Always delete `frontend\.next\standalone` (and `backend\dist`) before extracting a new
+  build** — `deploy.sh` and the workflow do this. Next.js 16 writes a runtime page cache to
+  `.next\standalone\frontend\.next\server\route-cache\`; extracting over the old folder
+  leaves it in place and the server keeps serving the **previous build's HTML** (old CSS
+  hashes) even after a restart.
 
 ## 4. Automated DB backups
 
