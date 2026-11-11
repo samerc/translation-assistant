@@ -9,6 +9,7 @@ import { DataSource } from 'typeorm';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter.js';
 import { seed } from './config/seed.js';
+import { cloudflareClientIpMiddleware } from './common/utils/client-ip.js';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -18,6 +19,12 @@ async function bootstrap() {
   // trusts only 127.0.0.1/::1 hops — safe in dev (direct clients aren't trusted).
   // Override with TRUST_PROXY (e.g. a hop count) if fronted differently.
   app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
+  // Behind Cloudflare: take the visitor IP from CF-Connecting-IP, but only for
+  // requests that really came through Cloudflare (see common/utils/client-ip.ts).
+  // Must run before everything that reads req.ip (guards, throttler, auth).
+  if (process.env.TRUST_CLOUDFLARE === 'true') {
+    app.use(cloudflareClientIpMiddleware);
+  }
 
   // Fail fast in production if the browser origin isn't pinned (avoid silently
   // falling back to localhost, which breaks auth cookies).

@@ -6,7 +6,14 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, DataSource } from 'typeorm';
+import { likeContains } from '../../common/utils/like.js';
+import {
+  Repository,
+  In,
+  DataSource,
+  EntityManager,
+  QueryFailedError,
+} from 'typeorm';
 import { existsSync, unlinkSync } from 'fs';
 import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
@@ -16,6 +23,7 @@ import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { Language } from '../settings/entities/language.entity.js';
+import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
@@ -78,11 +86,17 @@ export class JobsService {
     }
   }
 
-  private async generateJobNumber(): Promise<string> {
-    // MAX(existing) + 1, not COUNT(*), so numbers aren't reused after deletion.
-    // Concurrent creates are still caught by the unique constraint on jobNumber.
-    const result = await this.jobRepository
-      .createQueryBuilder('job')
+  // MAX(existing) + 1, not COUNT(*), so numbers aren't reused after deletion.
+  // Call inside the create transaction: it first locks the app_settings row
+  // (same lock invoice numbering uses), so concurrent creates are serialized
+  // and never pick the same number.
+  private async generateJobNumber(manager: EntityManager): Promise<string> {
+    await manager
+      .createQueryBuilder(AppSettings, 's')
+      .setLock('pessimistic_write')
+      .getMany();
+    const result = await manager
+      .createQueryBuilder(Job, 'job')
       .select('MAX(CAST(SUBSTRING(job.jobNumber, 5) AS UNSIGNED))', 'maxNum')
       .getRawOne<{ maxNum: string | number | null }>();
     const nextNum = Number(result?.maxNum ?? 0) + 1;
@@ -147,7 +161,7 @@ export class JobsService {
     if (search) {
       qb.andWhere(
         '(job.title LIKE :search OR job.jobNumber LIKE :search OR client.name LIKE :search)',
-        { search: `%${search}%` },
+        { search: likeContains(search) },
       );
     }
     // One status, or several comma-separated ("quote,accepted,in_progress")
@@ -270,10 +284,9 @@ export class JobsService {
       }
     }
 
-    const jobNumber = await this.generateJobNumber();
-
     // Wrap all writes in a transaction
     const savedId = await this.dataSource.transaction(async (manager) => {
+      const jobNumber = await this.generateJobNumber(manager);
       const job = manager.create(Job, {
         jobNumber,
         type: dto.type,
@@ -546,16 +559,33 @@ export class JobsService {
     ]);
     if (!user) throw new BadRequestException('User not found');
 
-    const existing = await this.jobUserRepository.findOne({
-      where: { jobId, userId },
-    });
-    if (existing) {
+    const updateExisting = async (): Promise<JobUser | null> => {
+      const existing = await this.jobUserRepository.findOne({
+        where: { jobId, userId },
+      });
+      if (!existing) return null;
       existing.permissionLevel = permissionLevel;
       return this.jobUserRepository.save(existing);
+    };
+    const updated = await updateExisting();
+    if (updated) return updated;
+
+    let result: JobUser;
+    try {
+      result = await this.jobUserRepository.save(
+        this.jobUserRepository.create({ jobId, userId, permissionLevel }),
+      );
+    } catch (err) {
+      // A concurrent assign won the race (unique job_id + user_id): treat
+      // this one as a permission update instead of a second assignment.
+      const code = (err as { driverError?: { code?: string } }).driverError
+        ?.code;
+      if (err instanceof QueryFailedError && code === 'ER_DUP_ENTRY') {
+        const raced = await updateExisting();
+        if (raced) return raced;
+      }
+      throw err;
     }
-    const result = await this.jobUserRepository.save(
-      this.jobUserRepository.create({ jobId, userId, permissionLevel }),
-    );
 
     // Notify the assigned user
     this.notificationsService

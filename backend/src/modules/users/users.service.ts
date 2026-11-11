@@ -6,6 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { User } from './entities/user.entity.js';
 import { Session } from '../auth/entities/session.entity.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
@@ -114,6 +115,26 @@ export class UsersService {
     });
     // Force re-login everywhere after a password change (a stolen session must not survive).
     await this.revokeAllSessions(id);
+  }
+
+  /**
+   * Admin-issued temporary password, for when a user is locked out and email
+   * reset isn't available. Shown to the admin once; the user must change it at
+   * next login (mustChangePassword) and all their sessions end now.
+   */
+  async resetPasswordByAdmin(
+    id: string,
+  ): Promise<{ temporaryPassword: string }> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    // 16 random chars + one of each class the password rules require.
+    const temporaryPassword = `${randomBytes(12).toString('base64url')}a7K!`;
+    await this.userRepository.update(id, {
+      password: await bcrypt.hash(temporaryPassword, 12),
+      mustChangePassword: true,
+    });
+    await this.revokeAllSessions(id);
+    return { temporaryPassword };
   }
 
   async deactivate(id: string): Promise<Partial<User>> {

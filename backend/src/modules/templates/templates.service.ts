@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { likeContains } from '../../common/utils/like.js';
 import { Repository } from 'typeorm';
 import { readFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
@@ -49,7 +50,9 @@ export class TemplatesService {
       .leftJoinAndSelect('labels.language', 'language');
 
     if (search) {
-      qb.andWhere('template.name LIKE :search', { search: `%${search}%` });
+      qb.andWhere('template.name LIKE :search', {
+        search: likeContains(search),
+      });
     }
 
     if (isActive !== undefined) {

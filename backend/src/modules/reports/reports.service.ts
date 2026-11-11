@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity.js';
@@ -122,8 +122,11 @@ export class ReportsService {
       qb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
 
-    if (from) qb.andWhere('p.paidAt >= :from', { from });
-    if (to) qb.andWhere('p.paidAt <= :to', { to });
+    // from/to: YYYY-MM (whole month) or YYYY-MM-DD, both inclusive.
+    const fromDate = ReportsService.parseBound(from, 'from');
+    const toDate = ReportsService.parseBound(to, 'to');
+    if (fromDate) qb.andWhere('p.paidAt >= :from', { from: fromDate });
+    if (toDate) qb.andWhere('p.paidAt <= :to', { to: toDate });
 
     if (period === 'weekly') {
       qb.select('YEARWEEK(p.paidAt, 1)', 'period')
@@ -141,10 +144,59 @@ export class ReportsService {
       period: string;
       revenue: string | null;
     }>();
-    return results.map((r) => ({
-      period: r.period,
+    const rows = results.map((r) => ({
+      period: String(r.period),
       revenue: Number(r.revenue || 0),
     }));
+    if (period === 'weekly') return rows;
+
+    // Monthly: one row per month in range, 0 for months with no payments, so
+    // the chart doesn't draw a line straight across a quiet month.
+    const first = fromDate?.slice(0, 7) ?? rows[0]?.period;
+    if (!first) return rows;
+    const today = new Date();
+    const thisMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const lastRow = rows[rows.length - 1]?.period;
+    let last =
+      toDate?.slice(0, 7) ??
+      (lastRow && lastRow > thisMonth ? lastRow : thisMonth);
+    if (last < first) last = first;
+    const byMonth = new Map(rows.map((r) => [r.period, r.revenue]));
+    const filled: { period: string; revenue: number }[] = [];
+    let [y, m] = first.split('-').map(Number);
+    for (let i = 0; i < 240; i++) {
+      const key = `${y}-${String(m).padStart(2, '0')}`;
+      if (key > last) break;
+      filled.push({ period: key, revenue: byMonth.get(key) ?? 0 });
+      m += 1;
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
+    }
+    return filled;
+  }
+
+  /** YYYY-MM or YYYY-MM-DD → YYYY-MM-DD (month start for `from`, month end for `to`). */
+  private static parseBound(
+    value: string | undefined,
+    kind: 'from' | 'to',
+  ): string | undefined {
+    if (!value) return undefined;
+    const month = /^(\d{4})-(\d{2})$/.exec(value);
+    if (month) {
+      const [y, m] = [Number(month[1]), Number(month[2])];
+      if (m < 1 || m > 12)
+        throw new BadRequestException(`Invalid ${kind} date`);
+      if (kind === 'from') return `${month[1]}-${month[2]}-01`;
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      return `${month[1]}-${month[2]}-${String(lastDay).padStart(2, '0')}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)))
+      return value;
+    throw new BadRequestException(
+      `Invalid ${kind} date — use YYYY-MM or YYYY-MM-DD`,
+    );
   }
 
   async getByClient(userId: string, isAdmin: boolean) {

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { likeContains } from '../../common/utils/like.js';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Client } from '../clients/entities/client.entity.js';
@@ -24,7 +25,7 @@ export class SearchService {
   ) {}
 
   async search(q: string, userId: string, isAdmin: boolean) {
-    const like = `%${q}%`;
+    const like = likeContains(q);
 
     // Build client query - non-admins only see clients they created or have jobs with
     const clientQb = this.clientRepository

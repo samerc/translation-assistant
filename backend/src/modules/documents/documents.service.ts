@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { likeContains } from '../../common/utils/like.js';
 import { Repository } from 'typeorm';
 import { Document } from './entities/document.entity.js';
 import { DocumentFieldValue } from './entities/document-field-value.entity.js';
@@ -227,7 +228,7 @@ export class DocumentsService {
 
     if (query.search) {
       qb.andWhere('(template.name LIKE :search OR client.name LIKE :search)', {
-        search: `%${query.search}%`,
+        search: likeContains(query.search),
       });
     }
 

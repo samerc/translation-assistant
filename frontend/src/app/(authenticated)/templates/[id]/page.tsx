@@ -9,6 +9,7 @@ import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog, alertDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
+import { useAuth } from '@/lib/auth-context';
 
 interface Language { id: string; code: string; name: string; direction: string; isActive: boolean; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -39,6 +40,11 @@ export default function TemplateDetailPage() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [languages, setLanguages] = useState<Language[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('fields');
+  const { hasPermission } = useAuth();
+  // Templates are shared by every user's documents — only roles with
+  // templates:update may change them; everyone else gets a read-only view.
+  const canEdit = hasPermission('templates:update');
+  const canDelete = hasPermission('templates:delete');
 
   const loadTemplate = () => { api.get<Template>(`/templates/${id}`).then(setTemplate).catch((err) => { logger.error('Failed to load template', err, 'templates'); router.push('/templates'); }); };
   const loadLanguages = () => { api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive))).catch((err) => { logger.error('Failed to load languages', err, 'templates'); toast.error(err instanceof ApiError ? err.message : 'Failed to load languages.'); }); };
@@ -85,7 +91,7 @@ export default function TemplateDetailPage() {
           </div>
           {template.description && <p className="text-sm text-text-secondary mt-1">{template.description}</p>}
         </div>
-        <button onClick={handleDelete} className="btn btn-danger">Delete</button>
+        {canDelete && <button onClick={handleDelete} className="btn btn-danger">Delete</button>}
       </div>
 
       <div className="flex gap-1 border-b border-border mb-6">
@@ -97,10 +103,17 @@ export default function TemplateDetailPage() {
         ))}
       </div>
 
+      {!canEdit && (
+        <p className="tone tone-info rounded-lg px-4 py-2.5 text-sm mb-4">
+          Read-only: templates are shared by everyone&apos;s documents, so only an admin can change them.
+        </p>
+      )}
+      <fieldset disabled={!canEdit} className="min-w-0">
       {activeTab === 'fields' && <FieldsTab template={template} languages={languages} onUpdate={loadTemplate} />}
       {activeTab === 'designer' && template.type === 'designer' && <DesignerTab template={template} onUpdate={loadTemplate} />}
       {activeTab === 'word' && template.type === 'word' && <WordTemplateTab template={template} onUpdate={loadTemplate} />}
       {activeTab === 'settings' && <SettingsTab template={template} onUpdate={loadTemplate} />}
+      </fieldset>
     </div>
   );
 }

@@ -150,6 +150,20 @@ export class UsersController {
     return this.usersService.deactivate(id);
   }
 
+  @Post(':id/reset-password')
+  @RequirePermissions('users:update')
+  @AdminOnly()
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  resetPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    if (id === user.id) {
+      throw new ForbiddenException('Use Change password for your own account');
+    }
+    return this.usersService.resetPasswordByAdmin(id);
+  }
+
   @Delete(':id')
   @RequirePermissions('users:delete')
   @AdminOnly()

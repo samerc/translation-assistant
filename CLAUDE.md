@@ -37,7 +37,7 @@ translation-assistant/
 │   │   └── styles/       # Global styles, theme
 │   └── public/
 ├── docs/                 # OPS.md (ops handoff/runbooks), design/ (original design spec + palettes)
-├── scripts/              # backup-db.ps1, test-integration.sh
+├── scripts/              # backup-db.ps1 (DB + uploads), test-integration.sh
 ├── docker-compose.yml    # MariaDB + app services
 └── CLAUDE.md
 ```
@@ -58,11 +58,14 @@ translation-assistant/
 ## Auth
 - JWT access tokens (15 min TTL, returned in body → localStorage) + refresh tokens (7 days)
 - **Refresh token delivered as an httpOnly, SameSite=Strict cookie** (`refresh_token`, path `/api/auth`, `secure` in prod) — never exposed in the response body. Requires `cookie-parser` (wired in `main.ts`) and CORS `credentials: true`.
-- Refresh token rotation with bcrypt hashing
+- Refresh token rotation (SHA-256 hash in `Session`). **Reuse detection**: a session keeps `previousRefreshTokenHash`; presenting an already-rotated token revokes that session (thief and user both have to log in again)
+- A session's IP / user-agent changing on refresh is logged (`SESSION_FINGERPRINT_CHANGE`) and recorded, **not** revoked — Wi-Fi↔mobile, Cloudflare edge changes and browser updates are normal
 - **Session tracking**: each login/refresh records a `Session` (IP, user-agent, lastUsed). Users can list active sessions (`GET /auth/sessions`, the caller's own marked `current`), revoke one (`DELETE /auth/sessions/:id`), or `logout-everywhere` (revokes all + clears cookie). Password reset and password change revoke all sessions (the change-password modal then signs the user out). Refresh JWTs carry a random `jti`, so concurrent logins never share a session hash.
+- **Real client IP behind Cloudflare**: with `TRUST_CLOUDFLARE=true` (prod), `cloudflareClientIpMiddleware` (`common/utils/client-ip.ts`) sets `req.ip` from `CF-Connecting-IP` — only when the TCP peer is loopback (IIS) **and** the last `X-Forwarded-For` hop is a Cloudflare range, so a direct hit on the origin can't spoof it. Everything (throttler, lockout, sessions) reads `req.ip`
+- **Admin password reset**: `POST /users/:id/reset-password` (`@AdminOnly`, not self, 10/hr) returns a one-time temporary password, sets `mustChangePassword`, revokes the user's sessions — the fallback when email reset isn't available
 - **Password reset flow**: `forgot-password` → `verify-reset-token` → `reset-password`. Tokens are 32-byte random, single-use, 30-min expiry (`PasswordResetToken`). No email service yet — in **non-production** the token is returned in the response for testing; in production only a generic message is returned (see `requestPasswordReset` TODO to wire email).
 - Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run, with `mustChangePassword` — the app shows a banner until it is changed; any password change/reset clears it). First run also seeds en/ar/fr languages and label options; the dashboard shows admins a Getting started checklist
-- 3 default roles: Admin (all permissions), Translator (create/read/update on core resources + `settings:read`, needed for languages/labels/job types), Viewer (read-only). Existing DBs get Translator `settings:read` via migration `*-TranslatorSettingsRead` (applied by hand on prod — see docs/OPS.md §5)
+- 3 default roles: Admin (all permissions), Translator (create/read/update on clients/jobs/documents/files/calendar/notifications, **read-only templates** — they're shared by everyone's documents — + `settings:read`, needed for languages/labels/job types), Viewer (read-only). Existing DBs get Translator `settings:read` via migration `*-TranslatorSettingsRead` (applied by hand on prod — see docs/OPS.md §0); existing DBs drop Translator `templates:create/update` via `*-GoLiveFixes`
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
 - **`@AdminOnly()` + `AdminGuard`**: hard role-name check (DB) on top of RBAC for privilege-sensitive endpoints (e.g. invite, role management) — prevents a `roles:update` holder from self-escalating
 - **The Admin role is fixed** (`roles.service.ts`): it cannot be renamed, deleted or have its permissions changed — every admin check matches the literal name `Admin`, so changing it would lock admins out with no way back in the app
@@ -94,7 +97,10 @@ translation-assistant/
 - Deletes blocked by a non-cascading FK are refused up front with a clear 400 (no generic FK error): client with jobs or invoices, job on an invoice, template used by documents, template field with document values
 - Job creation validates all referenced entities (client, language, template) exist
 - Job user assignment validates user exists before creating assignment
-- Invoice creation requires at least 1 line item
+- Invoice creation requires at least 1 line item; due date ≥ issue date
+- **A job is billed once**: a job can't be linked on a second invoice unless the other is cancelled (create, edit, and reviving a cancelled invoice). Checked inside the `app_settings` lock, so concurrent invoices can't both pass
+- Search terms are LIKE-escaped with `likeContains()` (`common/utils/like.ts`) — `%`/`_` match literally. Use it for every `LIKE` built from input
+- Request bodies over 1 MB → 413; deletes blocked by an FK the service doesn't pre-check → 409 with a "still used by other records" message (`GlobalExceptionFilter`)
 - Word template uploads rejected if no valid placeholders found
 - **Client visibility** (non-admins): clients they created (`Client.createdByUserId`) or have a job with — one SQL rule, `clientVisibleSql()` (`clients/client-access.ts`), used by the client list/detail checks, search and job creation (a non-admin can't open a job on a client they can't see)
 - Search access control: non-admins only see clients they created or have jobs with, only active templates; each result type is dropped unless the caller has that resource's `:read` permission (Translators get no invoices)
@@ -116,16 +122,20 @@ translation-assistant/
 - **Schema management**: dev uses TypeORM `synchronize` (auto-sync entities→schema); **production runs migrations** (`synchronize: false`, `migrationsRun: true` on boot). Gated by `NODE_ENV`, overridable via `DB_SYNCHRONIZE=true|false`. Config in `database.config.ts`; CLI DataSource in `config/data-source.ts`.
   - Migration scripts (in `backend/`): `npm run migration:generate -- src/migrations/Name`, `migration:run`, `migration:revert`, `migration:show`. All build first (CLI runs against compiled `dist/`).
   - `src/migrations/*-InitialBaseline.ts` is the baseline (full current schema, validated: generates zero diff against the live schema).
-  - **Prod cutover runbook** (one-time — the prod DB predates the `sessions`/`password_reset_tokens` tables): (1) deploy once with `DB_SYNCHRONIZE=true` to create the two new tables, OR create them manually; (2) create a `migrations` table and insert the baseline row `(timestamp, name)` so `migrationsRun` treats the baseline as already applied; (3) set `DB_SYNCHRONIZE=false` (or `NODE_ENV=production`) for subsequent deploys. A fresh/empty DB instead just runs the baseline migration on first boot.
+  - Migrations build the **complete** schema (checked 2026-11: fresh DB from migrations alone boots; `migration:generate` finds no drift). `*-GoLiveFixes` is idempotent (`ADD COLUMN/INDEX IF NOT EXISTS`) so it runs safely on prod's synchronize-built schema.
+  - **Prod cutover runbook**: docs/OPS.md §0 + §5 (stamp the first five migrations, `DB_SYNCHRONIZE=false`, deploy — GoLiveFixes then runs). Every schema change after that is a new migration file.
+  - Seed always creates the single `app_settings` row (numbering locks it — locking zero rows locks nothing).
 - Connection pool: 20 max, 10s connect timeout, 30s idle timeout (configurable via env)
 - Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
-- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction. Invoice numbers: `MAX()+1` for the current prefix, generated inside the create transaction after locking the `app_settings` row (serializes concurrent creates). Prefix max 15 chars (invoiceNumber is varchar(20))
+- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction. Invoice **and job** numbers: `MAX()+1` (invoices: for the current prefix), generated inside the create transaction after locking the `app_settings` row (serializes concurrent creates). Prefix max 15 chars (invoiceNumber is varchar(20))
 - Never `save()` an entity loaded with a `cascade: true` relation after replacing that relation's rows separately — TypeORM writes the stale loaded rows back. Use `update()` for the scalars (see `InvoicesService.update`)
 - No eager loading on entities — all relations loaded explicitly per query
 - List endpoints use `attachRelationCount()` for counts (not full relation joins)
 - N+1 eliminated: batch `IN()` queries, `Promise.all` for parallel validation
 - `recalculateTotal` uses DB `SUM()` aggregation (not in-memory)
 - Cron job overlap prevention: in-memory lock + error handling + logging
+- `job_users` has a unique `(job_id, user_id)` index; `assignUser` turns a lost race (ER_DUP_ENTRY) into a permission update
+- Indexes on filter columns: `jobs.status`, `jobs.deadline`, `invoices.status`, `invoices.dueDate`, `notifications(user_id, isRead)`, `invoice_payments.paidAt` (declared with `@Index` on the entities so synchronize and migrations agree)
 - Overdue invoice check: single batch `UPDATE` (not N individual saves)
 
 ## File Management
@@ -137,9 +147,11 @@ translation-assistant/
 
 ## Deployment
 - Server: `translate.fancyshark.com` (144.91.89.20)
+- **Behind Cloudflare** (proxied DNS). Origin setup — origin cert, per-hostname Full (strict), origin restricted to Cloudflare IPs, `TRUST_CLOUDFLARE=true` — in docs/OPS.md §6
 - IIS reverse proxy: `/api/*` → localhost:3005, `/*` → localhost:3080
 - PM2 manages backend + frontend processes
-- `npm run deploy` — builds, packages, uploads, restarts on server
+- `npm run deploy` — builds, packages, uploads, **backs up DB + uploads on the server first** (aborts if that fails; `SKIP_BACKUP=1` to bypass), restarts
+- Backups: `scripts/backup-db.ps1` (DB dump + uploads zip + optional off-site copy via `BACKUP_OFFSITE_DIR`, 14-day rotation) as a nightly scheduled task — docs/OPS.md §4
 - Frontend uses Next.js standalone output (~4MB deploy)
 - PM2 auto-resurrect on reboot via Windows Scheduled Task
 
@@ -152,7 +164,7 @@ translation-assistant/
 - Temp export downloads: `streamThenDelete(filePath, res)` (deletes on success, error and client abort).
 - Frontend: no setState directly in effects or `Date.now()` in render (React Compiler lint) — derive state, use `useNow()` + `formatTimeAgo()`, `uid()` for client ids, `useSyncExternalStore` for module stores (see `lib/toast.tsx`, `lib/confirm.tsx`). `api.*` resolves empty response bodies as `undefined`.
 - Frontend API calls: always `api.*` — including uploads (`api.upload(path, formData, 'POST')`) and file exports (`api.download(path, fallbackName)`); never raw `fetch` with the token, which skips refresh. `authedFetch` refreshes at most once at a time (shared promise + `navigator.locks` across tabs, because refresh tokens are one-time use) and never refreshes on `/auth/login|register|…` (there a 401 means bad credentials). `ApiError.message` is always a string (validation arrays joined).
-- Async click/submit handlers: `try/catch/finally` — busy flags reset in `finally`, errors shown (`toast.error` or the form's error area). Client `<select>`s use `useClientOptions(selectedId)` (API caps lists at 100; a preselected client outside that page is fetched separately).
+- Async click/submit handlers: `try/catch/finally` — busy flags reset in `finally`, errors shown (`toast.error` or the form's error area). Client fields use `<ClientPicker>` (`components/ui/ClientPicker.tsx`): a searchable combobox that queries `/clients?search=` as you type — never a `<select>` of a fetched list (the API caps pages at 100). `useClient(id)` (`lib/use-client.ts`) loads one client by id.
 - All API routes prefixed with `/api/`
 - RBAC permissions follow `resource:action` format (e.g., `clients:create`)
 - Database migrations managed via ORM (synchronize in dev, migrations in prod)
@@ -168,7 +180,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - Light + dark mode supported (separate toggle from palette). Text on a tinted background uses `text-primary-text` / tone classes, never `text-primary` (unreadable in dark mode).
 
 ## UI Kit (`frontend/src/components/ui/`)
-- Use these instead of hand-written class strings: `Button`/`buttonClass()` (primary/secondary/ghost/danger; Cancel = secondary), `Input`/`Select`/`Textarea`/`SearchInput`/`Field`, `Badge`, `PageHeader`, `EmptyState`, `Alert`, `SegmentedControl` (≤4 options), `TableCard`/`SortableTh`/`RowChevron`/`Pagination` (`DataTable.tsx`), outline icons in `icons.tsx`.
+- Use these instead of hand-written class strings: `Button`/`buttonClass()` (primary/secondary/ghost/danger; Cancel = secondary), `Input`/`Select`/`Textarea`/`SearchInput`/`Field`, `Badge`, `PageHeader`, `EmptyState`, `Alert`, `SegmentedControl` (≤4 options), `TableCard`/`SortableTh`/`RowChevron`/`Pagination` (`DataTable.tsx`), `ClientPicker`, outline icons in `icons.tsx`.
 - CSS component classes behind them live in `globals.css` `@layer components` (`.btn*`, `.input`, `.card`, `.data-table`, `.badge`, `.tone-*`, `.segmented`). Status colours: `lib/status.ts` maps → tone classes.
 - Clickable table rows: `<tr data-href onClick=…>` + `<RowChevron />` as the last cell.
 - Overdue = open job (`OPEN_JOB_STATUSES`) past its deadline: `isJobOverdue(job, todayLocal(useNow()))` from `lib/status.ts`. Keys → labels: `humanize()` (`lib/format.ts`).
@@ -254,7 +266,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `POST /reset-password` — Set a new password with a valid token
 
 ### Users (`/api/users`)
-- Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`
+- Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`, `POST /:id/reset-password` (admin: one-time temporary password)
 - `GET /profile/me` + `PATCH /profile/me` — Read / self-update own profile, no `users:*` permission needed (no role/active change)
 - `POST /change-password`
 
@@ -329,7 +341,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 
 ### Reports (`/api/reports`)
 - `GET /dashboard-stats` — Active jobs, monthly revenue, pending invoices, due this week
-- `GET /revenue?period=monthly&from=2026-01&to=2026-05` — Revenue over time (sum of payments by payment date — partial payments count when received)
+- `GET /revenue?period=monthly&from=2026-01&to=2026-05` — Revenue over time (sum of payments by payment date — partial payments count when received). `from`/`to`: `YYYY-MM` (whole month) or `YYYY-MM-DD`, inclusive, else 400. Monthly results include every month in range (0 when no payments)
 - `GET /by-client` — Revenue per client
 - `GET /job-status` — Jobs by status breakdown
 

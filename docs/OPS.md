@@ -7,22 +7,41 @@ place and no-ops safely until these are done.
 
 ---
 
-## 0. Next deploy — one-off data steps
+## 0. Go-live deploy (fix/golive-blockers): do these in order
 
-Prod runs `synchronize`, which applies schema changes but never data migrations.
-Run these against the prod DB **after** deploying the code (back up first; each
-is idempotent):
+This release also moves prod from `synchronize` to migrations. Do it in a quiet
+moment; it takes ~15 minutes.
 
-- **Translator `settings:read`** — the SQL in
-  `backend/src/migrations/1793100000000-TranslatorSettingsRead.ts` (`up()`). Without
-  it translators can't load languages/labels and can't create jobs. A backup of
-  `roles`/`role_permissions` taken before this change is at
-  `C:\apps\translation-assistant\backup-role-permissions-2026-10-26.sql`.
-- **Invoice payments backfill** — after the deploy has created `invoice_payments`
-  (synchronize does that on boot), run `INVOICE_PAYMENTS_BACKFILL` from
-  `backend/src/migrations/1793015124357-InvoicePayments.ts`. It turns each
-  already-paid invoice into one payment row; without it, revenue reports (now summed
-  from payments) drop every invoice paid before this change.
+1. **Back up** (DB + uploads): set up section 4 first, then run
+   `schtasks /Run /TN "TA Backup"` and check `db-backups\backup.log`.
+2. **Duplicate assignments check** (informational; the migration removes them,
+   keeping the least-privileged row):
+   ```sql
+   SELECT job_id, user_id, COUNT(*) FROM job_users GROUP BY job_id, user_id HAVING COUNT(*) > 1;
+   ```
+3. **Earlier data steps.** Both are idempotent and harmless to re-run:
+   - `INVOICE_PAYMENTS_BACKFILL` from `backend/src/migrations/1793015124357-InvoicePayments.ts`
+   - the `up()` SQL of `backend/src/migrations/1793100000000-TranslatorSettingsRead.ts`
+4. **Stamp the migrations prod already has via synchronize** (section 5).
+5. **Edit the ecosystem env** (`C:\apps\translation-assistant\ecosystem.config.cjs`,
+   `ta-backend`):
+   - `DB_SYNCHRONIZE: 'false'`
+   - `TRUST_CLOUDFLARE: 'true'` (section 6)
+6. **Deploy:** `npm run deploy` (it now takes a backup first and aborts if that fails).
+   Then on the server: `pm2 delete ta-backend` + `pm2 start ecosystem.config.cjs --only ta-backend`
+   + `pm2 save` (PM2 caches env, so `restart` won't pick up step 5).
+   On boot, `GoLiveFixes1793300000000` runs: missing columns (idempotent), job_users
+   dedupe + unique index, filter indexes, refresh-reuse column, Translator templates
+   read-only.
+7. **Check:** `SELECT name FROM migrations;` lists 6 rows; log in; open **Settings →
+   Security → Active Sessions**: the IP must be **your**
+   public IP, not a `162.158.x` / `172.6x.x` / `104.x` Cloudflare address or 127.0.0.1.
+   If it shows a Cloudflare IP, ARR isn't adding `X-Forwarded-For`: IIS Manager →
+   server → Application Request Routing Cache → Server Proxy Settings → tick
+   "Preserve client IP in the following header: X-Forwarded-For".
+
+Rollback: restore the step-1 backup and redeploy the previous build with
+`DB_SYNCHRONIZE: 'true'`.
 
 ---
 
@@ -36,6 +55,13 @@ production, reset/invite links are built from `appBaseUrl` → falls back to
 host / port / user / pass / from address → **Save** → **Send test email**.
 (SendGrid, Mailgun, Amazon SES, or your host's SMTP all work.)
 
+- **Mailgun:** host `smtp.mailgun.org` (EU region: `smtp.eu.mailgun.org`), port `587`,
+  secure off (STARTTLS), user = the domain's SMTP login (Sending → Domain settings →
+  SMTP credentials), from e.g. `Translation Assistant <noreply@mg.fancyshark.com>`.
+  Verify the sending domain first (SPF + DKIM DNS records, in Cloudflare DNS, set
+  to **DNS only**, grey cloud) or mail lands in spam.
+- If email ever breaks, an admin can still unlock a user: **Settings → Users →
+  Reset password** gives a one-time temporary password (user must change it).
 - Until this is set, `forgot-password` returns a generic message but sends nothing —
   i.e. password reset does not work in prod.
 - Alternatively set env vars in the server ecosystem (`SMTP_HOST`, `SMTP_PORT`,
@@ -75,67 +101,91 @@ Wired on both sides; nothing is sent until a DSN is configured.
   leaves it in place and the server keeps serving the **previous build's HTML** (old CSS
   hashes) even after a restart.
 
-## 4. Automated DB backups
+## 4. Automated backups (DB + uploads, off-site)
 
-`scripts/backup-db.ps1` does a nightly `mysqldump` + zip + 14-day rotation.
+`scripts/backup-db.ps1` dumps the DB **and** zips `backend\uploads` (passport copies,
+job files, Word templates, which the DB only points to), copies both off-site if
+`BACKUP_OFFSITE_DIR` is set, rotates (14 days), and logs to `db-backups\backup.log`.
+`npm run deploy` runs it before every deploy.
 
-**Do this (once, on the server, elevated):** copy the script to
-`C:\apps\translation-assistant\scripts\backup-db.ps1`, then register the task:
+**Do this once, on the server, in an elevated PowerShell:**
 
+```powershell
+Copy-Item <repo>\scripts\backup-db.ps1 C:\apps\translation-assistant\scripts\backup-db.ps1
+[Environment]::SetEnvironmentVariable('DB_BACKUP_PASSWORD', '<db password>', 'Machine')
+[Environment]::SetEnvironmentVariable('BACKUP_OFFSITE_DIR', '<off-site folder>', 'Machine')
+schtasks /Create /TN "TA Backup" /SC DAILY /ST 03:00 /RU SYSTEM /RL HIGHEST /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\apps\translation-assistant\scripts\backup-db.ps1"
+schtasks /Run /TN "TA Backup"
+Get-Content C:\apps\translation-assistant\db-backups\backup.log -Tail 5
 ```
-schtasks /Create /TN "TA DB Backup" /SC DAILY /ST 03:00 /RU SYSTEM /RL HIGHEST ^
-  /TR "powershell -NoProfile -ExecutionPolicy Bypass -File C:\apps\translation-assistant\scripts\backup-db.ps1"
-schtasks /Run /TN "TA DB Backup"   REM test it now
-```
 
-Backups land in `C:\apps\translation-assistant\db-backups\`.
+- **Off-site** = anything not on this server: a folder synced by OneDrive/Google
+  Drive/Dropbox, a NAS share, or an rclone-mounted S3/B2 bucket. The task runs as
+  SYSTEM, so a network share needs access for the computer account (or run the task
+  as a user with `/RU <user> /RP`).
+- Restart the `sshd` service once after setting the machine variables so the
+  pre-deploy backup (run over SSH) sees them.
+- **Test a restore once** into a scratch database (see the end of the script).
 
 ## 5. Migration cutover (get prod off `DB_SYNCHRONIZE=true`)
 
-**Why:** `synchronize` auto-alters the schema on boot. It's safe for *additive*
-changes (the pattern so far) but could drop/alter data if an entity's column type
-changes or a column is removed. Migrations make schema changes explicit + reviewable.
+**Why:** `synchronize` auto-alters the schema on boot and can drop or alter data when
+an entity changes. Migrations make schema changes explicit and reviewable. Since
+`GoLiveFixes1793300000000` the migrations build the full schema (checked: a fresh
+DB from migrations alone boots, and `migration:generate` finds no drift).
 
-**Current state:** prod runs `DB_SYNCHRONIZE:'true'`. The baseline migration
-(`src/migrations/*-InitialBaseline.ts`) is **missing the post-baseline columns**:
-`users.businessName/businessAddress/logo` and `app_settings.smtp*` + `appBaseUrl`.
-So a top-up migration is required before cutover, or the baseline must be regenerated.
-A second migration, `*-TypeormV1JoinTableFk.ts` (TypeORM 1.x changed the
-`role_permissions → permissions` FK to `ON DELETE CASCADE`), already exists; prod picks
-it up via synchronize, so it also needs stamping in step 2.
+**Stamp** the migrations whose effect prod already has (synchronize created the
+schema; the data steps are re-run in section 0 step 3), so they are not run again.
+`GoLiveFixes` is **not** stamped: it is idempotent and must run.
 
-**Do this (in a maintenance window, after a fresh backup):**
+```sql
+CREATE TABLE IF NOT EXISTS `migrations` (
+  `id` int NOT NULL AUTO_INCREMENT, `timestamp` bigint NOT NULL,
+  `name` varchar(255) NOT NULL, PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT INTO `migrations` (`timestamp`, `name`) VALUES
+  (1783760966727, 'InitialBaseline1783760966727'),
+  (1793004815347, 'TypeormV1JoinTableFk1793004815347'),
+  (1793015124357, 'InvoicePayments1793015124357'),
+  (1793100000000, 'TranslatorSettingsRead1793100000000'),
+  (1793200000000, 'ClientCreatorTranslateKey1793200000000');
+```
 
-1. **Generate the top-up migration** (local, against a scratch DB so the diff only
-   contains the missing columns):
-   ```
-   cd backend && npm run build
-   # create an empty scratch DB, run the baseline into it, then:
-   npm run migration:generate -- src/migrations/PostBaselineBrandingSmtp
-   # verify a second generate produces an empty migration (schema == entities)
-   ```
-   Commit the new migration file.
+Then `DB_SYNCHRONIZE: 'false'` and deploy (section 0). From then on every schema
+change is a new migration file (`npm run migration:generate -- src/migrations/Name`),
+applied automatically on boot.
 
-2. **Stamp the prod DB as already-migrated** (its schema already matches via
-   synchronize, so migrations must NOT try to recreate tables). Create the
-   `migrations` table and insert one row per migration (baseline + the top-up) with
-   their `(timestamp, name)` so `migrationsRun` treats them as applied.
-   Stamping is right for **schema** migrations only. Data migrations
-   (`*-TranslatorSettingsRead.ts`) are idempotent: stamp one only after
-   checking its effect is already on prod, otherwise let it run. Prod still runs
-   synchronize, so the Translator `settings:read` grant is applied by hand with the
-   migration's SQL (pre-change backup of `roles`/`role_permissions`:
-   `C:\apps\translation-assistant\backup-role-permissions-2026-10-26.sql`).
+## 6. Cloudflare + origin (translate.fancyshark.com only)
 
-3. **Flip prod to migrations:** set `DB_SYNCHRONIZE:'false'` (or `NODE_ENV=production`
-   without the override) in the ecosystem, then `pm2 delete` + `pm2 start` `ta-backend`.
-   On boot, `migrationsRun` will find nothing pending (all stamped) and stop syncing.
+Prod is proxied by Cloudflare. Configure it **per hostname** so other sites on the
+server and other fancyshark.com subdomains are unaffected.
 
-4. From then on, schema changes = new migration files, run via `migration:run` on deploy.
-
-> This is a sensitive live-DB operation — do it deliberately with a backup and a
-> rollback plan (`DB_SYNCHRONIZE:'true'` restores the old behavior). Not urgent while
-> changes remain additive.
+1. **Origin certificate:** Cloudflare → SSL/TLS → Origin Server → Create certificate.
+   The default hostnames (`*.fancyshark.com`, `fancyshark.com`), RSA 2048 and 15 years
+   are fine; the wildcard can be reused by other proxied subdomains on this server.
+   Key format **PEM**; save the certificate as `origin.pem` and the private key as
+   `origin.key` **before closing the page** (the key is shown only once). IIS needs a
+   PFX: `openssl pkcs12 -export -out fancyshark-origin.pfx -inkey origin.key -in origin.pem`
+   (Git Bash has openssl; set an export password). Then delete `origin.key`.
+   On the server: IIS Manager → server node → Server Certificates → Import → the PFX
+   (store: Web Hosting). Add an **https** binding on 443 to the Translation Assistant
+   site with **host name `translate.fancyshark.com`, "Require Server Name Indication"
+   ticked**, certificate = the imported one. SNI keeps it from touching other sites.
+2. **Encrypt Cloudflare → origin:** Rules → Configuration Rules → Create rule:
+   hostname equals `translate.fancyshark.com` → SSL: **Full (strict)**. (Changing the
+   zone-wide SSL mode instead would apply to every subdomain.)
+3. **Force HTTPS for visitors:** SSL/TLS → Edge Certificates → **Always Use HTTPS**
+   is zone-wide but only redirects visitors at Cloudflare's edge, so it only matters
+   for proxied (orange-cloud) hostnames. If some other proxied subdomain must stay on
+   http, use a Redirect Rule for just this hostname instead.
+4. **Stop direct-to-origin access** for this site only: in IIS, remove any binding of
+   the site that has no host name (that's what answers `http://144.91.89.20`), and
+   under the site's **IP Address and Domain Restrictions** allow only Cloudflare's
+   ranges (cloudflare.com/ips) plus 127.0.0.1, with "Access for unspecified clients:
+   Deny". Don't firewall the whole server unless every site on it is behind Cloudflare.
+5. `TRUST_CLOUDFLARE: 'true'` in the backend env: the app then uses `CF-Connecting-IP`
+   for rate limits, lockouts and the sessions list, but only on requests that really
+   came through Cloudflare (`common/utils/client-ip.ts`).
 
 ---
 

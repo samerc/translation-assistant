@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -10,6 +11,7 @@ import { Invoice } from './invoice.entity.js';
 
 /** One payment received against an invoice. An invoice can be paid in parts;
  *  Invoice.paidAmount is the sum of these rows. */
+@Index('IDX_invoice_payments_paidAt', ['paidAt'])
 @Entity('invoice_payments')
 export class InvoicePayment {
   @PrimaryGeneratedColumn('uuid')
