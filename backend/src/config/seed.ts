@@ -5,6 +5,7 @@ import { Role } from '../modules/roles/entities/role.entity.js';
 import { User } from '../modules/users/entities/user.entity.js';
 import { LabelOption } from '../modules/settings/entities/label-option.entity.js';
 import { Language } from '../modules/settings/entities/language.entity.js';
+import { AppSettings } from '../modules/settings/entities/app-settings.entity.js';
 
 const RESOURCES = [
   'users',
@@ -66,14 +67,15 @@ export async function seed(dataSource: DataSource) {
             'clients',
             'jobs',
             'documents',
-            'templates',
             'files',
             'calendar',
             'notifications',
           ].includes(p.resource) &&
             ['create', 'read', 'update'].includes(p.action)) ||
           // languages, labels, job types and currency — needed to create jobs
-          (p.resource === 'settings' && p.action === 'read'),
+          (p.resource === 'settings' && p.action === 'read') ||
+          // templates are shared by everyone's documents: read-only
+          (p.resource === 'templates' && p.action === 'read'),
       ),
     });
     await roleRepo.save(translatorRole);
@@ -120,6 +122,14 @@ export async function seed(dataSource: DataSource) {
         );
       }
     }
+  }
+
+  // The single settings row must exist from the start: job and invoice numbering
+  // lock it to serialize concurrent creates (locking zero rows locks nothing).
+  const settingsRepo = dataSource.getRepository(AppSettings);
+  if ((await settingsRepo.count()) === 0) {
+    await settingsRepo.save(settingsRepo.create({}));
+    console.log('Seeded default app settings');
   }
 
   // A fresh install gets a few common languages so jobs can be created

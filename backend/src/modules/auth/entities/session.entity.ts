@@ -23,6 +23,11 @@ export class Session {
   @Column({ length: 512 })
   refreshTokenHash: string;
 
+  // Hash of the token this session last rotated away from. Seeing it again
+  // means an old refresh token was replayed (stolen) → the session is revoked.
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  previousRefreshTokenHash: string | null;
+
   @Column({ length: 45 })
   ipAddress: string;
 

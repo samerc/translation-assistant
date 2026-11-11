@@ -219,26 +219,42 @@ export class AuthService {
     });
 
     if (!matchedSession) {
+      // Reuse detection: a token this session already rotated away from is
+      // being presented again, so someone holds a copy of an old refresh
+      // token. Revoke the session: both the thief and the user must log in.
+      const replayed = await this.sessionRepository.findOne({
+        where: {
+          userId: user.id,
+          previousRefreshTokenHash: this.hashRefreshToken(refreshToken),
+          revoked: false,
+        },
+      });
+      if (replayed) {
+        this.logger.warn(
+          `[REFRESH_TOKEN_REUSE] sessionId=${replayed.id} userId=${user.id} ip=${ip}`,
+        );
+        replayed.revoked = true;
+        await this.sessionRepository.save(replayed);
+      }
       throw new ForbiddenException('Access denied');
     }
 
-    // Check IP/UA binding — flag suspicious changes
+    // IP / user-agent changes are normal (Wi-Fi to mobile data, Cloudflare
+    // edge changes, browser updates), so they are logged for the audit trail
+    // but don't end the session. Token theft is caught by reuse detection.
     const currentUAHash = this.hashUserAgent(userAgent);
     if (
       matchedSession.ipAddress !== ip ||
       matchedSession.userAgentHash !== currentUAHash
     ) {
-      this.logger.warn(
-        `[SESSION_FINGERPRINT_MISMATCH] sessionId=${matchedSession.id} userId=${user.id} ` +
+      this.logger.log(
+        `[SESSION_FINGERPRINT_CHANGE] sessionId=${matchedSession.id} userId=${user.id} ` +
           `storedIp=${matchedSession.ipAddress} currentIp=${ip} ` +
           `uaMatch=${matchedSession.userAgentHash === currentUAHash}`,
       );
-      // Revoke the suspicious session
-      matchedSession.revoked = true;
-      await this.sessionRepository.save(matchedSession);
-      throw new ForbiddenException(
-        'Session invalidated due to suspicious activity. Please log in again.',
-      );
+      matchedSession.ipAddress = ip;
+      matchedSession.userAgentHash = currentUAHash;
+      matchedSession.userAgentRaw = (userAgent || '').slice(0, 512);
     }
 
     // Rotate: generate new tokens, update session
@@ -246,6 +262,7 @@ export class AuthService {
     const newRefreshToken = await this.generateRefreshToken(user);
     const newHash = this.hashRefreshToken(newRefreshToken);
 
+    matchedSession.previousRefreshTokenHash = matchedSession.refreshTokenHash;
     matchedSession.refreshTokenHash = newHash;
     matchedSession.lastUsedAt = new Date();
     await this.sessionRepository.save(matchedSession);

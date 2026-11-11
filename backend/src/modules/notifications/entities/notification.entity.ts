@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -8,6 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity.js';
 
+@Index('IDX_notifications_user_isRead', ['userId', 'isRead'])
 @Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')

@@ -99,6 +99,25 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         };
       }
 
+      // Delete blocked by a foreign key (e.g. a user or language that jobs,
+      // documents or invoices still point to).
+      const code = (exception as { driverError?: { code?: string } })
+        .driverError?.code;
+      if (
+        code === 'ER_ROW_IS_REFERENCED_2' ||
+        code === 'ER_ROW_IS_REFERENCED'
+      ) {
+        return {
+          status: HttpStatus.CONFLICT,
+          body: {
+            statusCode: HttpStatus.CONFLICT,
+            message:
+              'This item is still used by other records (such as jobs, documents or invoices), so it cannot be deleted. Deactivate it instead.',
+            error: 'Conflict',
+          },
+        };
+      }
+
       return {
         status: HttpStatus.BAD_REQUEST,
         body: {
@@ -117,6 +136,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           statusCode: HttpStatus.NOT_FOUND,
           message: 'Resource not found',
           error: 'Not Found',
+        },
+      };
+    }
+
+    // body-parser errors (oversized / malformed body) carry their own 4xx status
+    const bodyErr = exception as { type?: string; status?: number };
+    if (bodyErr?.type === 'entity.too.large') {
+      return {
+        status: HttpStatus.PAYLOAD_TOO_LARGE,
+        body: {
+          statusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+          message: 'The request is too large',
+          error: 'Payload Too Large',
         },
       };
     }

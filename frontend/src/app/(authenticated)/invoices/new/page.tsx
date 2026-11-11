@@ -5,12 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
-import { useClientOptions } from '@/lib/use-client-options';
+import { ClientPicker } from '@/components/ui/ClientPicker';
 import { useSettings } from '@/lib/settings-context';
 import { localDateString, todayLocal } from '@/lib/format';
 import { RequirePermission } from '@/components/RequirePermission';
 
-interface ClientOption { id: string; name: string; }
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
 interface LineItem { description: string; jobId: string; quantity: number; unitPrice: number; }
 
@@ -24,7 +23,6 @@ function NewInvoicePage() {
   const prefilled = useRef(false);
 
   const [clientId, setClientId] = useState('');
-  const clients = useClientOptions<ClientOption>(clientId);
   const { baseCurrency } = useSettings();
   const [issueDate, setIssueDate] = useState(() => todayLocal());
   const [dueDate, setDueDate] = useState(() => {
@@ -155,37 +153,33 @@ function NewInvoicePage() {
           <h2 className="text-lg font-semibold text-text mb-4">Invoice Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Client *</label>
-              <select value={clientId} onChange={(e) => setClientId(e.target.value)} required
-                className="input w-full">
-                <option value="">Select client...</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <label htmlFor="invoice-client" className="block text-sm font-medium text-text-secondary mb-1">Client *</label>
+              <ClientPicker id="invoice-client" value={clientId} onChange={setClientId} required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Currency</label>
-              <input value={currency} onChange={(e) => setCurrency(e.target.value)}
+              <label htmlFor="invoice-currency" className="block text-sm font-medium text-text-secondary mb-1">Currency</label>
+              <input id="invoice-currency" value={currency} onChange={(e) => setCurrency(e.target.value)}
                 className="input w-full" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Issue Date *</label>
-              <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required
+              <label htmlFor="invoice-issue" className="block text-sm font-medium text-text-secondary mb-1">Issue Date *</label>
+              <input id="invoice-issue" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required
                 className="input w-full" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Due Date *</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required
+              <label htmlFor="invoice-due" className="block text-sm font-medium text-text-secondary mb-1">Due Date *</label>
+              <input id="invoice-due" type="date" min={issueDate} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required
                 className="input w-full" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Tax Rate (%)</label>
-              <input type="number" step="0.01" min="0" value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}
+              <label htmlFor="invoice-tax" className="block text-sm font-medium text-text-secondary mb-1">Tax Rate (%)</label>
+              <input id="invoice-tax" type="number" step="0.01" min="0" value={taxRate} onChange={(e) => setTaxRate(Number(e.target.value))}
                 className="input w-full" />
             </div>
           </div>
           <div className="mt-4">
-            <label className="block text-sm font-medium text-text-secondary mb-1">Notes</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+            <label htmlFor="invoice-notes" className="block text-sm font-medium text-text-secondary mb-1">Notes</label>
+            <textarea id="invoice-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
               className="input w-full resize-y" />
           </div>
         </div>
@@ -206,12 +200,12 @@ function NewInvoicePage() {
                 <div className="col-span-2 md:col-span-5">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Description</label>}
                   <input value={item.description} onChange={(e) => updateItem(i, 'description', e.target.value)}
-                    placeholder="Description..."
+                    placeholder="Description..." aria-label={`Item ${i + 1} description`}
                     className="input w-full" />
                 </div>
                 <div className="col-span-2 md:col-span-3">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Link Job</label>}
-                  <select value={item.jobId} onChange={(e) => selectJob(i, e.target.value)}
+                  <select value={item.jobId} onChange={(e) => selectJob(i, e.target.value)} aria-label={`Item ${i + 1} linked job`}
                     className="input w-full">
                     <option value="">No linked job</option>
                     {jobs.map((j) => <option key={j.id} value={j.id}>{j.jobNumber} — {j.title}</option>)}
@@ -220,18 +214,18 @@ function NewInvoicePage() {
                 <div className="col-span-1 md:col-span-1">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Qty</label>}
                   <input type="number" min="0" step="0.01" value={item.quantity}
-                    onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                    onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))} aria-label={`Item ${i + 1} quantity`}
                     className="input w-full" />
                 </div>
                 <div className="col-span-1 md:col-span-2">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">Unit Price</label>}
                   <input type="number" min="0" step="0.01" value={item.unitPrice}
-                    onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                    onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))} aria-label={`Item ${i + 1} unit price`}
                     className="input w-full" />
                 </div>
                 <div className="col-span-2 md:col-span-1 flex items-end">
                   {i === 0 && <label className="block text-xs font-medium text-text-muted mb-1">&nbsp;</label>}
-                  <button type="button" onClick={() => removeItem(i)} disabled={items.length <= 1}
+                  <button type="button" onClick={() => removeItem(i)} disabled={items.length <= 1} aria-label={`Remove item ${i + 1}`}
                     className="p-2 text-text-muted hover:text-danger disabled:opacity-30">
                     <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
                   </button>

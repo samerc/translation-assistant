@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { likeContains } from '../../common/utils/like.js';
 import { Repository } from 'typeorm';
 import { basename } from 'path';
 import { existsSync, unlinkSync } from 'fs';
@@ -78,7 +79,7 @@ export class ClientsService {
     if (search) {
       qb.andWhere(
         '(client.name LIKE :search OR emails.email LIKE :search OR phones.phone LIKE :search)',
-        { search: `%${search}%` },
+        { search: likeContains(search) },
       );
     }
 

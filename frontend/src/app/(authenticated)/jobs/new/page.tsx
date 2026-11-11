@@ -6,7 +6,8 @@ import { api, ApiError } from '@/lib/api';
 import { uid } from '@/lib/uid';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency } from '@/lib/format';
-import { useClientOptions } from '@/lib/use-client-options';
+import { useClient } from '@/lib/use-client';
+import { ClientPicker } from '@/components/ui/ClientPicker';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
@@ -73,8 +74,7 @@ export default function NewJobPage() {
       .catch(() => setFreeformTypes([]));
   }, []);
 
-  const clients = useClientOptions<Client>(form.clientId);
-  const selectedClient = clients.find((c) => c.id === form.clientId);
+  const selectedClient = useClient<Client>(form.clientId);
 
   // The client list doesn't include contacts — load them for the selected company.
   // Keyed by client so a previous client's contacts are never offered.
@@ -276,10 +276,7 @@ export default function NewJobPage() {
                   </button>
                 )}
               </div>
-              <Select id="job-client" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value, contactId: '' })} required disabled={Boolean(newClient)}>
-                <option value="">{clients.length === 0 ? 'No clients yet — add one' : 'Select client...'}</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </Select>
+              <ClientPicker id="job-client" value={form.clientId} onChange={(clientId) => setForm((f) => ({ ...f, clientId, contactId: '' }))} required disabled={Boolean(newClient)} />
             </div>
             {isCompany && contacts.length > 0 && (
               <Field label="Contact Person" htmlFor="job-contact">

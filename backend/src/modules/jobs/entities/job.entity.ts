@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -15,6 +16,8 @@ import { JobUser } from './job-user.entity.js';
 import { JobFile } from './job-file.entity.js';
 import { JobLineItem } from './job-line-item.entity.js';
 
+@Index('IDX_jobs_status', ['status'])
+@Index('IDX_jobs_deadline', ['deadline'])
 @Entity('jobs')
 export class Job {
   @PrimaryGeneratedColumn('uuid')

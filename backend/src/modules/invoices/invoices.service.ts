@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { likeContains } from '../../common/utils/like.js';
 import { Repository, In, DataSource, EntityManager } from 'typeorm';
 import { Invoice } from './entities/invoice.entity.js';
 import { InvoiceItem } from './entities/invoice-item.entity.js';
@@ -87,6 +88,62 @@ export class InvoicesService {
   }
 
   /** Linked jobs must exist, belong to the invoice's client, and be editable by the caller. */
+  // A job is billed once: refuse to link it if another invoice that isn't
+  // cancelled already has it. Call inside a transaction after locking the
+  // app_settings row (lockSettings) so two concurrent invoices can't both pass.
+  private async assertJobsNotOnOtherInvoice(
+    manager: EntityManager,
+    items: { jobId?: string | null }[],
+    excludeInvoiceId?: string,
+  ): Promise<void> {
+    const jobIds = [
+      ...new Set(items.filter((i) => i.jobId).map((i) => i.jobId!)),
+    ];
+    if (jobIds.length === 0) return;
+    const qb = manager
+      .createQueryBuilder(InvoiceItem, 'item')
+      .innerJoin('item.invoice', 'inv')
+      .innerJoin('item.job', 'job')
+      .select([
+        'inv.invoiceNumber AS invoiceNumber',
+        'job.jobNumber AS jobNumber',
+      ])
+      .where('item.jobId IN (:...jobIds)', { jobIds })
+      .andWhere("inv.status != 'cancelled'");
+    if (excludeInvoiceId) {
+      qb.andWhere('inv.id != :excludeInvoiceId', { excludeInvoiceId });
+    }
+    const clash = await qb.getRawOne<{
+      invoiceNumber: string;
+      jobNumber: string;
+    }>();
+    if (clash) {
+      throw new BadRequestException(
+        `${clash.jobNumber} is already on invoice ${clash.invoiceNumber}. Cancel that invoice first, or remove the job from this one.`,
+      );
+    }
+  }
+
+  // Dates are YYYY-MM-DD strings, so string comparison is date order.
+  private assertDueAfterIssue(issueDate?: string, dueDate?: string): void {
+    if (
+      issueDate &&
+      dueDate &&
+      String(dueDate).slice(0, 10) < String(issueDate).slice(0, 10)
+    ) {
+      throw new BadRequestException(
+        'The due date cannot be before the issue date',
+      );
+    }
+  }
+
+  private async lockSettings(manager: EntityManager): Promise<void> {
+    await manager
+      .createQueryBuilder(AppSettings, 's')
+      .setLock('pessimistic_write')
+      .getMany();
+  }
+
   private async validateLinkedJobs(
     items: { jobId?: string }[],
     clientId: string,
@@ -214,7 +271,7 @@ export class InvoicesService {
     if (search) {
       qb.andWhere(
         '(inv.invoiceNumber LIKE :search OR client.name LIKE :search)',
-        { search: `%${search}%` },
+        { search: likeContains(search) },
       );
     }
     if (status) {
@@ -305,6 +362,7 @@ export class InvoicesService {
       this.settingsRepository.find(),
     ]);
     if (!client) throw new BadRequestException('Client not found');
+    this.assertDueAfterIssue(dto.issueDate, dto.dueDate);
     await this.validateLinkedJobs(dto.items, dto.clientId, userId, isAdmin);
     const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
@@ -316,10 +374,8 @@ export class InvoicesService {
     // Numbering + invoice + items in one transaction. Locking the settings row
     // serializes concurrent creates, so MAX()+1 never hands out a number twice.
     const savedId = await this.dataSource.transaction(async (manager) => {
-      await manager
-        .createQueryBuilder(AppSettings, 's')
-        .setLock('pessimistic_write')
-        .getMany();
+      await this.lockSettings(manager);
+      await this.assertJobsNotOnOtherInvoice(manager, dto.items);
       const invoiceNumber = await this.generateInvoiceNumber(manager);
       const invoice = manager.create(Invoice, {
         invoiceNumber,
@@ -373,6 +429,7 @@ export class InvoicesService {
     if (dto.notes !== undefined) invoice.notes = dto.notes;
     if (dto.currency) invoice.currency = dto.currency;
     if (dto.taxRate !== undefined) invoice.taxRate = dto.taxRate;
+    this.assertDueAfterIssue(invoice.issueDate, invoice.dueDate);
 
     if (dto.items) {
       if (dto.items.length === 0) {
@@ -398,6 +455,8 @@ export class InvoicesService {
 
     await this.dataSource.transaction(async (manager) => {
       if (dto.items) {
+        await this.lockSettings(manager);
+        await this.assertJobsNotOnOtherInvoice(manager, dto.items, id);
         await manager.delete(InvoiceItem, { invoiceId: id });
         await manager.save(
           dto.items.map((item, i) =>
@@ -440,6 +499,14 @@ export class InvoicesService {
       throw new BadRequestException(
         'This invoice has payments recorded. Delete them before cancelling it.',
       );
+    }
+
+    // Reviving a cancelled invoice: its jobs may have been billed elsewhere since.
+    if (status === 'draft') {
+      await this.dataSource.transaction(async (manager) => {
+        await this.lockSettings(manager);
+        await this.assertJobsNotOnOtherInvoice(manager, invoice.items, id);
+      });
     }
 
     const oldStatus = invoice.status;

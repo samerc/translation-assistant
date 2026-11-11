@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
@@ -12,6 +13,8 @@ import { Client } from '../../clients/entities/client.entity.js';
 import { InvoiceItem } from './invoice-item.entity.js';
 import { InvoicePayment } from './invoice-payment.entity.js';
 
+@Index('IDX_invoices_status', ['status'])
+@Index('IDX_invoices_dueDate', ['dueDate'])
 @Entity('invoices')
 export class Invoice {
   @PrimaryGeneratedColumn('uuid')

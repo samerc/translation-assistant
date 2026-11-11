@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { CheckIcon, MoonIcon, SunIcon } from '@/components/ui/icons';
-import { confirmDialog } from '@/lib/confirm';
+import { confirmDialog, alertDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { TranslateKeyForm } from '@/components/TranslateKeyForm';
 
@@ -967,6 +967,26 @@ function UsersSettings() {
     }
   };
 
+  const resetPassword = async (u: AdminUser) => {
+    if (!(await confirmDialog({
+      title: 'Reset password',
+      message: `Give ${u.email} a temporary password? They will be signed out everywhere and must choose a new password when they next log in.`,
+      confirmText: 'Reset password',
+    }))) return;
+    try {
+      const { temporaryPassword } = await api.post<{ temporaryPassword: string }>(`/users/${u.id}/reset-password`);
+      try { await navigator.clipboard.writeText(temporaryPassword); } catch { /* clipboard may be blocked */ }
+      await alertDialog({
+        title: 'Temporary password',
+        message: `${temporaryPassword}
+
+Send this to ${u.email} over a channel you trust. It is shown only once (it was also copied to your clipboard).`,
+      });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to reset password.');
+    }
+  };
+
   const remove = async (u: AdminUser) => {
     if (!(await confirmDialog(`Delete ${u.email}? This cannot be undone.`))) return;
     try {
@@ -1044,6 +1064,7 @@ function UsersSettings() {
                         <button onClick={() => toggleActive(u)} className="text-xs font-medium text-primary-text hover:underline mr-3">
                           {u.isActive ? 'Deactivate' : 'Activate'}
                         </button>
+                        <button onClick={() => resetPassword(u)} className="text-xs font-medium text-primary-text hover:underline mr-3">Reset password</button>
                         <button onClick={() => remove(u)} className="text-xs font-medium text-danger hover:underline">Delete</button>
                       </>
                     )}

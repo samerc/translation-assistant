@@ -21,6 +21,12 @@ import { DocumentsService } from '../src/modules/documents/documents.service.js'
 import { RolesService } from '../src/modules/roles/roles.service.js';
 import { UploadCleanupInterceptor } from '../src/common/interceptors/upload-cleanup.interceptor.js';
 import * as bcrypt from 'bcrypt';
+import {
+  cloudflareClientIp,
+  isCloudflareIp,
+  normalizeIp,
+} from '../src/common/utils/client-ip.js';
+import { likeContains } from '../src/common/utils/like.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
 import { JwtStrategy } from '../src/modules/auth/strategies/jwt.strategy.js';
 import { JwtRefreshStrategy } from '../src/modules/auth/strategies/jwt-refresh.strategy.js';
@@ -211,7 +217,7 @@ describe('Refresh-token architecture (AuthService)', () => {
     expect(new Set(hashes).size).toBe(hashes.length);
   });
 
-  it('refresh rotates the token and invalidates the old one (one-time use)', async () => {
+  it('refresh rotates the token; the new one keeps working', async () => {
     const login = await authService.login(
       { email: 'alice@example.com', password: 'Str0ng!Pass' },
       IP,
@@ -227,12 +233,6 @@ describe('Refresh-token architecture (AuthService)', () => {
     expect(rotated.refreshToken).not.toEqual(login.refreshToken);
     expect(jwtService.verify(rotated.refreshToken).type).toBe('refresh');
 
-    // Re-using the OLD refresh token must now fail (rotation replaced the hash).
-    await expect(
-      authService.refreshTokens(user.id, login.refreshToken, IP, UA),
-    ).rejects.toThrow(ForbiddenException);
-
-    // The NEW token still works.
     const again = await authService.refreshTokens(
       user.id,
       rotated.refreshToken,
@@ -240,6 +240,29 @@ describe('Refresh-token architecture (AuthService)', () => {
       UA,
     );
     expect(again.refreshToken).toBeDefined();
+  });
+
+  it('replaying an already-rotated refresh token revokes the whole session (reuse detection)', async () => {
+    const login = await authService.login(
+      { email: 'alice@example.com', password: 'Str0ng!Pass' },
+      IP,
+      UA,
+    );
+    const rotated = await authService.refreshTokens(
+      user.id,
+      login.refreshToken,
+      IP,
+      UA,
+    );
+
+    // The OLD token is refused (one-time use)…
+    await expect(
+      authService.refreshTokens(user.id, login.refreshToken, IP, UA),
+    ).rejects.toThrow(ForbiddenException);
+    // …and because it was a replay, the current token dies with the session.
+    await expect(
+      authService.refreshTokens(user.id, rotated.refreshToken, IP, UA),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('rejects an unknown / forged refresh token', async () => {
@@ -252,22 +275,25 @@ describe('Refresh-token architecture (AuthService)', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('revokes the session on IP/device fingerprint mismatch', async () => {
+  it('an IP / device change is recorded but does not end the session', async () => {
     const login = await authService.login(
       { email: 'alice@example.com', password: 'Str0ng!Pass' },
       IP,
       UA,
     );
 
-    // Same token, different IP → treated as suspicious, session revoked.
-    await expect(
-      authService.refreshTokens(user.id, login.refreshToken, '203.0.113.9', UA),
-    ).rejects.toThrow(ForbiddenException);
-
-    // Even from the correct IP, the now-revoked session can't refresh.
-    await expect(
-      authService.refreshTokens(user.id, login.refreshToken, IP, UA),
-    ).rejects.toThrow(ForbiddenException);
+    // Wi-Fi → mobile data, a new Cloudflare edge, a browser update: normal.
+    const rotated = await authService.refreshTokens(
+      user.id,
+      login.refreshToken,
+      '203.0.113.9',
+      UA + ' Updated/2',
+    );
+    expect(rotated.refreshToken).toBeDefined();
+    const session = sessionRepo.rows.find(
+      (r) => r.previousRefreshTokenHash && r.ipAddress === '203.0.113.9',
+    );
+    expect(session).toBeDefined(); // the session now shows the current IP
   });
 
   it('logout revokes the session so its refresh token stops working', async () => {
@@ -969,6 +995,14 @@ describe('Data integrity (Batch B)', () => {
       save: jest.fn(),
       create: (_e: unknown, o: unknown) => o,
       update: jest.fn(),
+      // settings-row lock taken before items are replaced
+      createQueryBuilder: () => {
+        const qb = {
+          setLock: () => qb,
+          getMany: () => Promise.resolve([]),
+        };
+        return qb;
+      },
     };
     const invoiceRepo = { save: jest.fn() };
     const svc = new InvoicesService(
@@ -1099,5 +1133,67 @@ describe('Invoice status vs payments', () => {
     await expect(svc.updateStatus('inv-1', 'cancelled')).rejects.toThrow(
       /payments recorded/,
     );
+  });
+});
+
+describe('Client IP behind Cloudflare', () => {
+  const req = (peer: string, headers: Record<string, string>) =>
+    ({ socket: { remoteAddress: peer }, headers }) as any;
+
+  it('uses CF-Connecting-IP when the request came Cloudflare → IIS (loopback)', () => {
+    expect(
+      cloudflareClientIp(
+        req('::1', {
+          'x-forwarded-for': '198.51.100.7, 162.158.10.20:44321',
+          'cf-connecting-ip': '198.51.100.7',
+        }),
+      ),
+    ).toBe('198.51.100.7');
+  });
+
+  it('ignores CF-Connecting-IP on a direct hit to the origin (spoofed headers)', () => {
+    // Attacker 203.0.113.5 → IIS directly: the hop IIS records is the attacker.
+    expect(
+      cloudflareClientIp(
+        req('127.0.0.1', {
+          'x-forwarded-for': '162.158.1.1, 203.0.113.5:5000',
+          'cf-connecting-ip': '1.2.3.4',
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('ignores it when the TCP peer is not the local proxy', () => {
+    expect(
+      cloudflareClientIp(
+        req('162.158.10.20', {
+          'x-forwarded-for': '162.158.10.20',
+          'cf-connecting-ip': '1.2.3.4',
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it('normalizes ports, brackets and IPv4-mapped addresses', () => {
+    expect(normalizeIp('1.2.3.4:80')).toBe('1.2.3.4');
+    expect(normalizeIp('[2606:4700::1]:443')).toBe('2606:4700::1');
+    expect(normalizeIp('::ffff:10.0.0.1')).toBe('10.0.0.1');
+    expect(normalizeIp('not-an-ip')).toBeNull();
+  });
+});
+
+describe('Search LIKE escaping (like.ts)', () => {
+  it('matches %, _ and backslash literally', () => {
+    expect(likeContains('50%_off')).toBe('%50\\%\\_off%');
+    expect(likeContains('a\\b')).toBe('%a\\\\b%');
+  });
+});
+
+describe('isCloudflareIp', () => {
+  it('knows Cloudflare v4 and v6 ranges', () => {
+    expect(isCloudflareIp('162.158.10.20')).toBe(true);
+    expect(isCloudflareIp('2606:4700::1')).toBe(true);
+    expect(isCloudflareIp('8.8.8.8')).toBe(false);
+    expect(isCloudflareIp(null)).toBe(false);
   });
 });
