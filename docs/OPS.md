@@ -160,11 +160,17 @@ applied automatically on boot.
 Prod is proxied by Cloudflare. Configure it **per hostname** so other sites on the
 server and other fancyshark.com subdomains are unaffected.
 
-1. **Origin certificate:** Cloudflare → SSL/TLS → Origin Server → Create certificate
-   (hostname `translate.fancyshark.com`, 15 years). Import it into the server's
-   certificate store (as PFX) and add an IIS **https** binding on 443 for the
-   Translation Assistant site with **host name `translate.fancyshark.com` and
-   "Require Server Name Indication" ticked**. SNI keeps it from touching other sites.
+1. **Origin certificate:** Cloudflare → SSL/TLS → Origin Server → Create certificate.
+   The default hostnames (`*.fancyshark.com`, `fancyshark.com`), RSA 2048 and 15 years
+   are fine; the wildcard can be reused by other proxied subdomains on this server.
+   Key format **PEM**; save the certificate as `origin.pem` and the private key as
+   `origin.key` **before closing the page** (the key is shown only once). IIS needs a
+   PFX: `openssl pkcs12 -export -out fancyshark-origin.pfx -inkey origin.key -in origin.pem`
+   (Git Bash has openssl; set an export password). Then delete `origin.key`.
+   On the server: IIS Manager → server node → Server Certificates → Import → the PFX
+   (store: Web Hosting). Add an **https** binding on 443 to the Translation Assistant
+   site with **host name `translate.fancyshark.com`, "Require Server Name Indication"
+   ticked**, certificate = the imported one. SNI keeps it from touching other sites.
 2. **Encrypt Cloudflare → origin:** Rules → Configuration Rules → Create rule:
    hostname equals `translate.fancyshark.com` → SSL: **Full (strict)**. (Changing the
    zone-wide SSL mode instead would apply to every subdomain.)
