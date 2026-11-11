@@ -52,7 +52,10 @@ try {
   Remove-Item $sql -Force
   Log "DB backup: $dbZip ($([math]::Round((Get-Item $dbZip).Length / 1KB)) KB)"
 
-  if (Test-Path $UploadsDir) {
+  if ((Test-Path $UploadsDir) -and -not (Get-ChildItem $UploadsDir -Recurse -File | Select-Object -First 1)) {
+    # Compress-Archive writes no zip at all for empty folders.
+    Log "Uploads: no files yet, skipped"
+  } elseif (Test-Path $UploadsDir) {
     Compress-Archive -Path (Join-Path $UploadsDir '*') -DestinationPath $upZip -Force
     Log "Uploads backup: $upZip ($([math]::Round((Get-Item $upZip).Length / 1MB, 1)) MB)"
   } else {
