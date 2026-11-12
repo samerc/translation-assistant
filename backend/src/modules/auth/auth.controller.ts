@@ -20,6 +20,12 @@ import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { InviteDto } from './dto/invite.dto.js';
 import {
+  SignupDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
+} from './dto/signup.dto.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import {
   ForgotPasswordDto,
   ResetPasswordDto,
   VerifyResetTokenDto,
@@ -175,8 +181,38 @@ export class AuthController {
   @RequirePermissions('users:create')
   @AdminOnly()
   @Throttle({ default: { limit: 5, ttl: 3600000 } })
-  async createInvite(@Body() dto: InviteDto) {
-    return this.authService.createInvite(dto.email, dto.roleId);
+  async createInvite(@Body() dto: InviteDto, @CurrentActor() actor: Actor) {
+    // Invites always join the inviting admin's own organization.
+    return this.authService.createInvite(dto.email, dto.roleId, actor.tenantId);
+  }
+
+  // ── Self sign-up (public; organizations wait for platform approval) ──
+
+  /** For the login/sign-up pages: are sign-ups open, and the Turnstile site key (public). */
+  @Get('signup-status')
+  async signupStatus() {
+    return this.authService.signupStatus();
+  }
+
+  @Post('signup')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 3600000 } })
+  async signup(@Body() dto: SignupDto, @Req() req: Request) {
+    return this.authService.signup(dto, this.getIp(req));
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto.token);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 600000 } })
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto.email);
   }
 
   @Post('file-token')

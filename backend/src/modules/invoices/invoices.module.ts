@@ -8,7 +8,6 @@ import { InvoiceItem } from './entities/invoice-item.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
-import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { MailModule } from '../mail/mail.module.js';
 
@@ -20,7 +19,6 @@ import { MailModule } from '../mail/mail.module.js';
       Job,
       JobUser,
       Client,
-      AppSettings,
       User,
     ]),
     MailModule,

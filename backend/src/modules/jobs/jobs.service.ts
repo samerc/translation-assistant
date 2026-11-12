@@ -10,6 +10,7 @@ import { likeContains } from '../../common/utils/like.js';
 import {
   Repository,
   In,
+  Brackets,
   DataSource,
   EntityManager,
   QueryFailedError,
@@ -23,7 +24,9 @@ import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { Language } from '../settings/entities/language.entity.js';
-import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { Contact } from '../clients/entities/contact.entity.js';
+import { lockTenantSettings } from '../tenants/tenant-lock.js';
+import type { Actor } from '../../common/tenancy/actor.js';
 import { User } from '../users/entities/user.entity.js';
 import { InvoiceItem } from '../invoices/entities/invoice-item.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
@@ -86,18 +89,19 @@ export class JobsService {
     }
   }
 
-  // MAX(existing) + 1, not COUNT(*), so numbers aren't reused after deletion.
-  // Call inside the create transaction: it first locks the app_settings row
-  // (same lock invoice numbering uses), so concurrent creates are serialized
-  // and never pick the same number.
-  private async generateJobNumber(manager: EntityManager): Promise<string> {
-    await manager
-      .createQueryBuilder(AppSettings, 's')
-      .setLock('pessimistic_write')
-      .getMany();
+  // MAX(existing) + 1 within the tenant, not COUNT(*), so numbers aren't reused
+  // after deletion. Call inside the create transaction: it first locks the
+  // tenant's settings row (same lock invoice numbering uses), so concurrent
+  // creates in one tenant are serialized and never pick the same number.
+  private async generateJobNumber(
+    manager: EntityManager,
+    tenantId: string,
+  ): Promise<string> {
+    await lockTenantSettings(manager, tenantId);
     const result = await manager
       .createQueryBuilder(Job, 'job')
       .select('MAX(CAST(SUBSTRING(job.jobNumber, 5) AS UNSIGNED))', 'maxNum')
+      .where('job.tenant_id = :tenantId', { tenantId })
       .getRawOne<{ maxNum: string | number | null }>();
     const nextNum = Number(result?.maxNum ?? 0) + 1;
     return `JOB-${String(nextNum).padStart(4, '0')}`;
@@ -118,6 +122,43 @@ export class JobsService {
     return item.pageCount * price;
   }
 
+  /** A language the tenant may use: global, or the tenant's own. */
+  private findLanguage(id: string, tenantId: string) {
+    return this.languageRepository
+      .createQueryBuilder('l')
+      .where('l.id = :id', { id })
+      .andWhere(
+        new Brackets((w) =>
+          w
+            .where('l.tenant_id IS NULL')
+            .orWhere('l.tenant_id = :tenantId', { tenantId }),
+        ),
+      )
+      .getOne();
+  }
+
+  /** A contact must belong to the job's client (and so to the same tenant). */
+  private async assertContactOfClient(
+    contactId: string,
+    clientId: string,
+  ): Promise<void> {
+    const found = await this.dataSource
+      .getRepository(Contact)
+      .count({ where: { id: contactId, clientId } });
+    if (!found) throw new BadRequestException('Contact not found');
+  }
+
+  /** Templates referenced by line items must be the tenant's own. */
+  private async findTenantTemplates(
+    ids: string[],
+    tenantId: string,
+  ): Promise<Template[]> {
+    if (ids.length === 0) return [];
+    return this.templateRepository.find({
+      where: { id: In(ids), tenantId },
+    });
+  }
+
   async findAll(query: {
     search?: string;
     status?: string;
@@ -128,8 +169,7 @@ export class JobsService {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
-    userId?: string;
-    isAdmin?: boolean;
+    actor: Actor;
   }) {
     const {
       search,
@@ -146,15 +186,16 @@ export class JobsService {
       .createQueryBuilder('job')
       .leftJoinAndSelect('job.client', 'client')
       .leftJoinAndSelect('job.sourceLanguage', 'sourceLang')
-      .leftJoinAndSelect('job.targetLanguage', 'targetLang');
+      .leftJoinAndSelect('job.targetLanguage', 'targetLang')
+      .where('job.tenant_id = :tenantId', { tenantId: query.actor.tenantId });
 
     // Non-admin users can only see jobs they are assigned to
-    if (query.userId && !query.isAdmin) {
+    if (!query.actor.isAdmin) {
       qb.innerJoin(
         'job.assignedUsers',
         'jobUser',
         'jobUser.user_id = :userId',
-        { userId: query.userId },
+        { userId: query.actor.userId },
       );
     }
 
@@ -232,39 +273,39 @@ export class JobsService {
     return job;
   }
 
-  async create(
-    dto: CreateJobDto,
-    userId: string,
-    isAdmin = false,
-  ): Promise<Job> {
-    // Validate referenced entities in parallel
-    const templateIds = (dto.lineItems || [])
-      .map((li) => li.templateId)
-      .filter(Boolean) as string[];
+  async create(dto: CreateJobDto, actor: Actor): Promise<Job> {
+    const { tenantId, userId } = actor;
+    // Validate referenced entities in parallel — all within the caller's tenant
+    const templateIds = [
+      ...new Set(
+        (dto.lineItems || [])
+          .map((li) => li.templateId)
+          .filter(Boolean) as string[],
+      ),
+    ];
 
     const [client, sourceLang, targetLang, templates] = await Promise.all([
-      this.clientRepository.findOne({ where: { id: dto.clientId } }),
-      this.languageRepository.findOne({ where: { id: dto.sourceLanguageId } }),
+      this.clientRepository.findOne({ where: { id: dto.clientId, tenantId } }),
+      this.findLanguage(dto.sourceLanguageId, tenantId),
       dto.targetLanguageId
-        ? this.languageRepository.findOne({
-            where: { id: dto.targetLanguageId },
-          })
+        ? this.findLanguage(dto.targetLanguageId, tenantId)
         : Promise.resolve(null),
-      templateIds.length > 0
-        ? this.templateRepository.find({ where: { id: In(templateIds) } })
-        : Promise.resolve([]),
+      this.findTenantTemplates(templateIds, tenantId),
     ]);
 
     if (!client) throw new BadRequestException('Client not found');
     // A non-admin can only open jobs for clients they can already see —
     // otherwise any client id would grant access to that client.
-    if (!isAdmin) {
+    if (!actor.isAdmin) {
       const visible = await this.clientRepository
         .createQueryBuilder('client')
         .where('client.id = :clientId', { clientId: dto.clientId })
         .andWhere(clientVisibleSql('client'), { accessUserId: userId })
         .getCount();
       if (!visible) throw new BadRequestException('Client not found');
+    }
+    if (dto.contactId) {
+      await this.assertContactOfClient(dto.contactId, dto.clientId);
     }
     if (!sourceLang) throw new BadRequestException('Source language not found');
     if (!sourceLang.isActive)
@@ -286,8 +327,9 @@ export class JobsService {
 
     // Wrap all writes in a transaction
     const savedId = await this.dataSource.transaction(async (manager) => {
-      const jobNumber = await this.generateJobNumber(manager);
+      const jobNumber = await this.generateJobNumber(manager, tenantId);
       const job = manager.create(Job, {
+        tenantId,
         jobNumber,
         type: dto.type,
         title: dto.title,
@@ -330,7 +372,11 @@ export class JobsService {
         const docsToCreate = templates
           .filter((t) => t.type !== 'simple')
           .map((t) =>
-            manager.create(Document, { jobId: saved.id, templateId: t.id }),
+            manager.create(Document, {
+              tenantId,
+              jobId: saved.id,
+              templateId: t.id,
+            }),
           );
         if (docsToCreate.length > 0) {
           await manager.save(docsToCreate);
@@ -362,6 +408,10 @@ export class JobsService {
       throw new BadRequestException(
         'Cannot edit a locked job. Reopen it first.',
       );
+    }
+
+    if (dto.contactId) {
+      await this.assertContactOfClient(dto.contactId, job.clientId);
     }
 
     // Route status changes through updateStatus() so transition rules + notifications apply.
@@ -421,6 +471,13 @@ export class JobsService {
   ): Promise<JobLineItem> {
     const job = await this.findOneBasic(jobId);
     if (this.isLocked(job)) throw new BadRequestException('Job is locked');
+    if (item.templateId) {
+      const [template] = await this.findTenantTemplates(
+        [item.templateId],
+        job.tenantId,
+      );
+      if (!template) throw new BadRequestException('Template not found');
+    }
 
     const maxSort = await this.lineItemRepository
       .createQueryBuilder('li')
@@ -553,10 +610,11 @@ export class JobsService {
     permissionLevel: 'view' | 'edit' = 'edit',
   ): Promise<JobUser> {
     // Validate both exist in parallel
-    const [job, user] = await Promise.all([
-      this.findOneBasic(jobId),
-      this.userRepository.findOne({ where: { id: userId } }),
-    ]);
+    const job = await this.findOneBasic(jobId);
+    // Only colleagues from the job's own organization can be assigned.
+    const user = await this.userRepository.findOne({
+      where: { id: userId, tenantId: job.tenantId },
+    });
     if (!user) throw new BadRequestException('User not found');
 
     const updateExisting = async (): Promise<JobUser | null> => {
@@ -631,6 +689,11 @@ export class JobsService {
     fileId: string,
   ): Promise<JobFile> {
     await this.assertUnlocked(jobId);
+    const target = await this.findOneBasic(jobId);
+    const sameTenant = await this.jobRepository.count({
+      where: { id: sourceJobId, tenantId: target.tenantId },
+    });
+    if (!sameTenant) throw new NotFoundException('Source file not found');
     const sourceFile = await this.jobFileRepository.findOne({
       where: { id: fileId, jobId: sourceJobId },
     });

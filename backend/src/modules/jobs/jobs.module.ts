@@ -6,7 +6,6 @@ import { Job } from './entities/job.entity.js';
 import { JobUser } from './entities/job-user.entity.js';
 import { JobFile } from './entities/job-file.entity.js';
 import { JobLineItem } from './entities/job-line-item.entity.js';
-import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { Document } from '../documents/entities/document.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
@@ -23,7 +22,6 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
       JobUser,
       JobFile,
       JobLineItem,
-      AppSettings,
       Document,
       Template,
       Client,

@@ -5,7 +5,10 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Tenant } from '../../tenants/entities/tenant.entity.js';
 import { Contact } from './contact.entity.js';
 import { PassportCopy } from './passport-copy.entity.js';
 import { ClientEmail } from './client-email.entity.js';
@@ -16,6 +19,13 @@ import { ClientAddress } from './client-address.entity.js';
 export class Client {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @ManyToOne(() => Tenant)
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId: string;
 
   @Column({ type: 'enum', enum: ['company', 'person'] })
   type: 'company' | 'person';

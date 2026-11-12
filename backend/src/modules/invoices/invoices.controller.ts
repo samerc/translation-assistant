@@ -32,6 +32,8 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { actorOf } from '../../common/tenancy/actor.js';
+import { TenantsService } from '../tenants/tenants.service.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 @Controller('invoices')
@@ -41,11 +43,8 @@ export class InvoicesController {
     private readonly invoicesService: InvoicesService,
     private readonly exportService: InvoiceExportService,
     private readonly mailService: MailService,
+    private readonly tenantsService: TenantsService,
   ) {}
-
-  private isAdmin(user: User): boolean {
-    return user.role?.name === 'Admin';
-  }
 
   @Get()
   @RequirePermissions('invoices:read')
@@ -71,8 +70,7 @@ export class InvoicesController {
       to: to || undefined,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
-      userId: user.id,
-      isAdmin: this.isAdmin(user),
+      actor: actorOf(user),
     });
   }
 
@@ -82,11 +80,8 @@ export class InvoicesController {
     @Param('jobId', ParseUUIDPipe) jobId: string,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyJobAccess(
-      jobId,
-      user.id,
-      this.isAdmin(user),
-    );
+    const actor = actorOf(user);
+    await this.invoicesService.verifyJobAccess(jobId, actor);
     return this.invoicesService.findByJob(jobId);
   }
 
@@ -96,17 +91,14 @@ export class InvoicesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    return this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    const actor = actorOf(user);
+    return this.invoicesService.verifyInvoiceAccess(id, actor);
   }
 
   @Post()
   @RequirePermissions('invoices:create')
   create(@Body() dto: CreateInvoiceDto, @CurrentUser() user: User) {
-    return this.invoicesService.create(dto, user.id, this.isAdmin(user));
+    return this.invoicesService.create(dto, actorOf(user));
   }
 
   @Patch(':id')
@@ -116,13 +108,9 @@ export class InvoicesController {
     @Body() dto: UpdateInvoiceDto,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
-    return this.invoicesService.update(id, dto, user.id, this.isAdmin(user));
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor, 'edit');
+    return this.invoicesService.update(id, dto, actor);
   }
 
   @Patch(':id/status')
@@ -132,12 +120,8 @@ export class InvoicesController {
     @Body() dto: UpdateInvoiceStatusDto,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor, 'edit');
     return this.invoicesService.updateStatus(id, dto.status);
   }
 
@@ -148,13 +132,9 @@ export class InvoicesController {
     @Body() dto: RecordPaymentDto,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
-    return this.invoicesService.recordPayment(id, dto, user.id);
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor, 'edit');
+    return this.invoicesService.recordPayment(id, dto, actor.userId);
   }
 
   @Delete(':id/payments/:paymentId')
@@ -164,12 +144,8 @@ export class InvoicesController {
     @Param('paymentId', ParseUUIDPipe) paymentId: string,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor, 'edit');
     return this.invoicesService.removePayment(id, paymentId);
   }
 
@@ -180,11 +156,8 @@ export class InvoicesController {
     @Res() res: Response,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor);
     const { filePath, fileName } = await this.exportService.exportPdf(id);
     if (!existsSync(filePath))
       throw new NotFoundException('Export file not found');
@@ -200,11 +173,8 @@ export class InvoicesController {
     @Res() res: Response,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor);
     const { filePath, fileName } = await this.exportService.exportWord(id);
     if (!existsSync(filePath))
       throw new NotFoundException('Export file not found');
@@ -226,10 +196,10 @@ export class InvoicesController {
     @Body() dto: SendInvoiceEmailDto,
     @CurrentUser() user: User,
   ) {
+    const actor = actorOf(user);
     const invoice = await this.invoicesService.verifyInvoiceAccess(
       id,
-      user.id,
-      this.isAdmin(user),
+      actor,
       'edit',
     );
     const recipient =
@@ -240,12 +210,19 @@ export class InvoicesController {
       );
     }
     const { filePath } = await this.exportService.exportPdf(id);
+    // Sent from the platform's mailbox under the sender's business name (My
+    // Business, else the organization); replies go to the sender.
+    const settings = await this.tenantsService.getSettings(actor.tenantId);
     try {
       await this.mailService.sendInvoiceEmail(
         recipient,
         invoice.invoiceNumber,
         filePath,
         dto.message,
+        {
+          name: user.businessName || settings.companyName,
+          replyTo: user.email,
+        },
       );
     } finally {
       try {
@@ -263,12 +240,8 @@ export class InvoicesController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ) {
-    await this.invoicesService.verifyInvoiceAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+    const actor = actorOf(user);
+    await this.invoicesService.verifyInvoiceAccess(id, actor, 'edit');
     return this.invoicesService.remove(id);
   }
 }

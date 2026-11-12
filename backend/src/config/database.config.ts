@@ -1,4 +1,5 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { TenantIsolationSubscriber } from '../common/tenancy/tenant-isolation.subscriber.js';
 
 // Schema management strategy:
 //  - Dev: `synchronize` auto-syncs entities → schema for fast iteration.
@@ -25,6 +26,8 @@ export const databaseConfig = (): TypeOrmModuleOptions => {
     database: process.env.DB_DATABASE || 'translation_assistant',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../migrations/*{.ts,.js}'],
+    // Refuses entities of another tenant inside a tenant request (safety net).
+    subscribers: [TenantIsolationSubscriber],
     synchronize,
     migrationsRun: !synchronize, // run pending migrations on boot when not syncing
     charset: 'utf8mb4',

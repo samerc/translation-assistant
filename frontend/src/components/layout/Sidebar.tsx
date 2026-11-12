@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useAuth } from '@/lib/auth-context';
 import {
-  BellIcon, BriefcaseIcon, CalendarIcon, ChartIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UsersIcon, XIcon,
+  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UsersIcon, XIcon,
 } from '@/components/ui/icons';
 
 interface NavItem {
@@ -39,6 +39,13 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   },
 ];
 
+// The platform admin manages organizations, not an organization's work.
+const platformGroups: { label?: string; items: NavItem[] }[] = [
+  {
+    items: [{ label: 'Organizations', href: '/platform', icon: BuildingIcon }],
+  },
+];
+
 const bottomItems: NavItem[] = [
   { label: 'Notifications', href: '/notifications', icon: BellIcon },
   { label: 'Settings', href: '/settings', icon: SettingsIcon },
@@ -47,7 +54,8 @@ const bottomItems: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { collapsed, toggle, mobileOpen, setMobileOpen } = useSidebar();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const groups = user?.isPlatformAdmin ? platformGroups : navGroups;
 
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/'));
 
@@ -88,7 +96,13 @@ export default function Sidebar() {
         {/* Brand */}
         <div className={`flex items-center h-14 gap-2.5 ${collapsed ? 'md:justify-center md:px-0 px-4' : 'px-4'}`}>
           <div className="w-7 h-7 rounded-lg bg-primary text-white grid place-items-center text-xs font-bold flex-none">TA</div>
-          <span className={`font-bold text-sm tracking-tight text-text truncate ${collapsed ? 'md:hidden' : ''}`}>Translation Assistant</span>
+          <div className={`min-w-0 ${collapsed ? 'md:hidden' : ''}`}>
+            <div className="font-bold text-sm tracking-tight text-text truncate">Translation Assistant</div>
+            {/* Which organization you're working in (or the platform area). */}
+            <div className="text-[11px] text-text-muted truncate" title={user?.tenant?.name}>
+              {user?.isPlatformAdmin ? 'Platform administration' : user?.tenant?.name}
+            </div>
+          </div>
           <button
             onClick={() => setMobileOpen(false)}
             className="ml-auto btn btn-ghost btn-icon btn-sm md:hidden"
@@ -100,7 +114,7 @@ export default function Sidebar() {
 
         {/* Nav groups */}
         <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-3 flex flex-col gap-5" aria-label="Main">
-          {navGroups.map((group, i) => {
+          {groups.map((group, i) => {
             const items = group.items.filter((item) => !item.permission || hasPermission(item.permission));
             if (items.length === 0) return null;
             return (

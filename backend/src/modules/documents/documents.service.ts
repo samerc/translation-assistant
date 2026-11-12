@@ -13,6 +13,8 @@ import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { CreateDocumentDto, FieldValueDto } from './dto/document.dto.js';
+import { Template } from '../templates/entities/template.entity.js';
+import type { Actor } from '../../common/tenancy/actor.js';
 
 // Mirrors JobsService.LOCKED_STATUSES.
 const LOCKED_JOB_STATUSES = ['delivered', 'invoiced', 'paid'];
@@ -32,24 +34,24 @@ export class DocumentsService {
   // and nobody (admins included) changes the documents of a locked job.
   async verifyJobAccess(
     jobId: string,
-    userId: string,
-    isAdmin: boolean,
+    actor: Actor,
     level: 'view' | 'edit' = 'view',
   ): Promise<void> {
-    if (level === 'edit') {
-      const job = await this.documentRepository.manager.findOne(Job, {
-        where: { id: jobId },
-        select: { id: true, status: true },
-      });
-      if (job && LOCKED_JOB_STATUSES.includes(job.status)) {
-        throw new BadRequestException(
-          'This job is locked (delivered, invoiced or paid). Reopen it to change its documents.',
-        );
-      }
+    // The job must be in the caller's tenant — another tenant's job answers
+    // like one that doesn't exist.
+    const job = await this.documentRepository.manager.findOne(Job, {
+      where: { id: jobId, tenantId: actor.tenantId },
+      select: { id: true, status: true, tenantId: true },
+    });
+    if (!job) throw new NotFoundException('Job not found');
+    if (level === 'edit' && LOCKED_JOB_STATUSES.includes(job.status)) {
+      throw new BadRequestException(
+        'This job is locked (delivered, invoiced or paid). Reopen it to change its documents.',
+      );
     }
-    if (isAdmin) return;
+    if (actor.isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
-      where: { jobId, userId },
+      where: { jobId, userId: actor.userId },
     });
     if (!assignment) {
       throw new ForbiddenException('You do not have access to this job');
@@ -61,12 +63,15 @@ export class DocumentsService {
 
   async verifyDocumentAccess(
     documentId: string,
-    userId: string,
-    isAdmin: boolean,
+    actor: Actor,
     level: 'view' | 'edit' = 'view',
   ): Promise<Document> {
+    const inTenant = await this.documentRepository.count({
+      where: { id: documentId, tenantId: actor.tenantId },
+    });
+    if (!inTenant) throw new NotFoundException('Document not found');
     const doc = await this.findOne(documentId);
-    await this.verifyJobAccess(doc.jobId, userId, isAdmin, level);
+    await this.verifyJobAccess(doc.jobId, actor, level);
     return doc;
   }
 
@@ -107,8 +112,14 @@ export class DocumentsService {
     return doc;
   }
 
-  async create(dto: CreateDocumentDto): Promise<Document> {
+  /** Call after verifyJobAccess(dto.jobId): the template must be the tenant's own. */
+  async create(dto: CreateDocumentDto, tenantId: string): Promise<Document> {
+    const template = await this.documentRepository.manager.count(Template, {
+      where: { id: dto.templateId, tenantId },
+    });
+    if (!template) throw new BadRequestException('Template not found');
     const doc = this.documentRepository.create({
+      tenantId,
       jobId: dto.jobId,
       templateId: dto.templateId,
       clonedFromId: dto.clonedFromId,
@@ -186,13 +197,20 @@ export class DocumentsService {
   }
 
   // Clone from existing document
-  async clone(sourceId: string, jobId: string): Promise<Document> {
+  async clone(
+    sourceId: string,
+    jobId: string,
+    tenantId: string,
+  ): Promise<Document> {
     const source = await this.findOne(sourceId);
-    return this.create({
-      jobId,
-      templateId: source.templateId,
-      clonedFromId: sourceId,
-    });
+    return this.create(
+      {
+        jobId,
+        templateId: source.templateId,
+        clonedFromId: sourceId,
+      },
+      tenantId,
+    );
   }
 
   // Search documents for cloning
@@ -200,23 +218,23 @@ export class DocumentsService {
     templateId?: string;
     search?: string;
     limit?: number;
-    userId?: string;
-    isAdmin?: boolean;
+    actor: Actor;
   }): Promise<Document[]> {
     const qb = this.documentRepository
       .createQueryBuilder('doc')
       .leftJoinAndSelect('doc.template', 'template')
       .leftJoinAndSelect('doc.job', 'job')
       .leftJoinAndSelect('job.client', 'client')
-      .where('doc.status = :status', { status: 'completed' });
+      .where('doc.tenant_id = :tenantId', { tenantId: query.actor.tenantId })
+      .andWhere('doc.status = :status', { status: 'completed' });
 
     // Non-admins can only see documents from their assigned jobs
-    if (query.userId && !query.isAdmin) {
+    if (!query.actor.isAdmin) {
       qb.innerJoin(
         'job_users',
         'ju',
         'ju.job_id = job.id AND ju.user_id = :userId',
-        { userId: query.userId },
+        { userId: query.actor.userId },
       );
     }
 

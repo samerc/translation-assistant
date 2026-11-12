@@ -29,6 +29,7 @@ export class Notification {
       'deadline_approaching',
       'invoice_overdue',
       'job_assigned',
+      'tenant_signup',
     ],
   })
   type: string;

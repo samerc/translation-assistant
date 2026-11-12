@@ -16,6 +16,7 @@ import { Job } from '../jobs/entities/job.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { clientVisibleSql } from './client-access.js';
+import type { Actor } from '../../common/tenancy/actor.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
 import { ClientAddress } from './entities/client-address.entity.js';
@@ -55,8 +56,7 @@ export class ClientsService {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
-    userId?: string;
-    isAdmin?: boolean;
+    actor: Actor;
   }) {
     const { search, type, sortBy = 'name', sortOrder = 'ASC' } = query;
     // Default params only apply to undefined — clamp explicitly (page=0, -1, NaN).
@@ -69,11 +69,16 @@ export class ClientsService {
     const qb = this.clientRepository
       .createQueryBuilder('client')
       .leftJoinAndSelect('client.emails', 'emails')
-      .leftJoinAndSelect('client.phones', 'phones');
+      .leftJoinAndSelect('client.phones', 'phones')
+      .where('client.tenant_id = :tenantId', {
+        tenantId: query.actor.tenantId,
+      });
 
     // Non-admins see clients they created or have jobs with
-    if (!query.isAdmin && query.userId) {
-      qb.andWhere(clientVisibleSql('client'), { accessUserId: query.userId });
+    if (!query.actor.isAdmin) {
+      qb.andWhere(clientVisibleSql('client'), {
+        accessUserId: query.actor.userId,
+      });
     }
 
     if (search) {
@@ -103,16 +108,20 @@ export class ClientsService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  async verifyClientAccess(
-    clientId: string,
-    userId: string,
-    isAdmin: boolean,
-  ): Promise<void> {
-    if (isAdmin) return;
+  /**
+   * The client must belong to the caller's tenant (404 otherwise — another
+   * tenant's ids don't "exist"), and a non-admin must also be able to see it.
+   */
+  async verifyClientAccess(clientId: string, actor: Actor): Promise<void> {
+    const inTenant = await this.clientRepository.count({
+      where: { id: clientId, tenantId: actor.tenantId },
+    });
+    if (!inTenant) throw new NotFoundException('Client not found');
+    if (actor.isAdmin) return;
     const hasAccess = await this.clientRepository
       .createQueryBuilder('client')
       .where('client.id = :clientId', { clientId })
-      .andWhere(clientVisibleSql('client'), { accessUserId: userId })
+      .andWhere(clientVisibleSql('client'), { accessUserId: actor.userId })
       .getCount();
     if (hasAccess === 0) {
       throw new ForbiddenException('You do not have access to this client');
@@ -134,10 +143,11 @@ export class ClientsService {
     return client;
   }
 
-  async create(dto: CreateClientDto, userId: string): Promise<Client> {
+  async create(dto: CreateClientDto, actor: Actor): Promise<Client> {
     const client = this.clientRepository.create({
       ...dto,
-      createdByUserId: userId,
+      tenantId: actor.tenantId,
+      createdByUserId: actor.userId,
     });
     const saved = await this.clientRepository.save(client);
     return this.findOne(saved.id);

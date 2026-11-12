@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
+import type { Actor } from '../../common/tenancy/actor.js';
 
 export interface CalendarEvent {
   id: string;
@@ -27,11 +28,11 @@ export class CalendarService {
   ) {}
 
   async getEvents(
-    userId: string,
-    isAdmin: boolean,
+    actor: Actor,
     month: number,
     year: number,
   ): Promise<CalendarEvent[]> {
+    const { userId, isAdmin, tenantId } = actor;
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -52,7 +53,8 @@ export class CalendarService {
       })
       .andWhere('job.status NOT IN (:...excluded)', {
         excluded: ['paid', 'cancelled', 'lost'],
-      });
+      })
+      .andWhere('job.tenant_id = :tenantId', { tenantId });
 
     if (!isAdmin) {
       jobQb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', {
@@ -72,7 +74,8 @@ export class CalendarService {
       })
       .andWhere('inv.status NOT IN (:...excluded)', {
         excluded: ['paid', 'cancelled'],
-      });
+      })
+      .andWhere('inv.tenant_id = :tenantId', { tenantId });
 
     if (!isAdmin) {
       invQb.andWhere(

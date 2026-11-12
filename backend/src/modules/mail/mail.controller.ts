@@ -10,9 +10,8 @@ import { AuthGuard } from '@nestjs/passport';
 import { IsEmail } from 'class-validator';
 import { MailService } from './mail.service.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
-import { AdminGuard } from '../../common/guards/admin.guard.js';
+import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
-import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 
 class SendTestEmailDto {
   @IsEmail()
@@ -24,9 +23,9 @@ export class MailController {
   constructor(private readonly mailService: MailService) {}
 
   @Post('test')
-  @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
-  @RequirePermissions('settings:update')
-  @AdminOnly()
+  // SMTP is platform-wide, so testing it is a platform-admin action.
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard, PlatformAdminGuard)
+  @RequirePermissions('platform:update')
   @HttpCode(HttpStatus.OK)
   async sendTest(@Body() dto: SendTestEmailDto) {
     await this.mailService.sendTestEmail(dto.to);

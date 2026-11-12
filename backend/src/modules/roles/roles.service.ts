@@ -1,19 +1,15 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Role } from './entities/role.entity.js';
 import { Permission } from './entities/permission.entity.js';
-import { CreateRoleDto, UpdateRoleDto } from './dto/create-role.dto.js';
+import { TENANT_ROLES } from '../../common/tenancy/roles.js';
 
-// AdminGuard and every isAdmin check match on this exact name, so the role is
-// fixed: renaming it, deleting it or trimming its permissions would lock every
-// admin out of the endpoints needed to undo the change.
-const ADMIN_ROLE = 'Admin';
-
+/**
+ * Roles are fixed (Admin / Translator / Viewer inside a tenant, plus Platform
+ * Admin). Their permissions are set by the seed on every boot, so this service
+ * only reads them — there is nothing to create, rename or delete.
+ */
 @Injectable()
 export class RolesService {
   constructor(
@@ -23,17 +19,19 @@ export class RolesService {
     private readonly permissionRepository: Repository<Permission>,
   ) {}
 
-  async findAll(): Promise<Role[]> {
+  /** The roles a tenant admin can give. */
+  findTenantRoles(): Promise<Role[]> {
     return this.roleRepository.find({
+      where: { name: In(TENANT_ROLES) },
       relations: {
         permissions: true,
       },
     });
   }
 
-  async findOne(id: string): Promise<Role> {
+  async findTenantRole(id: string): Promise<Role> {
     const role = await this.roleRepository.findOne({
-      where: { id },
+      where: { id, name: In(TENANT_ROLES) },
       relations: {
         permissions: true,
       },
@@ -42,54 +40,9 @@ export class RolesService {
     return role;
   }
 
-  async create(dto: CreateRoleDto): Promise<Role> {
-    const role = this.roleRepository.create({
-      name: dto.name,
-      description: dto.description,
-    });
-
-    if (dto.permissionIds?.length) {
-      role.permissions = await this.permissionRepository.findBy({
-        id: In(dto.permissionIds),
-      });
-    }
-
-    return this.roleRepository.save(role);
-  }
-
-  async update(id: string, dto: UpdateRoleDto): Promise<Role> {
-    const role = await this.findOne(id);
-
-    if (role.name === ADMIN_ROLE) {
-      const renamed = dto.name !== undefined && dto.name !== ADMIN_ROLE;
-      if (renamed || dto.permissionIds !== undefined) {
-        throw new BadRequestException(
-          'The Admin role cannot be renamed and always has every permission',
-        );
-      }
-    }
-
-    if (dto.name !== undefined) role.name = dto.name;
-    if (dto.description !== undefined) role.description = dto.description;
-
-    if (dto.permissionIds !== undefined) {
-      role.permissions = await this.permissionRepository.findBy({
-        id: In(dto.permissionIds),
-      });
-    }
-
-    return this.roleRepository.save(role);
-  }
-
-  async remove(id: string): Promise<void> {
-    const role = await this.findOne(id);
-    if (role.name === ADMIN_ROLE) {
-      throw new BadRequestException('The Admin role cannot be deleted');
-    }
-    await this.roleRepository.remove(role);
-  }
-
-  async findAllPermissions(): Promise<Permission[]> {
-    return this.permissionRepository.find();
+  /** The permission catalogue, minus the platform-only ones. */
+  async findTenantPermissions(): Promise<Permission[]> {
+    const all = await this.permissionRepository.find();
+    return all.filter((p) => p.resource !== 'platform');
   }
 }

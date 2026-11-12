@@ -190,60 +190,64 @@ export default function Topbar() {
         <MenuIcon className="w-5 h-5" />
       </button>
 
-      {/* Global Search */}
-      <div className="relative flex-1 min-w-0 max-w-md" ref={searchRef}>
-        <label className="input input-group bg-bg shadow-none">
-          <SearchIcon />
-          <input
-            ref={searchInputRef}
-            type="text"
-            aria-label="Search clients, jobs, templates and invoices"
-            placeholder="Search clients, jobs, invoices…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => { if (visibleResults) setShowSearch(true); }}
-            onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearch(false); e.currentTarget.blur(); } }}
-            className="text-sm"
-          />
-          <kbd className="hidden sm:inline-block font-mono text-[11px] leading-5 px-1.5 rounded border border-border bg-surface text-text-muted">Ctrl K</kbd>
-        </label>
-
-        {showSearch && visibleResults && (
-          <div className={`${dropdownClass} left-0 right-0 max-h-[28rem] overflow-y-auto py-1`}>
-            {searchLoading && <div className="px-4 py-3 text-sm text-text-muted">Searching…</div>}
-            {!searchLoading && totalResults === 0 && (
-              <div className="px-4 py-8 text-sm text-text-muted text-center">No results for &ldquo;{debouncedQuery}&rdquo;</div>
-            )}
-
-            <ResultGroup label="Clients" count={visibleResults.counts.clients}>
-              {visibleResults.clients.map((c) => (
-                <ResultRow key={c.id} icon={<UsersIcon />} title={c.name} subtitle={<span className="capitalize">{c.type}</span>}
-                  onClick={() => openResult(`/clients/${c.id}`)} />
-              ))}
-            </ResultGroup>
-            <ResultGroup label="Jobs" count={visibleResults.counts.jobs}>
-              {visibleResults.jobs.map((j) => (
-                <ResultRow key={j.id} icon={<BriefcaseIcon />} title={j.title}
-                  subtitle={<><span className="font-mono">{j.jobNumber}</span>{j.clientName ? ` · ${j.clientName}` : ''}</>}
-                  onClick={() => openResult(`/jobs/${j.id}`)} />
-              ))}
-            </ResultGroup>
-            <ResultGroup label="Templates" count={visibleResults.counts.templates}>
-              {visibleResults.templates.map((t) => (
-                <ResultRow key={t.id} icon={<FileTextIcon />} title={t.name} subtitle={<span className="capitalize">{t.type}</span>}
-                  onClick={() => openResult(`/templates/${t.id}`)} />
-              ))}
-            </ResultGroup>
-            <ResultGroup label="Invoices" count={visibleResults.counts.invoices}>
-              {visibleResults.invoices.map((inv) => (
-                <ResultRow key={inv.id} icon={<ReceiptIcon />} title={<span className="font-mono">{inv.invoiceNumber}</span>}
-                  subtitle={<>{inv.clientName} · <span className="capitalize">{inv.status}</span></>}
-                  onClick={() => openResult(`/invoices/${inv.id}`)} />
-              ))}
-            </ResultGroup>
-          </div>
-        )}
-      </div>
+      {/* Global Search (organization data; the platform admin has none) */}
+      {user?.isPlatformAdmin ? (
+        <div className="flex-1" />
+      ) : (
+        <div className="relative flex-1 min-w-0 max-w-md" ref={searchRef}>
+          <label className="input input-group bg-bg shadow-none">
+            <SearchIcon />
+            <input
+              ref={searchInputRef}
+              type="text"
+              aria-label="Search clients, jobs, templates and invoices"
+              placeholder="Search clients, jobs, invoices…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onFocus={() => { if (visibleResults) setShowSearch(true); }}
+              onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearch(false); e.currentTarget.blur(); } }}
+              className="text-sm"
+            />
+            <kbd className="hidden sm:inline-block font-mono text-[11px] leading-5 px-1.5 rounded border border-border bg-surface text-text-muted">Ctrl K</kbd>
+          </label>
+  
+          {showSearch && visibleResults && (
+            <div className={`${dropdownClass} left-0 right-0 max-h-[28rem] overflow-y-auto py-1`}>
+              {searchLoading && <div className="px-4 py-3 text-sm text-text-muted">Searching…</div>}
+              {!searchLoading && totalResults === 0 && (
+                <div className="px-4 py-8 text-sm text-text-muted text-center">No results for &ldquo;{debouncedQuery}&rdquo;</div>
+              )}
+  
+              <ResultGroup label="Clients" count={visibleResults.counts.clients}>
+                {visibleResults.clients.map((c) => (
+                  <ResultRow key={c.id} icon={<UsersIcon />} title={c.name} subtitle={<span className="capitalize">{c.type}</span>}
+                    onClick={() => openResult(`/clients/${c.id}`)} />
+                ))}
+              </ResultGroup>
+              <ResultGroup label="Jobs" count={visibleResults.counts.jobs}>
+                {visibleResults.jobs.map((j) => (
+                  <ResultRow key={j.id} icon={<BriefcaseIcon />} title={j.title}
+                    subtitle={<><span className="font-mono">{j.jobNumber}</span>{j.clientName ? ` · ${j.clientName}` : ''}</>}
+                    onClick={() => openResult(`/jobs/${j.id}`)} />
+                ))}
+              </ResultGroup>
+              <ResultGroup label="Templates" count={visibleResults.counts.templates}>
+                {visibleResults.templates.map((t) => (
+                  <ResultRow key={t.id} icon={<FileTextIcon />} title={t.name} subtitle={<span className="capitalize">{t.type}</span>}
+                    onClick={() => openResult(`/templates/${t.id}`)} />
+                ))}
+              </ResultGroup>
+              <ResultGroup label="Invoices" count={visibleResults.counts.invoices}>
+                {visibleResults.invoices.map((inv) => (
+                  <ResultRow key={inv.id} icon={<ReceiptIcon />} title={<span className="font-mono">{inv.invoiceNumber}</span>}
+                    subtitle={<>{inv.clientName} · <span className="capitalize">{inv.status}</span></>}
+                    onClick={() => openResult(`/invoices/${inv.id}`)} />
+                ))}
+              </ResultGroup>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Right side */}
       <div className="flex items-center gap-1 ml-auto">

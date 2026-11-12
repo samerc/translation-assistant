@@ -8,6 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Role } from '../../roles/entities/role.entity.js';
+import { Tenant } from '../../tenants/entities/tenant.entity.js';
 
 @Entity('users')
 export class User {
@@ -56,6 +57,19 @@ export class User {
   // embeds straight into PDF/Word exports and the UI with no file-serving layer.
   @Column({ type: 'mediumtext', nullable: true })
   logo: string | null;
+
+  // The organisation the user belongs to. Null only for platform admins, who
+  // manage tenants but never see tenant data.
+  @ManyToOne(() => Tenant, { nullable: true })
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant | null;
+
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+  tenantId: string | null;
+
+  // False only for self-signups that haven't clicked their email link yet.
+  @Column({ default: true })
+  emailVerified: boolean;
 
   @ManyToOne(() => Role, (role) => role.users, { eager: true })
   @JoinColumn({ name: 'role_id' })

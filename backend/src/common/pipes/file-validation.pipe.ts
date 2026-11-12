@@ -1,8 +1,7 @@
 import { Injectable, PipeTransform, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { extname } from 'path';
-import { AppSettings } from '../../modules/settings/entities/app-settings.entity.js';
+import { TenantsService } from '../../modules/tenants/tenants.service.js';
+import { requestTenantId } from '../tenancy/tenant-context.js';
 import {
   readHeaderBytes,
   sniffType,
@@ -16,19 +15,18 @@ export const UPLOAD_HARD_LIMIT_BYTES = 100 * 1024 * 1024;
 
 @Injectable()
 export class FileValidationPipe implements PipeTransform {
-  constructor(
-    @InjectRepository(AppSettings)
-    private readonly settingsRepository: Repository<AppSettings>,
-  ) {}
+  constructor(private readonly tenantsService: TenantsService) {}
 
   async transform(file: Express.Multer.File) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
 
-    const settings = await this.settingsRepository
-      .find({ take: 1 })
-      .then((r) => r[0] ?? null);
+    // Limits are the uploading user's organization's (Settings > File Uploads).
+    const tenantId = requestTenantId();
+    const settings = tenantId
+      ? await this.tenantsService.getSettings(tenantId)
+      : null;
 
     // Check file size
     const maxSizeMb = settings?.maxUploadSizeMb || 5;

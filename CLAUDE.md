@@ -1,9 +1,22 @@
 # Translation Assistant
 
 ## Project Overview
-Internal multi-user web application for freelance translators. Two core modules:
+Multi-tenant web application for translators and translation offices. Two core modules:
 1. **Freelance Job Management** — clients, contacts, jobs, invoicing, calendar, reporting
 2. **Document Translation** — template-based system with document designer and Word export
+
+Each **organization (tenant)** has its own users, clients, jobs, documents, templates, invoices and settings. A **platform admin** (no tenant) creates/approves/suspends organizations and manages platform settings, but never sees organization data. See **Multi-tenancy** below.
+
+## Multi-tenancy
+- **Model**: `Tenant` (name, status `pending|active|suspended`, source `platform|signup`, `plan` reserved for pricing). `tenant_id` (NOT NULL) on clients, jobs, documents, invoices, templates, freeform_job_types, invite_tokens, tenant_settings; nullable on users (NULL = platform admin), languages and label_options (NULL = global list; tenant-owned rows are reserved for a later "add your own" feature). Child tables (emails, line items, field values, payments…) belong to their parent — every child endpoint checks the parent first.
+- **Every query is scoped**: services take an `Actor` (`common/tenancy/actor.ts`: `{ userId, tenantId, isAdmin }`, `@CurrentActor()`, `actorOf(user)`). `verifyClientAccess/verifyJobAccess/verifyDocumentAccess/verifyInvoiceAccess` and `JobAccessGuard` check the tenant first for everyone (admins included) — another tenant's id answers **404**, never 403. Lists, search, reports, calendar add `tenant_id = :tenantId`. Referenced ids (client, contact, template, language, assigned user, linked job/file, clone source) must be in the caller's tenant (global languages allowed). `isAdmin` means the tenant's Admin — sees everything **in their tenant**.
+- **Safety net**: `TenantIsolationSubscriber` (TypeORM `afterLoad`) throws 404 + logs `[TENANT_ISOLATION_VIOLATION]` if an entity with another tenant's `tenantId` is loaded during a tenant request. The request tenant lives in AsyncLocalStorage (`tenant-context.ts`): opened by `TenantContextMiddleware` (Nest module middleware, after body parsers), bound by `JwtStrategy` / `actorForFileToken`. Not covered: raw/aggregate queries and partial selects without tenantId — scope those explicitly. Cron jobs and platform/public requests have no tenant bound.
+- **Platform admin**: role `Platform Admin`, `tenantId` NULL, permissions `platform:*` + notifications read/update only — so every tenant endpoint 403s for it (`PermissionsGuard`; `actorOf` also refuses). `/api/platform/*` is guarded by `PlatformAdminGuard` (role name + no tenant). It sees organizations' user accounts (names/emails/roles) to help with lockouts, never business data.
+- **Fixed roles**: Admin / Translator / Viewer (shared rows; the user's tenant comes from `users.tenant_id`) + Platform Admin. Permissions are enforced by the seed on **every boot** (`ROLE_DEFINITIONS` in `config/seed.ts`) — change permissions there, no migration. `/api/roles` is read-only and lists only the 3 tenant roles; tenant admins can't assign Platform Admin (users, invites).
+- **Per tenant**: `TenantSettings` (branding, currency, invoice prefix, upload limits, Google Translate key — each tenant pays its own, no platform fallback); job/invoice numbering (`UQ_jobs_tenant_number`, `UQ_invoices_tenant_number`; each starts at JOB-0001/INV-0001, serialized by `lockTenantSettings()` on the tenant's settings row); uploads in `uploads/<tenantId>/{jobs,passports,templates}` (`tenantDiskStorage()`); upload limits read via the request tenant in `FileValidationPipe`.
+- **Status**: pending (sign-up awaiting approval) / suspended → login refused with a clear message, `JwtStrategy` rejects existing access tokens, refresh refused; suspending revokes all its sessions.
+- **Sign-up** (`/signup`, public): `POST /auth/signup` creates a pending tenant + its Admin (email unverified) and emails a 24 h link (`EmailVerificationToken`); same answer for an already-registered email (that address gets an "you already have an account" mail). `POST /auth/verify-email` → platform admins get an in-app `tenant_signup` notification + email; approval → the admin is emailed. Turnstile bot check when `TURNSTILE_SECRET_KEY`/`TURNSTILE_SITE_KEY` are set (site key served by `GET /auth/signup-status`); throttled 5/h per IP; honeypot. Platform settings `signupsEnabled` switch. Unconfirmed sign-ups are deleted after 7 days (`SignupCleanupScheduler`, 03:30). Non-production returns the verification token (like password reset).
+- **Tests**: `node scripts/test-tenancy.mjs` (live, ~200 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval) — runs in CI against MariaDB (`tenancy` job).
 
 ## Tech Stack
 - **Runtime:** Node ≥ 22.12 (backend `engines`). NestJS 12 packages are ESM-only; the backend compiles to CommonJS and loads them via native `require(esm)`. Jest needs `--experimental-vm-modules` for the same, so `npm test`/`test:e2e` invoke jest through `node` with that flag.
@@ -15,7 +28,7 @@ Internal multi-user web application for freelance translators. Two core modules:
 - **File uploads:** Local disk, validated by magic bytes (no image compression)
 - **Word export:** `docx` npm library
 - **PDF export:** `pdfkit` library (invoice export). Text goes through `PdfText` (`invoices/pdf-text.ts`): embedded Noto Sans + Noto Sans Arabic (npm `@expo-google-fonts/*`, OFL), own line wrapping, and Unicode bidi via `bidi-js` — each line is drawn as direction runs on one alphabetic baseline (fontkit shapes Arabic but does no bidi, and pdfkit wrapping drops spaces between Arabic words). Never use `doc.text` / Helvetica directly for user data. Rows are measured, pages break with a repeated table header, totals stay together, page numbers when >1 page. Not covered: CJK, Hebrew, Thai, Devanagari; `→`-style symbols missing from Noto Sans
-- **Translation helper:** Google Cloud Translation API. Key set by an admin in Settings > General (`AppSettings.googleTranslateApiKey`, never returned — only `googleTranslateKeySet`); env `GOOGLE_TRANSLATE_API_KEY` is the fallback. No key → `POST /translate` is a 503 (never fake text); Google errors/timeouts are 502/504. `GET /translate/status` drives the document page's "not set up" banner
+- **Translation helper:** Google Cloud Translation API. Key set per organization by its admin in Settings > General (`TenantSettings.googleTranslateApiKey`, never returned — only `googleTranslateKeySet`); no platform-wide fallback (each organization pays its own). No key → `POST /translate` is a 503 (never fake text); Google errors/timeouts are 502/504. `GET /translate/status` drives the document page's "not set up" banner
 - **Charts:** `recharts` (reporting page)
 - **Scheduling:** `@nestjs/schedule` (notification cron jobs)
 - **Containerization:** Docker + Docker Compose
@@ -49,7 +62,8 @@ translation-assistant/
 - `docker compose up -d` — Start MariaDB
 - `docker compose down` — Stop all containers
 - `cd backend && npm test` — unit tests; `npm run test:e2e` — DB-free security e2e suite (both run in CI)
-- `bash scripts/test-integration.sh` — live integration suite (~159 checks; needs backend on :3005 + frontend on :3080 + local DB; writes test data, cleans up after itself)
+- `bash scripts/test-integration.sh` — live integration suite (~172 checks; needs backend on :3005 + frontend on :3080 + a scratch DB; creates its own organization as the platform admin, then runs as that organization's admin)
+- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~200 checks; backend on :3005, non-production, scratch DB; also in CI)
 
 ## Dependencies
 - Dependabot (`.github/dependabot.yml`): weekly grouped minor/patch per app, majors as separate PRs. TypeScript 7 majors ignored (no JS API; ts-jest/typescript-eslint unsupported).
@@ -64,14 +78,14 @@ translation-assistant/
 - **Real client IP behind Cloudflare**: with `TRUST_CLOUDFLARE=true` (prod), `cloudflareClientIpMiddleware` (`common/utils/client-ip.ts`) sets `req.ip` from `CF-Connecting-IP` — only when the TCP peer is loopback (IIS) **and** the last `X-Forwarded-For` hop is a Cloudflare range, so a direct hit on the origin can't spoof it. Everything (throttler, lockout, sessions) reads `req.ip`
 - **Admin password reset**: `POST /users/:id/reset-password` (`@AdminOnly`, not self, 10/hr) returns a one-time temporary password, sets `mustChangePassword`, revokes the user's sessions — the fallback when email reset isn't available
 - **Password reset flow**: `forgot-password` → `verify-reset-token` → `reset-password`. Tokens are 32-byte random, single-use, 30-min expiry (`PasswordResetToken`). No email service yet — in **non-production** the token is returned in the response for testing; in production only a generic message is returned (see `requestPasswordReset` TODO to wire email).
-- Default admin: `admin@translation-assistant.com` / `admin123!` (seeded on first run, with `mustChangePassword` — the app shows a banner until it is changed; any password change/reset clears it). First run also seeds en/ar/fr languages and label options; the dashboard shows admins a Getting started checklist
-- 3 default roles: Admin (all permissions), Translator (create/read/update on clients/jobs/documents/files/calendar/notifications, **read-only templates** — they're shared by everyone's documents — + `settings:read`, needed for languages/labels/job types), Viewer (read-only). Existing DBs get Translator `settings:read` via migration `*-TranslatorSettingsRead` (applied by hand on prod — see docs/OPS.md §0); existing DBs drop Translator `templates:create/update` via `*-GoLiveFixes`
+- Seeded **platform admin**: `ADMIN_INITIAL_EMAIL` / `ADMIN_INITIAL_PASSWORD` (defaults `admin@translation-assistant.com` / `admin123!` with `mustChangePassword` — banner until changed). Seeded when no platform admin exists. First run also seeds global en/ar/fr languages and label options. No organization is seeded; the dashboard shows organization admins a Getting started checklist
+- Fixed roles (see Multi-tenancy): Admin (everything in its organization), Translator (create/read/update on clients/jobs/documents/files/calendar/notifications, **read-only templates** — shared by the organization's documents — + `settings:read`), Viewer (read-only), Platform Admin (`platform:*`)
 - RBAC uses `@RequirePermissions('resource:action')` decorator + `PermissionsGuard`
-- **`@AdminOnly()` + `AdminGuard`**: hard role-name check (DB) on top of RBAC for privilege-sensitive endpoints (e.g. invite, role management) — prevents a `roles:update` holder from self-escalating
-- **The Admin role is fixed** (`roles.service.ts`): it cannot be renamed, deleted or have its permissions changed — every admin check matches the literal name `Admin`, so changing it would lock admins out with no way back in the app
+- **`@AdminOnly()` + `AdminGuard`**: hard role-name check (`Admin` = the organization's admin) on top of RBAC for privilege-sensitive tenant endpoints (users, invites, settings writes). Platform endpoints use `PlatformAdminGuard` instead
+- Roles can't be created, renamed or edited through the API (fixed set, permissions from the seed)
 - `JwtStrategy` accepts only `type: 'access'` tokens — refresh and file-access tokens (same secret; file tokens travel in URLs) are refused as API bearers
-- Invite-only registration: admin generates invite tokens via `POST /api/auth/invite`
-- Invite tokens are email-bound (case-insensitive), one-time use, 7-day expiry. The role is resolved when the invite is created: none picked = Translator; an unknown role id is a 400 then, not at registration
+- Joining an organization is by invite: its admin (`POST /api/auth/invite`) or the platform admin (`POST /api/platform/tenants/:id/invite`, default role Admin). New organizations come from the platform admin (`POST /api/platform/tenants` — invites the first admin) or public sign-up (approval required)
+- Invite tokens are email-bound (case-insensitive), one-time use, 7-day expiry, and carry the tenant. The role is resolved when the invite is created (tenant roles only): none picked = Translator; an unknown role id is a 400 then, not at registration. Registering is refused once the organization isn't active
 
 ## Security
 - All IDs are UUIDs (not sequential integers) — prevents enumeration
@@ -81,7 +95,7 @@ translation-assistant/
 - View-only users blocked from write operations on jobs, documents and invoices (`verifyJobAccess`/`verifyDocumentAccess`/`verifyInvoiceAccess` take a `'view' | 'edit'` level — pass `'edit'` on every write)
 - `User.password` and `User.refreshToken` are `select: false` — never returned by any query (JobUser.user is eager). Code that needs the hash selects it explicitly (`loadPasswordHash`, `changePassword`)
 - Emailing an invoice needs `invoices:update` + edit access, rate-limited to 10/hour (it sends branded mail to any address)
-- Settings responses (GET and PATCH) never include `smtpPass` or `googleTranslateApiKey` — only `smtpPassSet` / `googleTranslateKeySet` (admins)
+- Settings responses never include `smtpPass` (platform settings → `smtpPassSet`) or `googleTranslateApiKey` / `tenantId` (tenant settings → `googleTranslateKeySet`, admins)
 - Download headers go through `contentDisposition()` (`common/utils/content-disposition.ts`): ASCII `filename` + RFC 5987 `filename*`, exposed via CORS `exposedHeaders`; document exports download as `JOB-0001 Template name.docx`
 - Non-admin job list filtered to only assigned jobs (innerJoin on job_users)
 - ALL document endpoints verify job access via `verifyDocumentAccess()`/`verifyJobAccess()`
@@ -124,10 +138,11 @@ translation-assistant/
   - `src/migrations/*-InitialBaseline.ts` is the baseline (full current schema, validated: generates zero diff against the live schema).
   - Migrations build the **complete** schema (checked 2026-11: fresh DB from migrations alone boots; `migration:generate` finds no drift). `*-GoLiveFixes` is idempotent (`ADD COLUMN/INDEX IF NOT EXISTS`) so it runs safely on prod's synchronize-built schema.
   - **Prod cutover runbook**: docs/OPS.md §0 + §5 (stamp the first five migrations, `DB_SYNCHRONIZE=false`, deploy — GoLiveFixes then runs). Every schema change after that is a new migration file.
-  - Seed always creates the single `app_settings` row (numbering locks it — locking zero rows locks nothing).
+  - Seed always creates the single `app_settings` (platform) row; every tenant gets its `tenant_settings` row when created (numbering locks it — `lockTenantSettings()` self-heals a missing one).
+  - `*-MultiTenancy` moves any pre-existing data into one "Default organization" (old app settings become its settings); on an empty DB it creates no tenant.
 - Connection pool: 20 max, 10s connect timeout, 30s idle timeout (configurable via env)
 - Graceful shutdown: `app.enableShutdownHooks()` drains pool on SIGTERM/SIGINT
-- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction. Invoice **and job** numbers: `MAX()+1` (invoices: for the current prefix), generated inside the create transaction after locking the `app_settings` row (serializes concurrent creates). Prefix max 15 chars (invoiceNumber is varchar(20))
+- Transactions: job creation, invoice creation/update and document save-values wrapped in a transaction. Invoice **and job** numbers: `MAX()+1` (invoices: for the current prefix), per tenant, generated inside the create transaction after locking the tenant's `tenant_settings` row (serializes concurrent creates in that tenant only). Prefix max 15 chars (invoiceNumber is varchar(20))
 - Never `save()` an entity loaded with a `cascade: true` relation after replacing that relation's rows separately — TypeORM writes the stale loaded rows back. Use `update()` for the scalars (see `InvoicesService.update`)
 - No eager loading on entities — all relations loaded explicitly per query
 - List endpoints use `attachRelationCount()` for counts (not full relation joins)
@@ -139,6 +154,7 @@ translation-assistant/
 - Overdue invoice check: single batch `UPDATE` (not N individual saves)
 
 ## File Management
+- Uploads go to `uploads/<tenantId>/<jobs|passports|templates>/` (`tenantDiskStorage()`)
 - Physical files deleted on entity removal (job files, passport copies, templates) — always **after** the DB delete succeeds, never before
 - Linked job files share the original's `filePath`; `unlinkUnreferencedFiles()` (jobs.service) deletes a file only when no `JobFile` row references it any more
 - Export files (PDF/DOCX) deleted from disk after streaming to client
@@ -189,17 +205,21 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 ## Database Entities
 
 ### Auth & Users
-- **User** — email, password (bcrypt), firstName, lastName, avatar, isActive, colorPalette, darkMode, mustChangePassword, roleId, refreshToken
+- **Tenant** — name, status (pending/active/suspended), source (platform/signup), plan (reserved), approvedAt
+- **TenantSettings** — tenantId (1:1), companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. Invoice exports use the creator's My Business details, falling back to these
+- **User** — email (unique platform-wide), password (bcrypt), firstName, lastName, avatar, isActive, emailVerified, colorPalette, darkMode, mustChangePassword, roleId, tenantId (NULL = platform admin), refreshToken
+- **EmailVerificationToken** — token, userId, expiresAt, used (self sign-up, 24 h)
 - **Role** — name, description. M2M with Permission via `role_permissions`
 - **Permission** — resource, action (e.g., `clients:create`)
-- **InviteToken** — token, email, roleId, expiresAt, used, usedByUserId
+- **InviteToken** — token, email, roleId, tenantId, expiresAt, used, usedByUserId
 - **Session** — userId, refreshTokenHash, ip, userAgent, lastUsedAt, revoked. One row per active login; powers session list/revoke and logout-everywhere.
 - **PasswordResetToken** — token, userId, expiresAt, used. 32-byte single-use, 30-min expiry.
 
 ### Settings
-- **AppSettings** — companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. Invoice exports use the creator's My Business details, falling back to companyName/companyAddress/companyLogo
-- **Language** — code, name, direction (ltr/rtl), isActive
-- **LabelOption** — category (email/phone/address), value, sortOrder. Configurable labels for client contact info.
+- **AppSettings** (platform, one row) — smtpHost/Port/Secure/User/Pass/From, appBaseUrl, signupsEnabled
+- **Language** — code, name, direction (ltr/rtl), isActive, tenantId (NULL = global, managed by the platform admin; unique (tenant, code), global codes unique via the service)
+- **LabelOption** — category (email/phone/address), value, sortOrder, tenantId (NULL = global). Configurable labels for client contact info.
+- **FreeformJobType** — name, description, prices, isActive, tenantId (per organization)
 
 ### Clients
 - **Client** — type (company/person), name, taxId, notes, createdByUserId
@@ -270,13 +290,20 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET /profile/me` + `PATCH /profile/me` — Read / self-update own profile, no `users:*` permission needed (no role/active change)
 - `POST /change-password`
 
-### Roles (`/api/roles`)
-- Full CRUD + `GET /permissions` — List all permissions
+### Roles (`/api/roles`) — read-only
+- `GET /`, `GET /:id`, `GET /permissions` — the 3 tenant roles and the (non-platform) permission catalogue
 
-### Settings (`/api/settings`)
-- `GET /` + `PATCH /` — App settings
-- CRUD `/languages` — Language management
-- CRUD `/labels` + `GET /labels/:category` — Configurable label options
+### Settings (`/api/settings`) — the caller's organization
+- `GET /` + `PATCH /` — organization settings (PATCH: Admin)
+- `GET /languages`, `GET /labels`, `GET /labels/:category` — global + the organization's own (read)
+- CRUD `/freeform-job-types` (writes: Admin)
+
+### Platform (`/api/platform`) — platform admin only
+- `GET /tenants?status=&search=` (with user counts, admins, status counts), `GET /tenants/:id` (+ accounts), `POST /tenants` (name, adminEmail → invite), `PATCH /tenants/:id`
+- `POST /tenants/:id/approve|suspend|reactivate|reject` (reject = delete a pending sign-up), `POST /tenants/:id/invite`
+- `POST /users/:id/reset-password`, `PATCH /users/:id/activate|deactivate` (tenant users only)
+- `GET/PATCH /settings` (SMTP, app URL, signupsEnabled), CRUD `/languages`, CRUD `/labels` (global lists)
+- `POST /api/mail/test` — SMTP test (platform admin)
 
 ### Clients (`/api/clients`)
 - Full CRUD with search, type filter, sort, pagination
@@ -349,10 +376,15 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET /?q=term` — Global search across clients, jobs, templates, invoices (min 2 chars)
 
 ## Frontend Pages
-- `/login` — Login page (public, links to Forgot Password)
+- `/login` — Login page (public, links to Forgot Password and — when sign-ups are open — Create an account; offers to resend the confirmation email)
+- `/signup` — Public sign-up (organization + first admin, terms/privacy consent, Turnstile when configured)
+- `/verify-email?token=` — Confirms a sign-up's email
+- `/terms`, `/privacy` — Draft legal pages (`NEXT_PUBLIC_LEGAL_OPERATOR` / `NEXT_PUBLIC_LEGAL_CONTACT`) — **review before opening sign-ups**
+- `/platform` — Organizations (platform admin): status filter, pending approvals, approve/reject, create + invite
+- `/platform/tenants/:id` — Organization detail: rename, approve/reject/suspend/reactivate, accounts (reset password, (de)activate), invite another admin
 - `/forgot-password` — Request a reset link (public). In dev shows the generated reset link directly (no email service).
 - `/reset-password?token=` — Verify token and set a new password (public)
-- `/` — Dashboard: summary cards (reports:read), Upcoming deadlines (open jobs, overdue in red), admin Getting started checklist
+- `/` — Dashboard: summary cards (reports:read), Upcoming deadlines (open jobs, overdue in red), admin Getting started checklist. The platform admin is redirected to `/platform`
 - `/clients` — Client list with search, type filter, sort, pagination
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)
 - `/templates` — Template list (table + card view toggle, search, status filter, sort)
@@ -367,12 +399,12 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
 - `/notifications` — Full notifications list with read/unread filter
 - `/reports` — Reports page (Revenue line chart, By Client bar chart, Job Status donut chart via recharts — charts live in `reports/charts.tsx`, loaded with `next/dynamic` so recharts stays off other pages)
-- `/settings` — Settings page (General, Languages, Labels, File Uploads, Appearance tabs)
+- `/settings` — Settings. Organization admin: General, File Uploads, Appearance, My Business, Security, Freeform Types, Users, Roles (read-only). Platform admin: Email & Sign-ups, Languages, Labels (global), Appearance, Security
 
 ## File Upload Validation
 - `FileValidationPipe` checks every upload against:
-  - `maxUploadSizeMb` from AppSettings
-  - `allowedFileTypes` from AppSettings (if list is non-empty, only those extensions accepted)
+  - `maxUploadSizeMb` from the uploader's organization settings
+  - `allowedFileTypes` from the organization settings (if list is non-empty, only those extensions accepted)
 - Applied to passport copy uploads and job file uploads
 - Word template uploads additionally validated for placeholders (reject if none or malformed)
 
@@ -391,3 +423,4 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - [x] Phase 12: Notifications (in-app, bell badge, deadline/overdue cron)
 - [x] Phase 13: Reporting (revenue charts, client breakdown, job status, dashboard stats)
 - [x] Phase 14: Search (global search across clients, jobs, templates, invoices)
+- [x] Phase 15: Multi-tenancy (organizations, platform admin, sign-up + approval) — plans/pricing later

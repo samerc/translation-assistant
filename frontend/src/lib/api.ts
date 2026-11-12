@@ -27,6 +27,9 @@ const NO_REFRESH = [
   '/auth/forgot-password',
   '/auth/verify-reset-token',
   '/auth/reset-password',
+  '/auth/signup',
+  '/auth/verify-email',
+  '/auth/resend-verification',
 ];
 
 // Inject honeypot field into write request bodies.

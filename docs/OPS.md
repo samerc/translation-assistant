@@ -7,6 +7,51 @@ place and no-ops safely until these are done.
 
 ---
 
+## 00. Multi-tenancy deploy (feat/multi-tenancy): fresh production database
+
+Prod had no real data, so this release starts from an **empty database**: the
+migrations build the whole schema and the seed creates the platform admin.
+Takes ~15 minutes.
+
+1. **Cloudflare Turnstile** (bot check on the public sign-up page): Cloudflare
+   dashboard → Turnstile → Add widget → hostname `translate.fancyshark.com`, mode
+   Managed. Note the **site key** and **secret key**.
+2. **Back up** what's there (it's empty, but keep the habit):
+   `set DB_BACKUP_PASSWORD=...&& powershell -File C:\apps\translation-assistant\scripts\backup-db.ps1`
+3. **Ecosystem env** (`C:\apps\translation-assistant\ecosystem.config.cjs`, `ta-backend` env):
+   - `ADMIN_INITIAL_EMAIL: '<your real email>'` — the platform admin (a real mailbox,
+     so password reset works)
+   - `ADMIN_INITIAL_PASSWORD: '<a strong password>'` — used once, on first boot;
+     remove it from the file after you've logged in
+   - `TURNSTILE_SITE_KEY: '...'`, `TURNSTILE_SECRET_KEY: '...'`
+   - keep `DB_SYNCHRONIZE: 'false'` and `TRUST_CLOUDFLARE: 'true'`
+4. **Fresh database** (MariaDB keeps the user's grants on the database name):
+   ```sql
+   DROP DATABASE translation_assistant;
+   CREATE DATABASE translation_assistant CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+   and empty `C:\apps\translation-assistant\backend\uploads` (uploads are now kept
+   per organization under `uploads\<organization id>\`).
+5. **Legal pages**: the sign-up page links to `/terms` and `/privacy` (drafts —
+   review the text in `frontend/src/app/(auth)/terms|privacy/page.tsx`). Set who runs
+   the service and a contact address at frontend build time:
+   `NEXT_PUBLIC_LEGAL_OPERATOR="..." NEXT_PUBLIC_LEGAL_CONTACT="you@example.com" npm run deploy`
+   (`deploy.sh` passes the environment through to `next build`).
+6. **Deploy** (`SKIP_BACKUP=1 npm run deploy` until the nightly backup env is set),
+   then on the server `pm2 delete ta-backend` + `pm2 start ecosystem.config.cjs --only ta-backend`
+   + `pm2 save` (PM2 caches env). Boot runs all 7 migrations and seeds the platform
+   admin, global languages and labels — check the log for `Seeded platform admin`.
+7. **First steps**: log in with `ADMIN_INITIAL_EMAIL` → you land on **Organizations**.
+   Settings → Email & Sign-ups: confirm SMTP (re-enter the Mailgun details: the
+   database is new) and send a test email. Then **New organization** for your wife's
+   office with her email — she gets the invite and sets her password. Remove
+   `ADMIN_INITIAL_PASSWORD` from the ecosystem file.
+8. **Sign-ups**: open by default (Settings → Email & Sign-ups → Close sign-ups to turn
+   off). New sign-ups confirm their email, then appear under Organizations →
+   Waiting; approve or reject. Unconfirmed ones are deleted after 7 days.
+
+---
+
 ## 0. Go-live deploy (fix/golive-blockers): do these in order
 
 This release also moves prod from `synchronize` to migrations. Do it in a quiet

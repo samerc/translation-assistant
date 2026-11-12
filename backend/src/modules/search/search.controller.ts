@@ -9,6 +9,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SearchService } from './search.service.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { actorOf } from '../../common/tenancy/actor.js';
 
 @Controller('search')
 @UseGuards(AuthGuard('jwt'))
@@ -22,11 +23,7 @@ export class SearchController {
         'Search query must be at least 2 characters',
       );
     }
-    const results = await this.searchService.search(
-      q,
-      user.id,
-      user.role?.name === 'Admin',
-    );
+    const results = await this.searchService.search(q, actorOf(user));
     // Search spans four resources; only return the ones the caller may read
     // (e.g. a Translator has no invoices:read and must not see invoice numbers).
     const canRead = (resource: string) =>

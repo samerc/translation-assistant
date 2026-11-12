@@ -9,6 +9,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Tenant } from '../../tenants/entities/tenant.entity.js';
 import { Client } from '../../clients/entities/client.entity.js';
 import { Contact } from '../../clients/entities/contact.entity.js';
 import { Language } from '../../settings/entities/language.entity.js';
@@ -16,6 +17,8 @@ import { JobUser } from './job-user.entity.js';
 import { JobFile } from './job-file.entity.js';
 import { JobLineItem } from './job-line-item.entity.js';
 
+// Job numbers restart per tenant (each starts at JOB-0001).
+@Index('UQ_jobs_tenant_number', ['tenantId', 'jobNumber'], { unique: true })
 @Index('IDX_jobs_status', ['status'])
 @Index('IDX_jobs_deadline', ['deadline'])
 @Entity('jobs')
@@ -23,7 +26,14 @@ export class Job {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ length: 20, unique: true })
+  @ManyToOne(() => Tenant)
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId: string;
+
+  @Column({ length: 20 })
   jobNumber: string;
 
   @Column({ type: 'enum', enum: ['template', 'freeform'], default: 'template' })

@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../users/entities/user.entity.js';
+import { bindRequestTenant } from '../../../common/tenancy/tenant-context.js';
 
 export interface JwtPayload {
   sub: string;
@@ -44,13 +45,22 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         role: {
           permissions: true,
         },
+        tenant: true,
       },
     });
 
-    if (!user || !user.isActive) {
+    if (!user || !user.isActive || !user.emailVerified) {
+      throw new UnauthorizedException();
+    }
+    // A suspended (or not yet approved) organization locks out all its users,
+    // including access tokens issued before the suspension.
+    if (user.tenantId && user.tenant?.status !== 'active') {
       throw new UnauthorizedException();
     }
 
+    // From here on, loading another tenant's records aborts the request
+    // (TenantIsolationSubscriber).
+    bindRequestTenant(user.tenantId);
     return user;
   }
 }

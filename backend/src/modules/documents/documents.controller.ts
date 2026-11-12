@@ -26,8 +26,7 @@ import {
 } from './dto/document.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
-import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
-import { User } from '../users/entities/user.entity.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 @Controller('documents')
@@ -38,36 +37,27 @@ export class DocumentsController {
     private readonly exportService: ExportService,
   ) {}
 
-  private isAdmin(user: User): boolean {
-    return user.role?.name === 'Admin';
-  }
-
   @Get('by-job/:jobId')
   @RequirePermissions('documents:read')
   async findByJob(
     @Param('jobId', ParseUUIDPipe) jobId: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.documentsService.verifyJobAccess(
-      jobId,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.documentsService.verifyJobAccess(jobId, actor);
     return this.documentsService.findByJob(jobId);
   }
 
   @Get('search-clone')
   @RequirePermissions('documents:read')
   searchForClone(
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
     @Query('templateId') templateId?: string,
     @Query('search') search?: string,
   ) {
     return this.documentsService.searchForClone({
       templateId: templateId || undefined,
       search,
-      userId: user.id,
-      isAdmin: this.isAdmin(user),
+      actor,
     });
   }
 
@@ -75,33 +65,20 @@ export class DocumentsController {
   @RequirePermissions('documents:read')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.documentsService.verifyDocumentAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    return this.documentsService.verifyDocumentAccess(id, actor);
   }
 
   @Post()
   @RequirePermissions('documents:create')
-  async create(@Body() dto: CreateDocumentDto, @CurrentUser() user: User) {
-    await this.documentsService.verifyJobAccess(
-      dto.jobId,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+  async create(@Body() dto: CreateDocumentDto, @CurrentActor() actor: Actor) {
+    await this.documentsService.verifyJobAccess(dto.jobId, actor, 'edit');
     // Cloning copies field values from the source — require access to it too (IDOR guard).
     if (dto.clonedFromId) {
-      await this.documentsService.verifyDocumentAccess(
-        dto.clonedFromId,
-        user.id,
-        this.isAdmin(user),
-      );
+      await this.documentsService.verifyDocumentAccess(dto.clonedFromId, actor);
     }
-    return this.documentsService.create(dto);
+    return this.documentsService.create(dto, actor.tenantId);
   }
 
   @Post(':id/save-values')
@@ -109,14 +86,9 @@ export class DocumentsController {
   async saveFieldValues(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SaveFieldValuesDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.documentsService.verifyDocumentAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+    await this.documentsService.verifyDocumentAccess(id, actor, 'edit');
     return this.documentsService.saveFieldValues(id, dto.values);
   }
 
@@ -125,14 +97,9 @@ export class DocumentsController {
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateDocumentStatusDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.documentsService.verifyDocumentAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+    await this.documentsService.verifyDocumentAccess(id, actor, 'edit');
     return this.documentsService.updateStatus(id, dto.status);
   }
 
@@ -141,21 +108,12 @@ export class DocumentsController {
   async clone(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CloneDocumentDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
     // Verify access to both source document's job AND target job
-    await this.documentsService.verifyDocumentAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
-    await this.documentsService.verifyJobAccess(
-      dto.jobId,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
-    return this.documentsService.clone(id, dto.jobId);
+    await this.documentsService.verifyDocumentAccess(id, actor);
+    await this.documentsService.verifyJobAccess(dto.jobId, actor, 'edit');
+    return this.documentsService.clone(id, dto.jobId, actor.tenantId);
   }
 
   @Post(':id/export')
@@ -163,13 +121,9 @@ export class DocumentsController {
   async exportDocument(
     @Param('id', ParseUUIDPipe) id: string,
     @Res() res: Response,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.documentsService.verifyDocumentAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.documentsService.verifyDocumentAccess(id, actor);
     const { filePath, downloadName } =
       await this.exportService.exportDocument(id);
 
@@ -190,14 +144,9 @@ export class DocumentsController {
   @RequirePermissions('documents:delete')
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.documentsService.verifyDocumentAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-      'edit',
-    );
+    await this.documentsService.verifyDocumentAccess(id, actor, 'edit');
     return this.documentsService.remove(id);
   }
 }

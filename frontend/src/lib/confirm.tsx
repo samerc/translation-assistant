@@ -90,7 +90,7 @@ export function ConfirmHost() {
         <h3 className="text-lg font-semibold text-text mb-2">
           {current.title || (current.mode === 'alert' ? 'Notice' : 'Are you sure?')}
         </h3>
-        <p className="text-sm text-text-secondary whitespace-pre-line">{current.message}</p>
+        <p className="text-sm text-text-secondary whitespace-pre-line [overflow-wrap:anywhere]">{current.message}</p>
         <div className="mt-6 flex justify-end gap-3">
           {current.mode === 'confirm' && (
             <button

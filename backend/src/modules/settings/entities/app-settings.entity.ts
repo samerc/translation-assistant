@@ -5,33 +5,18 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+/**
+ * Platform-wide settings (a single row), managed by the platform admin:
+ * outgoing email and public sign-ups. Everything a tenant configures for
+ * itself (branding, currency, upload limits, Translate key) lives in
+ * TenantSettings.
+ */
 @Entity('app_settings')
 export class AppSettings {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ length: 255, default: '' })
-  companyName: string;
-
-  @Column({ type: 'text', nullable: true })
-  companyAddress: string;
-
-  @Column({ length: 255, nullable: true })
-  companyLogo: string;
-
-  @Column({ length: 10, default: 'USD' })
-  baseCurrency: string;
-
-  @Column({ length: 50, nullable: true })
-  invoicePrefix: string;
-
-  @Column({ default: 5 })
-  maxUploadSizeMb: number;
-
-  @Column({ type: 'json', nullable: true })
-  allowedFileTypes: string[];
-
-  // ── Email / SMTP (used for password-reset + invite delivery) ──
+  // ── Email / SMTP (password resets, invites, sign-up verification, invoices) ──
   @Column({ length: 255, nullable: true })
   smtpHost: string;
 
@@ -54,11 +39,9 @@ export class AppSettings {
   @Column({ length: 255, nullable: true })
   appBaseUrl: string;
 
-  // Google Cloud Translation API key (document GT helper). Never returned by
-  // the API — responses carry only `googleTranslateKeySet`. The env var
-  // GOOGLE_TRANSLATE_API_KEY is used when this is empty.
-  @Column({ type: 'varchar', length: 255, nullable: true })
-  googleTranslateApiKey: string | null;
+  // Public sign-up page on/off. New sign-ups still wait for approval.
+  @Column({ default: true })
+  signupsEnabled: boolean;
 
   @UpdateDateColumn()
   updatedAt: Date;

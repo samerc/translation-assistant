@@ -4,14 +4,33 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [signupsOpen, setSignupsOpen] = useState(false);
+  const [resent, setResent] = useState(false);
   const { login, user } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    api.get<{ enabled: boolean }>('/auth/signup-status')
+      .then((s) => setSignupsOpen(s.enabled))
+      .catch(() => {});
+  }, []);
+
+  // The server says so (after a correct password) when the address is unconfirmed.
+  const needsConfirmation = /confirm your email/i.test(error);
+  const resendConfirmation = async () => {
+    try {
+      await api.post('/auth/resend-verification', { email });
+    } finally {
+      setResent(true);
+    }
+  };
 
   // Redirect if already logged in
   useEffect(() => {
@@ -23,6 +42,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    setResent(false);
     setLoading(true);
 
     try {
@@ -53,8 +73,19 @@ export default function LoginPage() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="card p-6 shadow-sm">
           {error && (
-            <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">
+            <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm" role="alert">
               {error}
+              {needsConfirmation && (
+                <div className="mt-2">
+                  {resent ? (
+                    'We sent a new confirmation link — check your inbox.'
+                  ) : (
+                    <button type="button" onClick={resendConfirmation} className="underline font-medium">
+                      Send the confirmation email again
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -103,6 +134,14 @@ export default function LoginPage() {
               Forgot password?
             </Link>
           </div>
+          {signupsOpen && (
+            <div className="mt-3 pt-3 border-t border-border text-center text-sm">
+              <span className="text-text-secondary">New here? </span>
+              <Link href="/signup" className="text-primary hover:text-primary-hover font-medium">
+                Create an account
+              </Link>
+            </div>
+          )}
         </form>
       </div>
     </div>

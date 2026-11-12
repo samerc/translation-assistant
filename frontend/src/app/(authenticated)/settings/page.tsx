@@ -44,32 +44,40 @@ type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'secu
 
 export default function SettingsPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role?.name === 'Admin';
+  // The platform admin manages the platform (email, sign-ups, global lists);
+  // an organization's Admin manages that organization.
+  const isPlatformAdmin = Boolean(user?.isPlatformAdmin);
+  const isAdmin = !isPlatformAdmin && user?.role?.name === 'Admin';
   const [selectedTab, setActiveTab] = useState<Tab | null>(null);
 
-  // App-administration tabs (their writes are @AdminOnly server-side) are admin-only;
-  // everyone keeps the personal tabs.
-  const tabs: { id: Tab; label: string }[] = [
-    ...(isAdmin
-      ? [
-          { id: 'general' as Tab, label: 'General' },
-          { id: 'languages' as Tab, label: 'Languages' },
-          { id: 'labels' as Tab, label: 'Labels' },
-          { id: 'uploads' as Tab, label: 'File Uploads' },
-        ]
-      : []),
-    { id: 'appearance', label: 'Appearance' },
-    { id: 'business', label: 'My Business' },
-    { id: 'security', label: 'Security' },
-    ...(isAdmin
-      ? [
-          { id: 'freeform' as Tab, label: 'Freeform Types' },
-          { id: 'users' as Tab, label: 'Users' },
-          { id: 'roles' as Tab, label: 'Roles' },
-          { id: 'email' as Tab, label: 'Email' },
-        ]
-      : []),
-  ];
+  // Administration tabs (their writes are admin-only server-side) are shown to
+  // the matching admin; everyone keeps the personal tabs.
+  const tabs: { id: Tab; label: string }[] = isPlatformAdmin
+    ? [
+        { id: 'email', label: 'Email & Sign-ups' },
+        { id: 'languages', label: 'Languages' },
+        { id: 'labels', label: 'Labels' },
+        { id: 'appearance', label: 'Appearance' },
+        { id: 'security', label: 'Security' },
+      ]
+    : [
+        ...(isAdmin
+          ? [
+              { id: 'general' as Tab, label: 'General' },
+              { id: 'uploads' as Tab, label: 'File Uploads' },
+            ]
+          : []),
+        { id: 'appearance', label: 'Appearance' },
+        { id: 'business', label: 'My Business' },
+        { id: 'security', label: 'Security' },
+        ...(isAdmin
+          ? [
+              { id: 'freeform' as Tab, label: 'Freeform Types' },
+              { id: 'users' as Tab, label: 'Users' },
+              { id: 'roles' as Tab, label: 'Roles' },
+            ]
+          : []),
+      ];
   // Derived so the active tab is always one this user can see (first tab by default).
   const activeTab = tabs.some((t) => t.id === selectedTab) ? selectedTab : tabs[0].id;
 
@@ -95,8 +103,8 @@ export default function SettingsPage() {
       </div>
 
       {activeTab === 'general' && isAdmin && <GeneralSettings />}
-      {activeTab === 'languages' && isAdmin && <LanguagesSettings />}
-      {activeTab === 'labels' && isAdmin && <LabelsSettings />}
+      {activeTab === 'languages' && isPlatformAdmin && <LanguagesSettings />}
+      {activeTab === 'labels' && isPlatformAdmin && <LabelsSettings />}
       {activeTab === 'uploads' && isAdmin && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
       {activeTab === 'business' && <BusinessSettings />}
@@ -104,7 +112,7 @@ export default function SettingsPage() {
       {activeTab === 'freeform' && isAdmin && <FreeformTypesSettings />}
       {activeTab === 'users' && isAdmin && <UsersSettings />}
       {activeTab === 'roles' && isAdmin && <RolesSettings />}
-      {activeTab === 'email' && isAdmin && <EmailSettings />}
+      {activeTab === 'email' && isPlatformAdmin && <EmailSettings />}
     </div>
   );
 }
@@ -211,7 +219,7 @@ function LanguagesSettings() {
   const [form, setForm] = useState({ code: '', name: '', direction: 'ltr' as 'ltr' | 'rtl' });
 
   const loadLanguages = () => {
-    api.get<Language[]>('/settings/languages').then(setLanguages)
+    api.get<Language[]>('/platform/languages').then(setLanguages)
       .catch((err) => toast.error(err instanceof ApiError ? err.message : 'Failed to load languages.'));
   };
 
@@ -221,9 +229,9 @@ function LanguagesSettings() {
     e.preventDefault();
     try {
       if (editingId) {
-        await api.patch(`/settings/languages/${editingId}`, { name: form.name, direction: form.direction });
+        await api.patch(`/platform/languages/${editingId}`, { name: form.name, direction: form.direction });
       } else {
-        await api.post('/settings/languages', form);
+        await api.post('/platform/languages', form);
       }
       setShowForm(false);
       setEditingId(null);
@@ -243,7 +251,7 @@ function LanguagesSettings() {
   const handleDelete = async (id: string) => {
     if (!(await confirmDialog('Delete this language?'))) return;
     try {
-      await api.delete(`/settings/languages/${id}`);
+      await api.delete(`/platform/languages/${id}`);
       loadLanguages();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to delete language.');
@@ -252,7 +260,7 @@ function LanguagesSettings() {
 
   const handleToggleActive = async (lang: Language) => {
     try {
-      await api.patch(`/settings/languages/${lang.id}`, { isActive: !lang.isActive });
+      await api.patch(`/platform/languages/${lang.id}`, { isActive: !lang.isActive });
       loadLanguages();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to update language.');
@@ -263,7 +271,7 @@ function LanguagesSettings() {
     <div className="max-w-4xl">
       <div className="flex justify-between items-center mb-4">
         <p className="text-sm text-text-secondary">
-          Define the languages available for templates and translation jobs.
+          The languages every organization can use for templates and translation jobs.
         </p>
         <button
           onClick={() => { setShowForm(true); setEditingId(null); setForm({ code: '', name: '', direction: 'ltr' }); }}
@@ -391,13 +399,7 @@ function LabelsSettings() {
   const [editValue, setEditValue] = useState('');
 
   const loadLabels = () => {
-    Promise.all(
-      CATEGORIES.map((cat) =>
-        api.get<LabelOption[]>(`/settings/labels/${cat.id}`),
-      ),
-    ).then((results) => {
-      setLabels(results.flat());
-    }).catch((err) => toast.error(err instanceof ApiError ? err.message : 'Failed to load labels.'));
+    api.get<LabelOption[]>('/platform/labels').then(setLabels).catch((err) => toast.error(err instanceof ApiError ? err.message : 'Failed to load labels.'));
   };
 
   useEffect(() => { loadLabels(); }, []);
@@ -405,7 +407,7 @@ function LabelsSettings() {
   const handleAdd = async (category: string) => {
     if (!newValue.trim()) return;
     try {
-      await api.post('/settings/labels', { category, value: newValue.trim() });
+      await api.post('/platform/labels', { category, value: newValue.trim() });
       setNewValue('');
       setAdding(null);
       loadLabels();
@@ -416,7 +418,7 @@ function LabelsSettings() {
 
   const handleDelete = async (id: string) => {
     try {
-      await api.delete(`/settings/labels/${id}`);
+      await api.delete(`/platform/labels/${id}`);
       loadLabels();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Failed to delete label.');
@@ -426,7 +428,7 @@ function LabelsSettings() {
   const handleEditSave = async (id: string) => {
     if (!editValue.trim()) return;
     try {
-      await api.patch(`/settings/labels/${id}`, { value: editValue.trim() });
+      await api.patch(`/platform/labels/${id}`, { value: editValue.trim() });
       setEditingId(null);
       loadLabels();
     } catch (err) {
@@ -437,7 +439,7 @@ function LabelsSettings() {
   return (
     <div className="max-w-4xl">
       <p className="text-sm text-text-secondary mb-6">
-        Configure the label options available when adding emails, phones, and addresses to clients.
+        The label options every organization sees when adding emails, phones, and addresses to clients.
       </p>
 
       <div className="space-y-6">
@@ -1088,6 +1090,8 @@ function EmailSettings() {
   const [form, setForm] = useState({
     smtpHost: '', smtpPort: '', smtpSecure: false, smtpUser: '', smtpPass: '', smtpFrom: '', appBaseUrl: '',
   });
+  const [signupsEnabled, setSignupsEnabled] = useState(true);
+  const [signupBusy, setSignupBusy] = useState(false);
   const [passSet, setPassSet] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1096,7 +1100,8 @@ function EmailSettings() {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    api.get<Record<string, unknown>>('/settings').then((s) => {
+    api.get<Record<string, unknown>>('/platform/settings').then((s) => {
+      setSignupsEnabled(s.signupsEnabled !== false);
       setForm({
         smtpHost: (s.smtpHost as string) || '',
         smtpPort: s.smtpPort != null ? String(s.smtpPort) : '',
@@ -1125,7 +1130,7 @@ function EmailSettings() {
         appBaseUrl: form.appBaseUrl || null,
       };
       if (form.smtpPass) body.smtpPass = form.smtpPass; // only change when typed
-      await api.patch('/settings', body);
+      await api.patch('/platform/settings', body);
       if (form.smtpPass) setPassSet(true);
       setForm((f) => ({ ...f, smtpPass: '' }));
       setMessage({ type: 'ok', text: 'Email settings saved.' });
@@ -1149,14 +1154,43 @@ function EmailSettings() {
     }
   };
 
+  const toggleSignups = async () => {
+    setSignupBusy(true);
+    try {
+      await api.patch('/platform/settings', { signupsEnabled: !signupsEnabled });
+      setSignupsEnabled(!signupsEnabled);
+      toast.success(signupsEnabled ? 'Sign-ups closed.' : 'Sign-ups open.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to update sign-ups.');
+    } finally {
+      setSignupBusy(false);
+    }
+  };
+
   const inputClass = 'input';
   if (!loaded) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   return (
     <div className="max-w-2xl space-y-6">
       <div className="card p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-text mb-1">Public sign-up</h3>
+            <p className="text-sm text-text-secondary">
+              {signupsEnabled
+                ? 'Anyone can create an organization from the sign-up page. New organizations wait for your approval under Organizations.'
+                : 'The sign-up page is closed. You can still create organizations yourself under Organizations.'}
+            </p>
+          </div>
+          <button onClick={toggleSignups} disabled={signupBusy} className={signupsEnabled ? 'btn btn-secondary' : 'btn btn-primary'}>
+            {signupsEnabled ? 'Close sign-ups' : 'Open sign-ups'}
+          </button>
+        </div>
+      </div>
+
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">SMTP / Email</h3>
-        <p className="text-sm text-text-secondary mb-4">Used to send invite and password-reset links. For local testing, point this at smtp4dev (host <code>localhost</code>, port <code>25</code>).</p>
+        <p className="text-sm text-text-secondary mb-4">Used for every organization: invites, password resets, sign-up confirmations and invoice emails. For local testing, point this at smtp4dev (host <code>localhost</code>, port <code>25</code>).</p>
         {message && (
           <div className={`mb-4 p-3 rounded-lg text-sm ${message.type === 'ok' ? 'tone tone-success' : 'tone tone-danger'}`}>{message.text}</div>
         )}
@@ -1223,137 +1257,42 @@ interface Role { id: string; name: string; description?: string; permissions: Pe
 
 function RolesSettings() {
   const [roles, setRoles] = useState<Role[]>([]);
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [editing, setEditing] = useState<Role | 'new' | null>(null);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
+  useEffect(() => {
     api.get<Role[]>('/roles').then(setRoles).catch(() => setError('Couldn’t load roles.'));
-    api.get<Permission[]>('/roles/permissions').then(setPermissions).catch(() => {});
-  };
-  useEffect(load, []);
+  }, []);
 
-  const byResource = permissions.reduce<Record<string, Permission[]>>((acc, p) => {
-    (acc[p.resource] = acc[p.resource] || []).push(p);
-    return acc;
-  }, {});
-
-  const startNew = () => { setEditing('new'); setName(''); setDescription(''); setPicked(new Set()); setError(null); };
-  const startEdit = (r: Role) => {
-    setEditing(r); setName(r.name); setDescription(r.description || '');
-    setPicked(new Set(r.permissions.map((p) => p.id))); setError(null);
-  };
-  const toggle = (id: string) => setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const toggleResource = (res: string) => setPicked((prev) => {
-    const n = new Set(prev);
-    const ids = byResource[res].map((p) => p.id);
-    const allOn = ids.every((id) => n.has(id));
-    ids.forEach((id) => (allOn ? n.delete(id) : n.add(id)));
-    return n;
-  });
-
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    const body = { name, description, permissionIds: Array.from(picked) };
-    try {
-      if (editing === 'new') await api.post('/roles', body);
-      else if (editing) await api.patch(`/roles/${editing.id}`, body);
-      setEditing(null);
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? String(err.message) : 'Failed to save role.');
-    } finally { setBusy(false); }
-  };
-
-  const remove = async (r: Role) => {
-    if (!(await confirmDialog(`Delete role "${r.name}"?`))) return;
-    try { await api.delete(`/roles/${r.id}`); load(); }
-    catch (err) { setError(err instanceof ApiError ? String(err.message) : 'Failed to delete role.'); }
-  };
-
-  const inputClass = 'input';
-
-  if (editing) {
-    return (
-      <div className="card max-w-3xl p-6">
-        <h3 className="font-semibold text-text mb-4">{editing === 'new' ? 'New role' : `Edit role: ${editing.name}`}</h3>
-        {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
-        <form onSubmit={save} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="roleName" className="block text-sm font-medium text-text mb-1.5">Name</label>
-              <input id="roleName" value={name} onChange={(e) => setName(e.target.value)} required className={inputClass} />
-            </div>
-            <div>
-              <label htmlFor="roleDesc" className="block text-sm font-medium text-text mb-1.5">Description</label>
-              <input id="roleDesc" value={description} onChange={(e) => setDescription(e.target.value)} className={inputClass} />
-            </div>
-          </div>
-          <div>
-            <span className="block text-sm font-medium text-text mb-2">Permissions</span>
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
-              {Object.keys(byResource).sort().map((res) => {
-                const ids = byResource[res].map((p) => p.id);
-                const allOn = ids.every((id) => picked.has(id));
-                return (
-                  <div key={res} className="border border-border rounded-lg p-3">
-                    <label className="flex items-center gap-2 font-medium text-sm text-text mb-2 capitalize">
-                      <input type="checkbox" checked={allOn} onChange={() => toggleResource(res)} />
-                      {res}
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pl-6">
-                      {byResource[res].map((p) => (
-                        <label key={p.id} className="flex items-center gap-2 text-sm text-text-secondary">
-                          <input type="checkbox" checked={picked.has(p.id)} onChange={() => toggle(p.id)} />
-                          {p.action}
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" disabled={busy} className="btn btn-primary">{busy ? 'Saving...' : 'Save role'}</button>
-            <button type="button" onClick={() => setEditing(null)} className="btn btn-secondary">Cancel</button>
-          </div>
-        </form>
-      </div>
-    );
-  }
+  // Admin first, then the more limited roles.
+  const order = ['Admin', 'Translator', 'Viewer'];
+  const sorted = [...roles].sort((x, y) => order.indexOf(x.name) - order.indexOf(y.name));
 
   return (
     <div className="max-w-3xl space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-text-secondary">Roles control what each user can do. Assign a role when inviting a user.</p>
-        <button onClick={startNew} className="btn btn-primary">+ New role</button>
-      </div>
+      <p className="text-sm text-text-secondary">
+        Every organization has the same three roles. Choose one when you invite someone, or change it under Users.
+      </p>
       {error && <div className="p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
       <div className="space-y-3">
-        {roles.map((r) => (
-          <div key={r.id} className="card p-4 flex items-start justify-between gap-4">
-            <div>
+        {sorted.map((r) => {
+          const byResource = r.permissions.reduce<Record<string, string[]>>((acc, p) => {
+            (acc[p.resource] = acc[p.resource] || []).push(p.action);
+            return acc;
+          }, {});
+          return (
+            <div key={r.id} className="card p-4">
               <div className="font-medium text-text">{r.name}</div>
               {r.description && <div className="text-sm text-text-secondary mt-0.5">{r.description}</div>}
-              <div className="text-xs text-text-muted mt-1">{r.permissions.length} permission{r.permissions.length !== 1 ? 's' : ''}</div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {Object.keys(byResource).sort().map((res) => (
+                  <span key={res} className="badge tone tone-neutral capitalize" title={byResource[res].join(', ')}>
+                    {res}: {['create', 'read', 'update', 'delete'].filter((a) => byResource[res].includes(a)).join(', ')}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-3 flex-shrink-0">
-              {/* Admin is fixed server-side (name + all permissions) */}
-              {r.name !== 'Admin' && (
-                <>
-                  <button onClick={() => startEdit(r)} className="text-xs text-primary hover:underline">Edit</button>
-                  <button onClick={() => remove(r)} className="text-xs text-danger hover:underline">Delete</button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

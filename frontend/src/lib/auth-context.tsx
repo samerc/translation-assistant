@@ -22,6 +22,10 @@ interface AuthUser {
   /** Seeded admin still on the documented default password. */
   mustChangePassword?: boolean;
   role: UserRole;
+  /** The organization the user works in; null for the platform admin. */
+  tenant: { id: string; name: string } | null;
+  /** Manages organizations and platform settings; sees no organization's data. */
+  isPlatformAdmin: boolean;
 }
 
 interface LoginResponse {

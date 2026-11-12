@@ -2,6 +2,7 @@
 
 import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format';
@@ -24,6 +25,17 @@ interface UpcomingJob { id: string; jobNumber: string; title: string; status: st
 const STATUS_LABEL: Record<string, string> = { quote: 'Quote', accepted: 'Accepted', in_progress: 'In Progress' };
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const router = useRouter();
+  // The platform admin's home is the organizations list.
+  useEffect(() => {
+    if (user?.isPlatformAdmin) router.replace('/platform');
+  }, [user, router]);
+  if (user?.isPlatformAdmin) return null;
+  return <TenantDashboard />;
+}
+
+function TenantDashboard() {
   const { user, hasPermission } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const canSeeStats = hasPermission('reports:read');
@@ -145,15 +157,13 @@ function GettingStarted() {
     const safe = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
     Promise.all([
       safe(api.get<{ companyName: string }>('/settings'), { companyName: '' }),
-      safe(api.get<{ isActive: boolean }[]>('/settings/languages'), []),
       safe(api.get<unknown[]>('/templates'), []),
       safe(api.get<{ total: number }>('/clients?limit=1'), { total: 0 }),
       safe(api.get<unknown[]>('/users'), []),
       safe(api.get<{ configured: boolean }>('/translate/status'), { configured: false }),
-    ]).then(([settings, languages, templates, clients, users, gt]) => {
+    ]).then(([settings, templates, clients, users, gt]) => {
       setSteps([
         { done: Boolean(settings.companyName?.trim()), title: 'Add your company details', hint: 'Name and address appear on invoices.', href: '/settings' },
-        { done: languages.filter((l) => l.isActive).length >= 2, title: 'Set up your languages', hint: 'The languages you translate between.', href: '/settings' },
         { done: templates.length > 0, title: 'Create a document template', hint: 'Birth certificates, diplomas, contracts…', href: '/templates' },
         { done: clients.total > 0, title: 'Add your first client', hint: 'A company or a person you translate for.', href: '/clients' },
         { done: users.length > 1, title: 'Invite a translator', hint: 'Settings › Users › Invite.', href: '/settings' },

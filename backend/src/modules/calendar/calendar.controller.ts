@@ -5,6 +5,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { actorOf } from '../../common/tenancy/actor.js';
 
 @Controller('calendar')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -26,11 +27,6 @@ export class CalendarController {
       2100,
       Math.max(2000, parseInt(year, 10) || new Date().getFullYear()),
     );
-    return this.calendarService.getEvents(
-      user.id,
-      user.role?.name === 'Admin',
-      m,
-      y,
-    );
+    return this.calendarService.getEvents(actorOf(user), m, y);
   }
 }
