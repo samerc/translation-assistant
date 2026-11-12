@@ -188,6 +188,12 @@ export class AuthController {
 
   // ── Self sign-up (public; organizations wait for platform approval) ──
 
+  /** For the login/sign-up pages: are sign-ups open, and the Turnstile site key (public). */
+  @Get('signup-status')
+  async signupStatus() {
+    return this.authService.signupStatus();
+  }
+
   @Post('signup')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 3600000 } })

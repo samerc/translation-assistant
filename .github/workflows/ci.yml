@@ -26,6 +26,57 @@ jobs:
       - run: npm test
       - run: npm run test:e2e # DB-free security/validation suite
 
+  tenancy:
+    # Live cross-tenant suite: a real MariaDB, the schema built from migrations
+    # only (as in production), two organizations, every endpoint probed with the
+    # other organization's ids.
+    name: Tenant isolation (live)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: translation_assistant
+          MARIADB_USER: translation_user
+          MARIADB_PASSWORD: translation_pass
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=24
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_SYNCHRONIZE: 'false'
+      NODE_ENV: development
+      JWT_SECRET: ci-only-secret
+      PORT: '3005'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Start backend (runs the migrations and seed)
+        run: nohup node dist/src/main.js > backend.log 2>&1 &
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3005/api/auth/signup-status && exit 0
+            sleep 2
+          done
+          cat backend.log; exit 1
+      - run: node ../scripts/test-tenancy.mjs
+      - name: Backend log
+        if: failure()
+        run: cat backend.log
+
   frontend:
     name: Frontend — build
     runs-on: ubuntu-latest

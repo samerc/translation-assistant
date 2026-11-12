@@ -72,6 +72,7 @@ export class PlatformService {
             'u.firstName',
             'u.lastName',
             'u.tenantId',
+            'u.emailVerified',
           ])
           .where('u.tenant_id IN (:...ids)', { ids: tenants.map((t) => t.id) })
           .orderBy('u.createdAt', 'ASC')
@@ -92,6 +93,7 @@ export class PlatformService {
             id: a.id,
             email: a.email,
             name: `${a.firstName} ${a.lastName}`.trim(),
+            emailVerified: a.emailVerified,
           })),
       })),
       counts: Object.fromEntries(

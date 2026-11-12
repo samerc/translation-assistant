@@ -11,6 +11,9 @@ import { JobUser } from '../../modules/jobs/entities/job-user.entity.js';
 import { Job } from '../../modules/jobs/entities/job.entity.js';
 import type { MaybeAuthenticatedRequest } from '../types/authenticated-request.js';
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class JobAccessGuard implements CanActivate {
   constructor(
@@ -32,6 +35,8 @@ export class JobAccessGuard implements CanActivate {
     const rawJobId = request.params.id || request.params.jobId;
     const jobId = Array.isArray(rawJobId) ? rawJobId[0] : rawJobId;
     if (!jobId) return true; // No job context, let other guards handle
+    // A malformed id: let the route's ParseUUIDPipe answer 400.
+    if (!UUID_RE.test(jobId)) return true;
 
     // Everyone, admins included: the job must belong to the caller's tenant.
     // Another tenant's job answers like a job that doesn't exist.

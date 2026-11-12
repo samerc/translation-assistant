@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PlatformController } from './platform.controller.js';
 import { PlatformService } from './platform.service.js';
+import { SignupCleanupScheduler } from './signup-cleanup.scheduler.js';
+import { Tenant } from '../tenants/entities/tenant.entity.js';
 import { User } from '../users/entities/user.entity.js';
 import { Session } from '../auth/entities/session.entity.js';
 import { AuthModule } from '../auth/auth.module.js';
@@ -11,13 +13,13 @@ import { UsersModule } from '../users/users.module.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Session]),
+    TypeOrmModule.forFeature([User, Session, Tenant]),
     AuthModule,
     MailModule,
     SettingsModule,
     UsersModule,
   ],
   controllers: [PlatformController],
-  providers: [PlatformService],
+  providers: [PlatformService, SignupCleanupScheduler],
 })
 export class PlatformModule {}

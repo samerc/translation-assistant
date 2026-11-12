@@ -562,6 +562,18 @@ export class AuthService {
 
   // ── Self sign-up ──
 
+  async signupStatus(): Promise<{
+    enabled: boolean;
+    turnstileSiteKey: string | null;
+  }> {
+    const platform = await this.settingsService.getPlatformSettings();
+    return {
+      enabled: platform.signupsEnabled,
+      // Site keys are public by design (they go into the page).
+      turnstileSiteKey: process.env.TURNSTILE_SITE_KEY?.trim() || null,
+    };
+  }
+
   /**
    * Creates an organization (pending approval) and its first admin (email not
    * yet verified), then emails a confirmation link. The response is the same

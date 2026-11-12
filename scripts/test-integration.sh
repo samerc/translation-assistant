@@ -1,7 +1,10 @@
 #!/bin/bash
 # Full integration test for Translation Assistant (live API + frontend pages)
 # Needs backend on :3005 and frontend on :3080. Run: bash scripts/test-integration.sh
-# Tests all endpoints: happy paths, validation errors, business logic errors, security
+# Tests all endpoints: happy paths, validation errors, business logic errors, security.
+# Logs in as the platform admin, creates a fresh organization and runs the
+# business tests as that organization's admin (cross-tenant isolation has its
+# own suite: node scripts/test-tenancy.mjs).
 
 API="http://localhost:3005/api"
 PASS=0
@@ -60,10 +63,27 @@ echo ""
 # ═══════════════════════════════════════
 echo "=== 1. AUTH — Login ==="
 # ═══════════════════════════════════════
-LOGIN=$(curl -s -c /tmp/ta_cookies.txt "$API/auth/login" -H "Content-Type: application/json" -d '{"email":"admin@translation-assistant.com","password":"admin123!"}')
+LOGIN=$(curl -s "$API/auth/login" -H "Content-Type: application/json" -d '{"email":"admin@translation-assistant.com","password":"admin123!"}')
+PTOKEN=$(echo "$LOGIN" | json .accessToken)
+check "Platform admin login succeeds" "eyJ" "$PTOKEN"
+PH="Authorization: Bearer $PTOKEN"
+
+# A fresh organization for this run; the business tests run as its admin.
+RUN=$(date +%s)
+ADMIN_EMAIL="itest-admin-$RUN@test.com"
+ADMIN_PW="Itest-Admin#2026"
+R=$(curl -s "$API/platform/tenants" -H "$PH" -H "Content-Type: application/json" -d '{"name":"Integration Org '$RUN'","adminEmail":"'$ADMIN_EMAIL'"}')
+check "Platform admin creates an organization" '"status":"active"' "$R"
+INVITE=$(echo "$R" | json .invite.token)
+LOGIN=$(curl -s -c /tmp/ta_cookies.txt "$API/auth/register" -H "Content-Type: application/json" -d '{"email":"'$ADMIN_EMAIL'","password":"'$ADMIN_PW'","firstName":"Itest","lastName":"Admin","inviteToken":"'$INVITE'"}')
 TOKEN=$(echo "$LOGIN" | json .accessToken)
-check "Admin login succeeds" "eyJ" "$TOKEN"
+check "Organization admin registers from the invite" "eyJ" "$TOKEN"
 H="Authorization: Bearer $TOKEN"
+
+R=$(curl -s "$API/clients" -H "$PH")
+check "Platform admin: no access to organization data" "Forbidden" "$R"
+R=$(curl -s "$API/platform/tenants" -H "$H")
+check "Organization admin: no access to the platform area" "Forbidden" "$R"
 
 # Errors
 R=$(curl -s "$API/auth/login" -H "Content-Type: application/json" -d '{"email":"admin@translation-assistant.com","password":"wrong12345678"}')
@@ -83,7 +103,7 @@ check "Login: empty body → 400" "email" "$R"
 
 # Profile
 R=$(curl -s "$API/auth/profile" -H "$H")
-check "Profile returns admin" "admin@translation-assistant.com" "$R"
+check "Profile returns the organization admin" "$ADMIN_EMAIL" "$R"
 
 R=$(curl -s "$API/auth/profile")
 check "Profile: no token → 401" "Unauthorized" "$R"
@@ -114,7 +134,7 @@ check "Register: empty firstName → 400" "must be longer" "$R"
 echo ""
 echo "=== 3. AUTH — Password Reset ==="
 # ═══════════════════════════════════════
-R=$(curl -s -X POST "$API/auth/forgot-password" -H "Content-Type: application/json" -d '{"email":"admin@translation-assistant.com"}')
+R=$(curl -s -X POST "$API/auth/forgot-password" -H "Content-Type: application/json" -d '{"email":"'$ADMIN_EMAIL'"}')
 check "Forgot password: real email → safe message" "If an account" "$R"
 RESET_TOKEN=$(echo "$R" | json .token)
 
@@ -177,7 +197,7 @@ check "Create user: bad roleId → 400" "must be a UUID" "$R"
 R=$(curl -s -X POST "$API/users/change-password" -H "$H" -H "Content-Type: application/json" -d '{"currentPassword":"wrongcurrent1","newPassword":"New-Valid-12345"}')
 check "Change password: wrong current → 400" "Current password is incorrect" "$R"
 
-R=$(curl -s -X POST "$API/users/change-password" -H "$H" -H "Content-Type: application/json" -d '{"currentPassword":"admin123!","newPassword":"password1"}')
+R=$(curl -s -X POST "$API/users/change-password" -H "$H" -H "Content-Type: application/json" -d '{"currentPassword":"'$ADMIN_PW'","newPassword":"password1"}')
 check "Change password: common new password → 400" "too common" "$R"
 
 R=$(curl -s -X PATCH "$API/users/profile/me" -H "$H" -H "Content-Type: application/json" -d '{"colorPalette":"invalid"}')
@@ -293,8 +313,6 @@ echo "=== 8. JOBS — CRUD + Status + Line Items ==="
 # ═══════════════════════════════════════
 R=$(curl -s "$API/jobs?limit=5" -H "$H")
 check "Jobs list" '"total"' "$R"
-check "Jobs list has lineItemCount" "lineItemCount" "$R"
-EXISTING_JOB_ID=$(echo "$R" | json '.data[0].id')
 
 # Create job — need language IDs
 SRC_LANG_ID=$(echo "$LANGS" | json '[0].id')
@@ -305,6 +323,9 @@ R=$(curl -s -X POST "$API/jobs" -H "$H" -H "Content-Type: application/json" -d '
 }')
 check "Create job" "Test Job" "$R"
 JOB_ID=$(echo "$R" | json .id)
+EXISTING_JOB_ID=$JOB_ID
+R=$(curl -s "$API/jobs?limit=5" -H "$H")
+check "Jobs list has lineItemCount" "lineItemCount" "$R"
 
 # Validation errors
 R=$(curl -s -X POST "$API/jobs" -H "$H" -H "Content-Type: application/json" -d '{"title":"","clientId":"'$CLIENT_ID'","sourceLanguageId":"'$SRC_LANG_ID'"}')
@@ -379,7 +400,6 @@ echo "=== 9. INVOICES — CRUD + Status Transitions ==="
 # ═══════════════════════════════════════
 R=$(curl -s "$API/invoices" -H "$H")
 check "Invoices list" '"total"' "$R"
-check "Invoices list has itemCount" "itemCount" "$R"
 
 # Validation errors
 R=$(curl -s -X POST "$API/invoices" -H "$H" -H "Content-Type: application/json" -d '{"clientId":"'$CLIENT_ID'","issueDate":"2026-06-01","dueDate":"2026-07-01","items":[]}')
@@ -407,6 +427,8 @@ check "Create invoice: negative quantity → 400" "must not be less than 0" "$R"
 R=$(curl -s -X POST "$API/invoices" -H "$H" -H "Content-Type: application/json" -d '{"clientId":"'$CLIENT_ID'","issueDate":"2026-06-01","dueDate":"2026-07-01","items":[{"description":"Test service","quantity":2,"unitPrice":50}]}')
 check "Create invoice: valid" "Test service" "$R"
 INV_ID=$(echo "$R" | json .id)
+R=$(curl -s "$API/invoices" -H "$H")
+check "Invoices list has itemCount" "itemCount" "$R"
 
 # Status transitions
 R=$(curl -s -X PATCH "$API/invoices/$INV_ID/status" -H "$H" -H "Content-Type: application/json" -d '{"status":"paid"}')
@@ -479,21 +501,30 @@ echo "=== 11. SETTINGS ==="
 R=$(curl -s "$API/settings" -H "$H")
 check "Get settings" "companyName" "$R"
 
-# Languages
-R=$(curl -s -X POST "$API/settings/languages" -H "$H" -H "Content-Type: application/json" -d '{"code":"x","name":"Test","direction":"ltr"}')
+# Languages and labels are global lists, managed by the platform admin
+R=$(curl -s "$API/settings/languages" -H "$H")
+check "Organization sees the global languages" '"code":"en"' "$R"
+
+R=$(curl -s -X POST "$API/platform/languages" -H "$PH" -H "Content-Type: application/json" -d '{"code":"x","name":"Test","direction":"ltr"}')
 check "Create language: code too short → 400" "must be longer" "$R"
 
-R=$(curl -s -X POST "$API/settings/languages" -H "$H" -H "Content-Type: application/json" -d '{"code":"zz","name":"Test","direction":"invalid"}')
+R=$(curl -s -X POST "$API/platform/languages" -H "$PH" -H "Content-Type: application/json" -d '{"code":"zz","name":"Test","direction":"invalid"}')
 check "Create language: bad direction → 400" "must be one of" "$R"
 
-R=$(curl -s -X POST "$API/settings/languages" -H "$H" -H "Content-Type: application/json" -d '{"code":"zz","name":"","direction":"ltr"}')
+R=$(curl -s -X POST "$API/platform/languages" -H "$PH" -H "Content-Type: application/json" -d '{"code":"zz","name":"","direction":"ltr"}')
 check "Create language: empty name → 400" "must be longer" "$R"
 
+R=$(curl -s -X POST "$API/platform/languages" -H "$PH" -H "Content-Type: application/json" -d '{"code":"en","name":"English again","direction":"ltr"}')
+check "Create language: duplicate global code → 400" "already exists" "$R"
+
+R=$(curl -s -X POST "$API/platform/languages" -H "$H" -H "Content-Type: application/json" -d '{"code":"zz","name":"Test","direction":"ltr"}')
+check "Organization admin can't change the global languages" "Forbidden" "$R"
+
 # Labels
-R=$(curl -s -X POST "$API/settings/labels" -H "$H" -H "Content-Type: application/json" -d '{"category":"invalid","value":"Test"}')
+R=$(curl -s -X POST "$API/platform/labels" -H "$PH" -H "Content-Type: application/json" -d '{"category":"invalid","value":"Test"}')
 check "Create label: bad category → 400" "must be one of" "$R"
 
-R=$(curl -s -X POST "$API/settings/labels" -H "$H" -H "Content-Type: application/json" -d '{"category":"email","value":""}')
+R=$(curl -s -X POST "$API/platform/labels" -H "$PH" -H "Content-Type: application/json" -d '{"category":"email","value":""}')
 check "Create label: empty value → 400" "must be longer" "$R"
 
 # Freeform job types
@@ -617,7 +648,11 @@ check "Unauthenticated → 401" "Unauthorized" "$R"
 echo ""
 echo "=== 17. ACCESS CONTROL — Translator ==="
 # ═══════════════════════════════════════
-TLOGIN=$(curl -s "$API/auth/login" -H "Content-Type: application/json" -d '{"email":"tester@test.com","password":"tester123!"}')
+# A translator in this run's organization
+TRANSLATOR_ROLE=$(curl -s "$API/roles" -H "$H" | node -e "process.stdin.on('data',d=>{const r=JSON.parse(d).find(x=>x.name==='Translator');console.log(r?r.id:'FAIL')})")
+TR_EMAIL="itest-translator-$RUN@test.com"
+curl -s -X POST "$API/users" -H "$H" -H "Content-Type: application/json" -d '{"email":"'$TR_EMAIL'","password":"'$ADMIN_PW'","firstName":"Itest","lastName":"Translator","roleId":"'$TRANSLATOR_ROLE'"}' > /dev/null
+TLOGIN=$(curl -s "$API/auth/login" -H "Content-Type: application/json" -d '{"email":"'$TR_EMAIL'","password":"'$ADMIN_PW'"}')
 TTOKEN=$(echo "$TLOGIN" | json .accessToken)
 TH="Authorization: Bearer $TTOKEN"
 
@@ -651,7 +686,7 @@ fi
 echo ""
 echo "=== 18. FRONTEND PAGES ==="
 # ═══════════════════════════════════════
-for page in "/" "/login" "/forgot-password" "/reset-password" "/clients" "/jobs" "/invoices" "/calendar" "/reports" "/notifications" "/settings" "/templates"; do
+for page in "/" "/login" "/signup" "/verify-email" "/terms" "/privacy" "/forgot-password" "/reset-password" "/clients" "/jobs" "/invoices" "/calendar" "/reports" "/notifications" "/settings" "/templates" "/platform"; do
   CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:3080$page")
   check_status "Page $page loads" "200" "$CODE"
 done
@@ -660,7 +695,8 @@ done
 echo ""
 echo "=== 19. CLEANUP ==="
 # ═══════════════════════════════════════
-# Delete test data in reverse dependency order
+# Delete test data in reverse dependency order. The run's organization itself
+# stays (organizations are suspended, not deleted) — run against a scratch DB.
 [ "$JOB_ID" != "FAIL" ] && [ -n "$JOB_ID" ] && curl -s -X DELETE "$API/jobs/$JOB_ID" -H "$H" > /dev/null 2>&1
 [ "$TEMPLATE_ID" != "FAIL" ] && [ -n "$TEMPLATE_ID" ] && curl -s -X DELETE "$API/templates/$TEMPLATE_ID" -H "$H" > /dev/null 2>&1
 [ "$PERSON_ID" != "FAIL" ] && [ -n "$PERSON_ID" ] && curl -s -X DELETE "$API/clients/$PERSON_ID" -H "$H" > /dev/null 2>&1
