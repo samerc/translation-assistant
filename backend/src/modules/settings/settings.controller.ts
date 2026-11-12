@@ -12,12 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
-import { AppSettings } from './entities/app-settings.entity.js';
-import { CreateLanguageDto, UpdateLanguageDto } from './dto/language.dto.js';
-import {
-  CreateLabelOptionDto,
-  UpdateLabelOptionDto,
-} from './dto/label-option.dto.js';
+import { TenantSettings } from '../tenants/entities/tenant-settings.entity.js';
 import type { LabelCategory } from './dto/label-option.dto.js';
 import {
   CreateFreeformJobTypeDto,
@@ -27,20 +22,26 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
-import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
-import { User } from '../users/entities/user.entity.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 
+/**
+ * The caller's tenant settings. Languages and labels are read here (global +
+ * the tenant's own); the global lists are managed under /platform.
+ */
 @Controller('settings')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
-  // ── App Settings ──
+  // ── Tenant settings ──
 
   @Get()
   @RequirePermissions('settings:read')
-  async getSettings(@CurrentUser() user: User) {
-    return this.present(await this.settingsService.getSettings(), user);
+  async getSettings(@CurrentActor() actor: Actor) {
+    return this.present(
+      await this.settingsService.getTenantSettings(actor.tenantId),
+      actor,
+    );
   }
 
   @Patch()
@@ -48,125 +49,67 @@ export class SettingsController {
   @AdminOnly()
   async updateSettings(
     @Body() dto: UpdateSettingsDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.present(await this.settingsService.updateSettings(dto), user);
+    return this.present(
+      await this.settingsService.updateTenantSettings(actor.tenantId, dto),
+      actor,
+    );
   }
 
-  private present(settings: AppSettings, user: User) {
-    // Never expose the stored SMTP password; signal only whether one is set.
-    const {
-      smtpPass,
-      googleTranslateApiKey,
-      smtpHost,
-      smtpPort,
-      smtpUser,
-      smtpFrom,
-      smtpSecure,
-      appBaseUrl,
-      ...safe
-    } = settings;
-    // SMTP / infrastructure details are admin-only. Non-admins (e.g. Viewer, who
-    // holds settings:read) still get branding + currency + upload limits.
-    if (user?.role?.name === 'Admin') {
-      return {
-        ...safe,
-        smtpHost,
-        smtpPort,
-        smtpUser,
-        smtpFrom,
-        smtpSecure,
-        appBaseUrl,
-        smtpPassSet: Boolean(smtpPass),
-        googleTranslateKeySet: Boolean(googleTranslateApiKey),
-      };
+  private present(settings: TenantSettings, actor: Actor) {
+    // Never expose the stored Translate key; admins learn only whether one is set.
+    const { googleTranslateApiKey, tenantId: _t, ...safe } = settings;
+    if (actor.isAdmin) {
+      return { ...safe, googleTranslateKeySet: Boolean(googleTranslateApiKey) };
     }
     return safe;
   }
 
-  // ── Languages ──
+  // ── Languages & labels (read: global + the tenant's own) ──
 
   @Get('languages')
   @RequirePermissions('settings:read')
-  findAllLanguages() {
-    return this.settingsService.findAllLanguages();
+  findAllLanguages(@CurrentActor() actor: Actor) {
+    return this.settingsService.findLanguagesForTenant(actor.tenantId);
   }
-
-  @Post('languages')
-  @RequirePermissions('settings:create')
-  @AdminOnly()
-  createLanguage(@Body() dto: CreateLanguageDto) {
-    return this.settingsService.createLanguage(dto);
-  }
-
-  @Patch('languages/:id')
-  @RequirePermissions('settings:update')
-  @AdminOnly()
-  updateLanguage(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateLanguageDto,
-  ) {
-    return this.settingsService.updateLanguage(id, dto);
-  }
-
-  @Delete('languages/:id')
-  @RequirePermissions('settings:delete')
-  @AdminOnly()
-  removeLanguage(@Param('id', ParseUUIDPipe) id: string) {
-    return this.settingsService.removeLanguage(id);
-  }
-
-  // ── Label Options ──
 
   @Get('labels')
   @RequirePermissions('settings:read')
-  findAllLabels() {
-    return this.settingsService.findAllLabels();
+  findAllLabels(@CurrentActor() actor: Actor) {
+    return this.settingsService.findAllLabels(actor.tenantId);
   }
 
   @Get('labels/:category')
   @RequirePermissions('settings:read')
-  findLabelsByCategory(@Param('category') category: LabelCategory) {
-    return this.settingsService.findLabelsByCategory(category);
-  }
-
-  @Post('labels')
-  @RequirePermissions('settings:create')
-  @AdminOnly()
-  createLabel(@Body() dto: CreateLabelOptionDto) {
-    return this.settingsService.createLabel(dto);
-  }
-
-  @Patch('labels/:id')
-  @RequirePermissions('settings:update')
-  @AdminOnly()
-  updateLabel(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateLabelOptionDto,
+  async findLabelsByCategory(
+    @Param('category') category: LabelCategory,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.settingsService.updateLabel(id, dto);
+    const all = await this.settingsService.findAllLabels(actor.tenantId);
+    return (all[category] ?? []).map((value, sortOrder) => ({
+      category,
+      value,
+      sortOrder,
+    }));
   }
 
-  @Delete('labels/:id')
-  @RequirePermissions('settings:delete')
-  @AdminOnly()
-  removeLabel(@Param('id', ParseUUIDPipe) id: string) {
-    return this.settingsService.removeLabel(id);
-  }
-
-  // ── Freeform Job Types ──
+  // ── Freeform job types (per tenant) ──
 
   @Get('freeform-job-types')
   @RequirePermissions('settings:read')
-  findAllFreeformJobTypes() {
-    return this.settingsService.findAllFreeformJobTypes();
+  findAllFreeformJobTypes(@CurrentActor() actor: Actor) {
+    return this.settingsService.findAllFreeformJobTypes(actor.tenantId);
   }
 
   @Post('freeform-job-types')
   @RequirePermissions('settings:create')
   @AdminOnly()
-  createFreeformJobType(@Body() dto: CreateFreeformJobTypeDto) {
-    return this.settingsService.createFreeformJobType(dto);
+  createFreeformJobType(
+    @Body() dto: CreateFreeformJobTypeDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.settingsService.createFreeformJobType(actor.tenantId, dto);
   }
 
   @Patch('freeform-job-types/:id')
@@ -175,14 +118,18 @@ export class SettingsController {
   updateFreeformJobType(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFreeformJobTypeDto,
+    @CurrentActor() actor: Actor,
   ) {
-    return this.settingsService.updateFreeformJobType(id, dto);
+    return this.settingsService.updateFreeformJobType(actor.tenantId, id, dto);
   }
 
   @Delete('freeform-job-types/:id')
   @RequirePermissions('settings:delete')
   @AdminOnly()
-  removeFreeformJobType(@Param('id', ParseUUIDPipe) id: string) {
-    return this.settingsService.removeFreeformJobType(id);
+  removeFreeformJobType(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.settingsService.removeFreeformJobType(actor.tenantId, id);
   }
 }

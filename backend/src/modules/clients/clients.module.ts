@@ -8,7 +8,6 @@ import { PassportCopy } from './entities/passport-copy.entity.js';
 import { ClientEmail } from './entities/client-email.entity.js';
 import { ClientPhone } from './entities/client-phone.entity.js';
 import { ClientAddress } from './entities/client-address.entity.js';
-import { AppSettings } from '../settings/entities/app-settings.entity.js';
 import { Job } from '../jobs/entities/job.entity.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
@@ -22,7 +21,6 @@ import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
       ClientEmail,
       ClientPhone,
       ClientAddress,
-      AppSettings,
       Job,
     ]),
     forwardRef(() => AuthModule),

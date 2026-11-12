@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -10,6 +10,7 @@ import { HoneypotGuard } from './common/guards/honeypot.guard.js';
 import { AbuseDetectionGuard } from './common/guards/abuse-detection.guard.js';
 import { WriteThrottleGuard } from './common/guards/write-throttle.guard.js';
 import { UploadCleanupInterceptor } from './common/interceptors/upload-cleanup.interceptor.js';
+import { TenantContextMiddleware } from './common/tenancy/tenant-context.js';
 // AdminGuard is imported per-controller, not globally
 import { HealthModule } from './modules/health/health.module.js';
 import { MailModule } from './modules/mail/mail.module.js';
@@ -27,6 +28,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { CalendarModule } from './modules/calendar/calendar.module.js';
 import { ReportsModule } from './modules/reports/reports.module.js';
 import { SearchModule } from './modules/search/search.module.js';
+import { TenantsModule } from './modules/tenants/tenants.module.js';
+import { PlatformModule } from './modules/platform/platform.module.js';
 
 @Module({
   imports: [
@@ -60,6 +63,8 @@ import { SearchModule } from './modules/search/search.module.js';
     CalendarModule,
     ReportsModule,
     SearchModule,
+    TenantsModule,
+    PlatformModule,
   ],
   controllers: [],
   providers: [
@@ -78,4 +83,9 @@ import { SearchModule } from './modules/search/search.module.js';
     // because it needs req.user which is set by AuthGuard('jwt') at controller level
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Per-request tenant context (read by the tenant-isolation safety net).
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(TenantContextMiddleware).forRoutes('{*path}');
+  }
+}

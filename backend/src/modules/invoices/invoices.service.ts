@@ -14,7 +14,9 @@ import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Client } from '../clients/entities/client.entity.js';
 import { attachRelationCount } from '../../common/utils/relation-count.js';
-import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { lockTenantSettings } from '../tenants/tenant-lock.js';
+import { TenantsService } from '../tenants/tenants.service.js';
+import type { Actor } from '../../common/tenancy/actor.js';
 import {
   CreateInvoiceDto,
   UpdateInvoiceDto,
@@ -34,8 +36,7 @@ export class InvoicesService {
     private readonly jobUserRepository: Repository<JobUser>,
     @InjectRepository(Client)
     private readonly clientRepository: Repository<Client>,
-    @InjectRepository(AppSettings)
-    private readonly settingsRepository: Repository<AppSettings>,
+    private readonly tenantsService: TenantsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -43,12 +44,17 @@ export class InvoicesService {
   // 'edit' for writes: a view-only assignment on a linked job grants read only.
   async verifyInvoiceAccess(
     invoiceId: string,
-    userId: string,
-    isAdmin: boolean,
+    actor: Actor,
     level: 'view' | 'edit' = 'view',
   ): Promise<Invoice> {
+    // Another tenant's invoice answers like one that doesn't exist.
+    const inTenant = await this.invoiceRepository.count({
+      where: { id: invoiceId, tenantId: actor.tenantId },
+    });
+    if (!inTenant) throw new NotFoundException('Invoice not found');
     const invoice = await this.findOne(invoiceId);
-    if (isAdmin) return invoice;
+    if (actor.isAdmin) return invoice;
+    const userId = actor.userId;
 
     // Check if user created the invoice
     if (invoice.createdByUserId === userId) return invoice;
@@ -71,13 +77,16 @@ export class InvoicesService {
 
   async verifyJobAccess(
     jobId: string,
-    userId: string,
-    isAdmin: boolean,
+    actor: Actor,
     level: 'view' | 'edit' = 'view',
   ): Promise<void> {
-    if (isAdmin) return;
+    const inTenant = await this.jobRepository.count({
+      where: { id: jobId, tenantId: actor.tenantId },
+    });
+    if (!inTenant) throw new NotFoundException('Job not found');
+    if (actor.isAdmin) return;
     const assignment = await this.jobUserRepository.findOne({
-      where: { jobId, userId },
+      where: { jobId, userId: actor.userId },
     });
     if (!assignment) {
       throw new ForbiddenException('You do not have access to this job');
@@ -90,7 +99,8 @@ export class InvoicesService {
   /** Linked jobs must exist, belong to the invoice's client, and be editable by the caller. */
   // A job is billed once: refuse to link it if another invoice that isn't
   // cancelled already has it. Call inside a transaction after locking the
-  // app_settings row (lockSettings) so two concurrent invoices can't both pass.
+  // tenant's settings row (lockTenantSettings) so two concurrent invoices
+  // can't both pass.
   private async assertJobsNotOnOtherInvoice(
     manager: EntityManager,
     items: { jobId?: string | null }[],
@@ -137,24 +147,18 @@ export class InvoicesService {
     }
   }
 
-  private async lockSettings(manager: EntityManager): Promise<void> {
-    await manager
-      .createQueryBuilder(AppSettings, 's')
-      .setLock('pessimistic_write')
-      .getMany();
-  }
-
   private async validateLinkedJobs(
     items: { jobId?: string }[],
     clientId: string,
-    userId: string | undefined,
-    isAdmin: boolean,
+    actor: Actor,
   ): Promise<void> {
     const jobIds = [
       ...new Set(items.filter((i) => i.jobId).map((i) => i.jobId!)),
     ];
     if (jobIds.length === 0) return;
-    const jobs = await this.jobRepository.find({ where: { id: In(jobIds) } });
+    const jobs = await this.jobRepository.find({
+      where: { id: In(jobIds), tenantId: actor.tenantId },
+    });
     const jobMap = new Map(jobs.map((j) => [j.id, j]));
     for (const jobId of jobIds) {
       const job = jobMap.get(jobId);
@@ -167,10 +171,8 @@ export class InvoicesService {
       }
     }
     // IDOR guard: the caller must be able to edit every job they link.
-    if (userId) {
-      for (const jobId of jobIds) {
-        await this.verifyJobAccess(jobId, userId, isAdmin, 'edit');
-      }
+    for (const jobId of jobIds) {
+      await this.verifyJobAccess(jobId, actor, 'edit');
     }
   }
 
@@ -183,19 +185,23 @@ export class InvoicesService {
     cancelled: ['draft'],
   };
 
-  // MAX()+1 of the numbers with the current prefix. Call inside the create
-  // transaction after locking the settings row (see create()), so concurrent
-  // creates are serialized and can't pick the same number.
-  private async generateInvoiceNumber(manager: EntityManager): Promise<string> {
-    const settings = await manager.find(AppSettings, { take: 1 });
-    const prefix = settings[0]?.invoicePrefix || 'INV-';
+  // MAX()+1 of the tenant's numbers with its current prefix. Call inside the
+  // create transaction with the row lockTenantSettings() returned, so concurrent
+  // creates in the tenant are serialized and can't pick the same number.
+  private async generateInvoiceNumber(
+    manager: EntityManager,
+    tenantId: string,
+    invoicePrefix: string | null,
+  ): Promise<string> {
+    const prefix = invoicePrefix || 'INV-';
     const result = await manager
       .createQueryBuilder(Invoice, 'inv')
       .select(
         'MAX(CAST(SUBSTRING(inv.invoiceNumber, :prefixLen + 1) AS UNSIGNED))',
         'maxNum',
       )
-      .where('inv.invoiceNumber LIKE :like', {
+      .where('inv.tenant_id = :tenantId', { tenantId })
+      .andWhere('inv.invoiceNumber LIKE :like', {
         // only numbers with the current prefix (LIKE wildcards escaped)
         like: prefix.replace(/[\\%_]/g, (c) => `\\${c}`) + '%',
       })
@@ -237,8 +243,7 @@ export class InvoicesService {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
-    userId?: string;
-    isAdmin?: boolean;
+    actor: Actor;
   }) {
     const {
       search,
@@ -254,17 +259,18 @@ export class InvoicesService {
 
     const qb = this.invoiceRepository
       .createQueryBuilder('inv')
-      .leftJoinAndSelect('inv.client', 'client');
+      .leftJoinAndSelect('inv.client', 'client')
+      .where('inv.tenant_id = :tenantId', { tenantId: query.actor.tenantId });
 
     // Non-admins: only see invoices they created or where they have access to linked jobs
-    if (query.userId && !query.isAdmin) {
+    if (!query.actor.isAdmin) {
       qb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (
           SELECT 1 FROM invoice_items ii
           INNER JOIN job_users ju ON ju.job_id = ii.job_id AND ju.user_id = :userId
           WHERE ii.invoice_id = inv.id
         ))`,
-        { userId: query.userId },
+        { userId: query.actor.userId },
       );
     }
 
@@ -351,33 +357,36 @@ export class InvoicesService {
     return chosen?.email || null;
   }
 
-  async create(
-    dto: CreateInvoiceDto,
-    userId: string,
-    isAdmin = false,
-  ): Promise<Invoice> {
+  async create(dto: CreateInvoiceDto, actor: Actor): Promise<Invoice> {
+    const { tenantId, userId } = actor;
     // Validate the client and every linked job before writing anything
     const [client, settings] = await Promise.all([
-      this.clientRepository.findOne({ where: { id: dto.clientId } }),
-      this.settingsRepository.find(),
+      this.clientRepository.findOne({ where: { id: dto.clientId, tenantId } }),
+      this.tenantsService.getSettings(tenantId),
     ]);
     if (!client) throw new BadRequestException('Client not found');
     this.assertDueAfterIssue(dto.issueDate, dto.dueDate);
-    await this.validateLinkedJobs(dto.items, dto.clientId, userId, isAdmin);
-    const currency = dto.currency || settings[0]?.baseCurrency || 'USD';
+    await this.validateLinkedJobs(dto.items, dto.clientId, actor);
+    const currency = dto.currency || settings.baseCurrency || 'USD';
     const taxRate = dto.taxRate || 0;
     const { subtotal, taxAmount, total } = this.calculateTotals(
       dto.items,
       taxRate,
     );
 
-    // Numbering + invoice + items in one transaction. Locking the settings row
-    // serializes concurrent creates, so MAX()+1 never hands out a number twice.
+    // Numbering + invoice + items in one transaction. Locking the tenant's
+    // settings row serializes concurrent creates, so MAX()+1 never hands out a
+    // number twice.
     const savedId = await this.dataSource.transaction(async (manager) => {
-      await this.lockSettings(manager);
+      const locked = await lockTenantSettings(manager, tenantId);
       await this.assertJobsNotOnOtherInvoice(manager, dto.items);
-      const invoiceNumber = await this.generateInvoiceNumber(manager);
+      const invoiceNumber = await this.generateInvoiceNumber(
+        manager,
+        tenantId,
+        locked.invoicePrefix,
+      );
       const invoice = manager.create(Invoice, {
+        tenantId,
         invoiceNumber,
         clientId: dto.clientId,
         status: 'draft',
@@ -416,8 +425,7 @@ export class InvoicesService {
   async update(
     id: string,
     dto: UpdateInvoiceDto,
-    userId?: string,
-    isAdmin = false,
+    actor: Actor,
   ): Promise<Invoice> {
     const invoice = await this.findOne(id);
     if (invoice.status !== 'draft') {
@@ -435,12 +443,7 @@ export class InvoicesService {
       if (dto.items.length === 0) {
         throw new BadRequestException('Invoice must have at least one item');
       }
-      await this.validateLinkedJobs(
-        dto.items,
-        invoice.clientId,
-        userId,
-        isAdmin,
-      );
+      await this.validateLinkedJobs(dto.items, invoice.clientId, actor);
     }
 
     // Recalculate totals
@@ -455,7 +458,7 @@ export class InvoicesService {
 
     await this.dataSource.transaction(async (manager) => {
       if (dto.items) {
-        await this.lockSettings(manager);
+        await lockTenantSettings(manager, invoice.tenantId);
         await this.assertJobsNotOnOtherInvoice(manager, dto.items, id);
         await manager.delete(InvoiceItem, { invoiceId: id });
         await manager.save(
@@ -504,7 +507,7 @@ export class InvoicesService {
     // Reviving a cancelled invoice: its jobs may have been billed elsewhere since.
     if (status === 'draft') {
       await this.dataSource.transaction(async (manager) => {
-        await this.lockSettings(manager);
+        await lockTenantSettings(manager, invoice.tenantId);
         await this.assertJobsNotOnOtherInvoice(manager, invoice.items, id);
       });
     }

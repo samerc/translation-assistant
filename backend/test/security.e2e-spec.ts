@@ -17,6 +17,7 @@ import { join } from 'path';
 import { lastValueFrom, of, throwError } from 'rxjs';
 import { User } from '../src/modules/users/entities/user.entity.js';
 import { SettingsController } from '../src/modules/settings/settings.controller.js';
+import { PlatformController } from '../src/modules/platform/platform.controller.js';
 import { DocumentsService } from '../src/modules/documents/documents.service.js';
 import { RolesService } from '../src/modules/roles/roles.service.js';
 import { UploadCleanupInterceptor } from '../src/common/interceptors/upload-cleanup.interceptor.js';
@@ -129,6 +130,14 @@ const mailService = {
   sendPasswordReset: () => Promise.resolve(),
 } as any;
 
+// AuthService deps added with multi-tenancy (verification tokens, tenants,
+// settings, Turnstile, DataSource) — not used by these tests.
+const AUTH_EXTRAS = [noopRepo, {}, {}, {}, {}] as [any, any, any, any, any];
+
+// Callers as the services see them (tenant t1).
+const T_USER = { userId: 'user-1', tenantId: 't1', isAdmin: false };
+const T_ADMIN = { userId: 'admin', tenantId: 't1', isAdmin: true };
+
 describe('Refresh-token architecture (AuthService)', () => {
   let authService: AuthService;
   let sessionRepo: ReturnType<typeof makeSessionRepo>;
@@ -151,6 +160,9 @@ describe('Refresh-token architecture (AuthService)', () => {
       email: 'alice@example.com',
       password: passwordHash,
       isActive: true,
+      emailVerified: true,
+      tenantId: 't1',
+      tenant: { id: 't1', name: 'Org', status: 'active' },
       firstName: 'Alice',
       lastName: 'A',
       role: { id: 'r1', name: 'Translator', permissions: [] },
@@ -176,6 +188,7 @@ describe('Refresh-token architecture (AuthService)', () => {
       jwtService,
       configService,
       mailService,
+      ...AUTH_EXTRAS,
     );
   });
 
@@ -313,6 +326,9 @@ describe('Token-type enforcement (passport strategies)', () => {
   const activeUser = {
     id: 'user-1',
     isActive: true,
+    emailVerified: true,
+    tenantId: 't1',
+    tenant: { id: 't1', status: 'active' },
     role: { name: 'Translator', permissions: [] },
   };
   const userRepo = {
@@ -338,6 +354,7 @@ describe('Token-type enforcement (passport strategies)', () => {
       jwtService,
       configService,
       mailService,
+      ...AUTH_EXTRAS,
     ).generateFileToken('user-1');
     await expect(
       jwtStrategy.validate(jwtService.verify(fileToken)),
@@ -347,6 +364,16 @@ describe('Token-type enforcement (passport strategies)', () => {
   it('JwtStrategy accepts a valid access token for an active user', async () => {
     const u = await jwtStrategy.validate({ sub: 'user-1', type: 'access' });
     expect(u.id).toBe('user-1');
+  });
+
+  it('JwtStrategy rejects users of a suspended or pending organization', async () => {
+    for (const status of ['suspended', 'pending']) {
+      activeUser.tenant.status = status;
+      await expect(
+        jwtStrategy.validate({ sub: 'user-1', type: 'access' }),
+      ).rejects.toThrow(UnauthorizedException);
+    }
+    activeUser.tenant.status = 'active';
   });
 
   it('JwtStrategy rejects an unknown / inactive user', async () => {
@@ -380,7 +407,7 @@ describe('Token-type enforcement (passport strategies)', () => {
 });
 
 describe('IDOR guards (controllers)', () => {
-  const nonAdmin = { id: 'user-1', role: { name: 'Translator' } } as any;
+  const nonAdmin = T_USER;
 
   describe('Document create — cloning requires access to the source document', () => {
     it('blocks cloning a document the user cannot access', async () => {
@@ -403,8 +430,7 @@ describe('IDOR guards (controllers)', () => {
       // Access to the clone source was checked, and creation never happened.
       expect(documentsService.verifyDocumentAccess).toHaveBeenCalledWith(
         'secret-doc',
-        'user-1',
-        false,
+        T_USER,
       );
       expect(documentsService.create).not.toHaveBeenCalled();
     });
@@ -465,9 +491,9 @@ describe('IDOR guards (controllers)', () => {
 
     it('rejects an invalid file token (401)', async () => {
       const authService = {
-        verifyFileToken: jest.fn(() => {
-          throw new Error('bad token');
-        }),
+        actorForFileToken: jest.fn(() =>
+          Promise.reject(new Error('bad token')),
+        ),
       } as any;
       const controller = new ClientsController({} as any, authService);
       const res = makeRes();
@@ -482,10 +508,7 @@ describe('IDOR guards (controllers)', () => {
 
     it('rejects a valid token whose owner lacks access to the client (403 IDOR guard)', async () => {
       const authService = {
-        verifyFileToken: jest.fn(() => 'user-1'),
-        getProfile: jest
-          .fn()
-          .mockResolvedValue({ id: 'user-1', role: { name: 'Translator' } }),
+        actorForFileToken: jest.fn().mockResolvedValue(T_USER),
       } as any;
       const clientsService = {
         verifyClientAccess: jest
@@ -506,8 +529,7 @@ describe('IDOR guards (controllers)', () => {
       expect(res.statusCode).toBe(403);
       expect(clientsService.verifyClientAccess).toHaveBeenCalledWith(
         'other-client',
-        'user-1',
-        false,
+        T_USER,
       );
       // Never reached file lookup / disk.
       expect(clientsService.getPassportCopy).not.toHaveBeenCalled();
@@ -523,6 +545,10 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
     id: 'u-active',
     email: 'active@example.com',
     isActive: true,
+    emailVerified: true,
+    tenantId: 't1',
+    tenant: { id: 't1', name: 'Org', status: 'active' },
+
     firstName: 'A',
     lastName: 'A',
     role: { id: 'r', name: 'Translator', permissions: [] },
@@ -531,6 +557,10 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
     id: 'u-inactive',
     email: 'inactive@example.com',
     isActive: false,
+    emailVerified: true,
+    tenantId: 't1',
+    tenant: { id: 't1', name: 'Org', status: 'active' },
+
     firstName: 'I',
     lastName: 'I',
     role: { id: 'r', name: 'Translator', permissions: [] },
@@ -560,6 +590,7 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
       jwtService,
       configService,
       mailService,
+      ...AUTH_EXTRAS,
     );
   });
 
@@ -693,8 +724,11 @@ describe('Invoice create — IDOR guard on linked jobs', () => {
     const clientRepo = { findOne: jest.fn().mockResolvedValue({ id: 'C' }) };
     const jobRepo = {
       find: jest.fn().mockResolvedValue([{ id: 'J', clientId: 'C' }]),
+      count: jest.fn().mockResolvedValue(1), // the job is in the caller's tenant
     };
-    const settingsRepo = { find: jest.fn().mockResolvedValue([]) };
+    const settingsRepo = {
+      getSettings: jest.fn().mockResolvedValue({ baseCurrency: 'USD' }),
+    };
     const jobUserRepo = { findOne: jest.fn().mockResolvedValue(null) }; // no assignment → no access
     const dataSource = { transaction: jest.fn() };
 
@@ -716,8 +750,7 @@ describe('Invoice create — IDOR guard on linked jobs', () => {
           dueDate: '2026-08-30',
           items: [{ jobId: 'J', description: 'x', quantity: 1, unitPrice: 1 }],
         } as any,
-        'user-1',
-        false,
+        T_USER,
       ),
     ).rejects.toThrow(ForbiddenException);
 
@@ -737,23 +770,39 @@ describe('Sensitive columns are never loaded by default', () => {
     }
   });
 
-  it('PATCH /settings response never contains the SMTP password', async () => {
+  it('PATCH /platform/settings response never contains the SMTP password', async () => {
     const settingsService = {
-      updateSettings: jest.fn().mockResolvedValue({
-        companyName: 'X',
+      updatePlatformSettings: jest.fn().mockResolvedValue({
         smtpHost: 'smtp.example.com',
         smtpPass: 'hunter2',
       }),
     } as any;
-    const controller = new SettingsController(settingsService);
-    const res = await controller.updateSettings({}, {
-      role: { name: 'Admin' },
-    } as any);
+    const controller = new PlatformController(
+      {} as any,
+      settingsService,
+      {} as any,
+    );
+    const res = await controller.updateSettings({});
     expect(res).not.toHaveProperty('smtpPass');
     expect(res).toMatchObject({
       smtpHost: 'smtp.example.com',
       smtpPassSet: true,
     });
+  });
+
+  it('PATCH /settings never returns the Translate key or the tenant id', async () => {
+    const settingsService = {
+      updateTenantSettings: jest.fn().mockResolvedValue({
+        companyName: 'X',
+        tenantId: 't1',
+        googleTranslateApiKey: 'secret-key',
+      }),
+    } as any;
+    const controller = new SettingsController(settingsService);
+    const res = await controller.updateSettings({}, T_ADMIN);
+    expect(JSON.stringify(res)).not.toContain('secret-key');
+    expect(res).not.toHaveProperty('tenantId');
+    expect(res).toMatchObject({ googleTranslateKeySet: true });
   });
 });
 
@@ -775,12 +824,10 @@ describe('View-only job assignments grant read, never write', () => {
       {} as any,
       viewOnly as any,
     );
-    await expect(
-      svc.verifyJobAccess('job-1', 'user-1', false),
-    ).resolves.toBeUndefined();
-    await expect(
-      svc.verifyJobAccess('job-1', 'user-1', false, 'edit'),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(svc.verifyJobAccess('job-1', T_USER)).resolves.toBeUndefined();
+    await expect(svc.verifyJobAccess('job-1', T_USER, 'edit')).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('DocumentsController write endpoints ask for edit access', async () => {
@@ -790,11 +837,10 @@ describe('View-only job assignments grant read, never write', () => {
       remove: jest.fn(),
     } as any;
     const controller = new DocumentsController(documentsService, {} as any);
-    const user = { id: 'user-1', role: { name: 'Translator' } } as any;
-    await controller.saveFieldValues('doc-1', { values: [] }, user);
-    await controller.remove('doc-1', user);
+    await controller.saveFieldValues('doc-1', { values: [] }, T_USER);
+    await controller.remove('doc-1', T_USER);
     for (const call of documentsService.verifyDocumentAccess.mock.calls) {
-      expect(call[3]).toBe('edit');
+      expect(call[2]).toBe('edit');
     }
     expect(documentsService.verifyDocumentAccess).toHaveBeenCalledTimes(2);
   });
@@ -802,7 +848,7 @@ describe('View-only job assignments grant read, never write', () => {
   it('InvoicesService.verifyInvoiceAccess(edit) only matches edit assignments', async () => {
     const jobUserRepo = { findOne: jest.fn().mockResolvedValue(null) };
     const svc = new InvoicesService(
-      {} as any,
+      { count: jest.fn().mockResolvedValue(1) } as any, // invoice in tenant
       {} as any,
       {} as any,
       jobUserRepo as any,
@@ -815,7 +861,7 @@ describe('View-only job assignments grant read, never write', () => {
       items: [{ jobId: 'job-1' }],
     } as any);
     await expect(
-      svc.verifyInvoiceAccess('inv-1', 'user-1', false, 'edit'),
+      svc.verifyInvoiceAccess('inv-1', T_USER, 'edit'),
     ).rejects.toThrow(ForbiddenException);
     expect(jobUserRepo.findOne.mock.calls[0][0].where).toMatchObject({
       userId: 'user-1',
@@ -824,37 +870,21 @@ describe('View-only job assignments grant read, never write', () => {
   });
 });
 
-describe('Admin role is fixed', () => {
-  const adminRole = { id: 'r-admin', name: 'Admin', permissions: [] };
-  const otherRole = { id: 'r-t', name: 'Translator', permissions: [] };
-  const roleRepo = {
-    findOne: ({ where }: any) =>
-      Promise.resolve(
-        [adminRole, otherRole].find((r) => r.id === where.id) ?? null,
-      ),
-    save: (r: any) => Promise.resolve(r),
-    remove: jest.fn(),
-  };
-  const permRepo = { findBy: () => Promise.resolve([]) };
-  const svc = new RolesService(roleRepo as any, permRepo as any);
-
-  it('cannot be renamed, stripped of permissions or deleted', async () => {
-    await expect(
-      svc.update('r-admin', { name: 'Administrator' }),
-    ).rejects.toThrow(BadRequestException);
-    await expect(svc.update('r-admin', { permissionIds: [] })).rejects.toThrow(
-      BadRequestException,
-    );
-    await expect(svc.remove('r-admin')).rejects.toThrow(BadRequestException);
-    expect(roleRepo.remove).not.toHaveBeenCalled();
-  });
-
-  it('other roles can still be renamed and edited', async () => {
-    const r = await svc.update('r-t', {
-      name: 'Senior Translator',
-      permissionIds: [],
-    });
-    expect(r.name).toBe('Senior Translator');
+describe('Roles are fixed', () => {
+  it('the roles API only reads, and only the tenant roles', async () => {
+    const roleRepo = { find: jest.fn().mockResolvedValue([]) };
+    const svc = new RolesService(roleRepo as any, {} as any);
+    await svc.findTenantRoles();
+    const where = roleRepo.find.mock.calls[0][0].where;
+    expect((where.name as FindOperator<string[]>).value).toEqual([
+      'Admin',
+      'Translator',
+      'Viewer',
+    ]);
+    // Nothing to create, rename or delete — permissions come from the seed.
+    expect((svc as any).create).toBeUndefined();
+    expect((svc as any).update).toBeUndefined();
+    expect((svc as any).remove).toBeUndefined();
   });
 });
 
@@ -903,23 +933,37 @@ describe('Invites resolve their role up front', () => {
       jwtService,
       configService,
       mailService,
+      ...AUTH_EXTRAS,
     );
     return { svc, inviteRepo, userRepo };
   };
 
   it('no role picked → stores the Translator role id', async () => {
     const { svc, inviteRepo, userRepo } = make({ id: 'r-translator' });
-    await svc.createInvite('new@example.com');
+    await svc.createInvite('new@example.com', undefined, 't1');
     expect(userRepo.manager.findOne.mock.calls[0][1]).toEqual({
       where: { name: 'Translator' },
     });
-    expect(inviteRepo.save.mock.calls[0][0].roleId).toBe('r-translator');
+    expect(inviteRepo.save.mock.calls[0][0]).toMatchObject({
+      roleId: 'r-translator',
+      tenantId: 't1', // the invitee joins the inviting admin's organization
+    });
+  });
+
+  it('a picked role must be one of the tenant roles (never Platform Admin)', async () => {
+    const { svc, userRepo } = make({ id: 'r-admin' });
+    await svc.createInvite('new@example.com', 'r-admin', 't1');
+    const where = userRepo.manager.findOne.mock.calls[0][1].where;
+    expect(where.id).toBe('r-admin');
+    expect((where.name as FindOperator<string[]>).value).not.toContain(
+      'Platform Admin',
+    );
   });
 
   it('unknown role id → 400 at invite time, nothing stored', async () => {
     const { svc, inviteRepo } = make(null);
     await expect(
-      svc.createInvite('new@example.com', 'no-such-role'),
+      svc.createInvite('new@example.com', 'no-such-role', 't1'),
     ).rejects.toThrow(BadRequestException);
     expect(inviteRepo.save).not.toHaveBeenCalled();
   });
@@ -936,12 +980,12 @@ describe('Locked jobs (Batch C)', () => {
       {} as any,
       {} as any,
     );
-    await expect(
-      svc.verifyJobAccess('job-1', 'admin', true, 'edit'),
-    ).rejects.toThrow(BadRequestException);
+    await expect(svc.verifyJobAccess('job-1', T_ADMIN, 'edit')).rejects.toThrow(
+      BadRequestException,
+    );
     // reading a locked job's documents is still fine
     await expect(
-      svc.verifyJobAccess('job-1', 'admin', true),
+      svc.verifyJobAccess('job-1', T_ADMIN),
     ).resolves.toBeUndefined();
   });
 });
@@ -995,11 +1039,12 @@ describe('Data integrity (Batch B)', () => {
       save: jest.fn(),
       create: (_e: unknown, o: unknown) => o,
       update: jest.fn(),
-      // settings-row lock taken before items are replaced
+      // tenant settings-row lock taken before items are replaced
       createQueryBuilder: () => {
         const qb = {
           setLock: () => qb,
-          getMany: () => Promise.resolve([]),
+          where: () => qb,
+          getOne: () => Promise.resolve({ tenantId: 't1' }),
         };
         return qb;
       },
@@ -1016,6 +1061,7 @@ describe('Data integrity (Batch B)', () => {
     );
     jest.spyOn(svc, 'findOne').mockResolvedValue({
       id: 'inv-1',
+      tenantId: 't1',
       status: 'draft',
       clientId: 'C',
       taxRate: 0,
@@ -1024,8 +1070,7 @@ describe('Data integrity (Batch B)', () => {
     await svc.update(
       'inv-1',
       { items: [{ description: 'new', quantity: 2, unitPrice: 3 }] },
-      'user-1',
-      true,
+      T_ADMIN,
     );
     expect(invoiceRepo.save).not.toHaveBeenCalled();
     expect(manager.update).toHaveBeenCalledWith(
@@ -1049,7 +1094,7 @@ describe('Data integrity (Batch B)', () => {
       .spyOn(svc, 'findOne')
       .mockResolvedValue({ status: 'draft', items: [] } as any);
     await expect(
-      svc.update('inv-1', { items: [] } as any, 'user-1', true),
+      svc.update('inv-1', { items: [] } as any, T_ADMIN),
     ).rejects.toThrow(BadRequestException);
   });
 });
@@ -1085,8 +1130,8 @@ describe('Invoice PDF (Unicode fonts + pagination)', () => {
     };
     const svc = new InvoiceExportService(
       { findOne: jest.fn().mockResolvedValue(invoice) } as any,
-      { find: jest.fn().mockResolvedValue([]) } as any,
       { findOne: jest.fn().mockResolvedValue(null) } as any,
+      { getSettings: jest.fn().mockResolvedValue({ companyName: '' }) } as any,
     );
     const { filePath } = await svc.exportPdf('inv-1');
     try {

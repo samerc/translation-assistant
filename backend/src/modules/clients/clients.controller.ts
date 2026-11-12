@@ -18,9 +18,6 @@ import type { Response } from 'express';
 import { createReadStream, existsSync } from 'fs';
 import { pipeline } from 'stream';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
 import { basename } from 'path';
 import { ClientsService } from './clients.service.js';
 import { AuthService } from '../auth/auth.service.js';
@@ -38,18 +35,12 @@ import {
 } from '../../common/pipes/file-validation.pipe.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
-import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { Public } from '../../common/decorators/public.decorator.js';
-import { User } from '../users/entities/user.entity.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
 
-const uploadStorage = diskStorage({
-  destination: join(process.cwd(), 'uploads', 'passports'),
-  filename: (_req, file, cb) => {
-    const uniqueName = `${randomUUID()}${extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
-});
+const uploadStorage = tenantDiskStorage('passports');
 
 @Controller('clients')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -59,16 +50,12 @@ export class ClientsController {
     private readonly authService: AuthService,
   ) {}
 
-  private isAdmin(user: User): boolean {
-    return user.role?.name === 'Admin';
-  }
-
   // ── Clients ──
 
   @Get()
   @RequirePermissions('clients:read')
   findAll(
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
     @Query('search') search?: string,
     @Query('type') type?: 'company' | 'person',
     @Query('sortBy') sortBy?: string,
@@ -83,8 +70,7 @@ export class ClientsController {
       sortOrder,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
-      userId: user.id,
-      isAdmin: this.isAdmin(user),
+      actor,
     });
   }
 
@@ -92,20 +78,16 @@ export class ClientsController {
   @RequirePermissions('clients:read')
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.findOne(id);
   }
 
   @Post()
   @RequirePermissions('clients:create')
-  create(@Body() dto: CreateClientDto, @CurrentUser() user: User) {
-    return this.clientsService.create(dto, user.id);
+  create(@Body() dto: CreateClientDto, @CurrentActor() actor: Actor) {
+    return this.clientsService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -113,13 +95,9 @@ export class ClientsController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClientDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.update(id, dto);
   }
 
@@ -127,13 +105,9 @@ export class ClientsController {
   @RequirePermissions('clients:delete')
   async remove(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.remove(id);
   }
 
@@ -144,13 +118,9 @@ export class ClientsController {
   async addEmail(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateClientEmailDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.addEmail(id, dto);
   }
 
@@ -160,13 +130,9 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('emailId', ParseUUIDPipe) emailId: string,
     @Body() dto: CreateClientEmailDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.updateEmail(id, emailId, dto);
   }
 
@@ -175,13 +141,9 @@ export class ClientsController {
   async removeEmail(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('emailId', ParseUUIDPipe) emailId: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.removeEmail(id, emailId);
   }
 
@@ -192,13 +154,9 @@ export class ClientsController {
   async addPhone(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateClientPhoneDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.addPhone(id, dto);
   }
 
@@ -208,13 +166,9 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('phoneId', ParseUUIDPipe) phoneId: string,
     @Body() dto: CreateClientPhoneDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.updatePhone(id, phoneId, dto);
   }
 
@@ -223,13 +177,9 @@ export class ClientsController {
   async removePhone(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('phoneId', ParseUUIDPipe) phoneId: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.removePhone(id, phoneId);
   }
 
@@ -240,13 +190,9 @@ export class ClientsController {
   async addAddress(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateClientAddressDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.addAddress(id, dto);
   }
 
@@ -256,13 +202,9 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('addressId', ParseUUIDPipe) addressId: string,
     @Body() dto: CreateClientAddressDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.updateAddress(id, addressId, dto);
   }
 
@@ -271,13 +213,9 @@ export class ClientsController {
   async removeAddress(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('addressId', ParseUUIDPipe) addressId: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.removeAddress(id, addressId);
   }
 
@@ -287,13 +225,9 @@ export class ClientsController {
   @RequirePermissions('clients:read')
   async findContacts(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.findContacts(id);
   }
 
@@ -302,13 +236,9 @@ export class ClientsController {
   async createContact(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateContactDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.createContact(id, dto);
   }
 
@@ -318,13 +248,9 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('contactId', ParseUUIDPipe) contactId: string,
     @Body() dto: UpdateContactDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.updateContact(id, contactId, dto);
   }
 
@@ -333,13 +259,9 @@ export class ClientsController {
   async removeContact(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('contactId', ParseUUIDPipe) contactId: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.removeContact(id, contactId);
   }
 
@@ -349,13 +271,9 @@ export class ClientsController {
   @RequirePermissions('clients:read')
   async findPassportCopies(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.findPassportCopies(id);
   }
 
@@ -371,13 +289,9 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('label') label: string,
     @UploadedFile(FileValidationPipe) file: Express.Multer.File,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     const safeLabel =
       typeof label === 'string' ? label.slice(0, 255) : 'Passport';
     return this.clientsService.createPassportCopy(
@@ -400,20 +314,19 @@ export class ClientsController {
       return;
     }
 
-    let tokenUserId: string;
+    let actor: Actor;
     try {
-      tokenUserId = this.authService.verifyFileToken(token);
+      actor = await this.authService.actorForFileToken(token);
     } catch {
       res.status(401).json({ message: 'Invalid or expired file token' });
       return;
     }
 
     // The file token proves identity but is not resource-bound — enforce that the
-    // token's owner actually has access to this client before serving the PII image.
+    // token's owner actually has access to this client (same tenant, visible to
+    // them) before serving the PII image.
     try {
-      const profile = await this.authService.getProfile(tokenUserId);
-      const isAdmin = profile.role?.name === 'Admin';
-      await this.clientsService.verifyClientAccess(id, tokenUserId, isAdmin);
+      await this.clientsService.verifyClientAccess(id, actor);
     } catch {
       res.status(403).json({ message: 'You do not have access to this file' });
       return;
@@ -452,13 +365,9 @@ export class ClientsController {
   async removePassportCopy(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('copyId', ParseUUIDPipe) copyId: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    await this.clientsService.verifyClientAccess(
-      id,
-      user.id,
-      this.isAdmin(user),
-    );
+    await this.clientsService.verifyClientAccess(id, actor);
     return this.clientsService.removePassportCopy(id, copyId);
   }
 }

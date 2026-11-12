@@ -5,6 +5,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { actorOf } from '../../common/tenancy/actor.js';
 
 @Controller('reports')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -14,10 +15,7 @@ export class ReportsController {
   @Get('dashboard-stats')
   @RequirePermissions('reports:read')
   getDashboardStats(@CurrentUser() user: User) {
-    return this.reportsService.getDashboardStats(
-      user.id,
-      user.role?.name === 'Admin',
-    );
+    return this.reportsService.getDashboardStats(actorOf(user));
   }
 
   @Get('revenue')
@@ -29,8 +27,7 @@ export class ReportsController {
     @Query('to') to?: string,
   ) {
     return this.reportsService.getRevenue(
-      user.id,
-      user.role?.name === 'Admin',
+      actorOf(user),
       period || 'monthly',
       from,
       to,
@@ -40,18 +37,12 @@ export class ReportsController {
   @Get('by-client')
   @RequirePermissions('reports:read')
   getByClient(@CurrentUser() user: User) {
-    return this.reportsService.getByClient(
-      user.id,
-      user.role?.name === 'Admin',
-    );
+    return this.reportsService.getByClient(actorOf(user));
   }
 
   @Get('job-status')
   @RequirePermissions('reports:read')
   getJobStatus(@CurrentUser() user: User) {
-    return this.reportsService.getJobStatus(
-      user.id,
-      user.role?.name === 'Admin',
-    );
+    return this.reportsService.getJobStatus(actorOf(user));
   }
 }

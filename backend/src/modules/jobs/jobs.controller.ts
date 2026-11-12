@@ -12,15 +12,13 @@ import {
   UploadedFile,
   ParseUUIDPipe,
   Res,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { createReadStream } from 'fs';
 import { pipeline } from 'stream';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
 import { JobsService } from './jobs.service.js';
 import {
   CreateJobDto,
@@ -41,13 +39,10 @@ import {
   UPLOAD_HARD_LIMIT_BYTES,
 } from '../../common/pipes/file-validation.pipe.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
 
-const jobFileStorage = diskStorage({
-  destination: join(process.cwd(), 'uploads', 'jobs'),
-  filename: (_req, file, cb) => {
-    cb(null, `${randomUUID()}${extname(file.originalname)}`);
-  },
-});
+const jobFileStorage = tenantDiskStorage('jobs');
 
 @Controller('jobs')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard, JobAccessGuard)
@@ -57,7 +52,7 @@ export class JobsController {
   @Get()
   @RequirePermissions('jobs:read')
   findAll(
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('clientId') clientId?: string,
@@ -78,8 +73,7 @@ export class JobsController {
       clientId: clientId || undefined,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
-      userId: user.id,
-      isAdmin: user.role?.name === 'Admin',
+      actor,
     });
   }
 
@@ -91,8 +85,8 @@ export class JobsController {
 
   @Post()
   @RequirePermissions('jobs:create')
-  create(@Body() dto: CreateJobDto, @CurrentUser() user: User) {
-    return this.jobsService.create(dto, user.id, user.role?.name === 'Admin');
+  create(@Body() dto: CreateJobDto, @CurrentActor() actor: Actor) {
+    return this.jobsService.create(dto, actor);
   }
 
   @Patch(':id')
@@ -200,17 +194,17 @@ export class JobsController {
   async linkFile(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: LinkFileDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    // JobAccessGuard checks target job (:id). Also verify source job access.
-    const isAdmin = user.role?.name === 'Admin';
-    if (!isAdmin) {
+    // JobAccessGuard checks the target job (:id). The source job must be in the
+    // same tenant (service) and, for non-admins, assigned to the caller.
+    if (!actor.isAdmin) {
       const assignment = await this.jobsService.checkUserAssignment(
         dto.sourceJobId,
-        user.id,
+        actor.userId,
       );
       if (!assignment) {
-        throw new (await import('@nestjs/common')).ForbiddenException(
+        throw new ForbiddenException(
           'You do not have access to the source job',
         );
       }

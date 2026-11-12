@@ -9,10 +9,14 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Tenant } from '../../tenants/entities/tenant.entity.js';
 import { Client } from '../../clients/entities/client.entity.js';
 import { InvoiceItem } from './invoice-item.entity.js';
 import { InvoicePayment } from './invoice-payment.entity.js';
 
+@Index('UQ_invoices_tenant_number', ['tenantId', 'invoiceNumber'], {
+  unique: true,
+})
 @Index('IDX_invoices_status', ['status'])
 @Index('IDX_invoices_dueDate', ['dueDate'])
 @Entity('invoices')
@@ -20,7 +24,14 @@ export class Invoice {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ length: 20, unique: true })
+  @ManyToOne(() => Tenant)
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId: string;
+
+  @Column({ length: 20 })
   invoiceNumber: string;
 
   @ManyToOne(() => Client)

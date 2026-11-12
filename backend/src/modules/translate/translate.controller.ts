@@ -16,6 +16,7 @@ import { Throttle } from '@nestjs/throttler';
 import { IsString, MaxLength, MinLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from '../users/entities/user.entity.js';
+import { actorOf } from '../../common/tenancy/actor.js';
 import { SettingsService } from '../settings/settings.service.js';
 
 class TranslateDto {
@@ -49,9 +50,11 @@ export class TranslateController {
 
   /** Whether a Google Translate key is set — the document page shows a banner when not. */
   @Get('status')
-  async status() {
+  async status(@CurrentUser() user: User) {
     return {
-      configured: Boolean(await this.settingsService.getTranslateApiKey()),
+      configured: Boolean(
+        await this.settingsService.getTranslateApiKey(actorOf(user).tenantId),
+      ),
     };
   }
 
@@ -64,7 +67,10 @@ export class TranslateController {
       throw new BadRequestException('Invalid language code format');
     }
 
-    const apiKey = await this.settingsService.getTranslateApiKey();
+    // Each organization uses (and pays for) its own key.
+    const apiKey = await this.settingsService.getTranslateApiKey(
+      actorOf(user).tenantId,
+    );
     if (!apiKey) {
       throw new ServiceUnavailableException(
         'Google Translate is not set up. An admin can add an API key in Settings.',

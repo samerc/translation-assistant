@@ -8,6 +8,7 @@ import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Template } from '../templates/entities/template.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
 import { clientVisibleSql } from '../clients/client-access.js';
+import type { Actor } from '../../common/tenancy/actor.js';
 
 @Injectable()
 export class SearchService {
@@ -24,21 +25,24 @@ export class SearchService {
     private readonly invoiceRepository: Repository<Invoice>,
   ) {}
 
-  async search(q: string, userId: string, isAdmin: boolean) {
+  async search(q: string, actor: Actor) {
+    const { userId, isAdmin, tenantId } = actor;
     const like = likeContains(q);
 
     // Build client query - non-admins only see clients they created or have jobs with
     const clientQb = this.clientRepository
       .createQueryBuilder('c')
       .select(['c.id', 'c.name', 'c.type'])
-      .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like });
+      .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like })
+      .andWhere('c.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {
       clientQb.andWhere(clientVisibleSql('c'), { accessUserId: userId });
     }
 
     const clientCountQb = this.clientRepository
       .createQueryBuilder('c')
-      .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like });
+      .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like })
+      .andWhere('c.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {
       clientCountQb.andWhere(clientVisibleSql('c'), { accessUserId: userId });
     }
@@ -52,7 +56,8 @@ export class SearchService {
       .where(
         '(j.title LIKE :q OR j.jobNumber LIKE :q OR j.description LIKE :q)',
         { q: like },
-      );
+      )
+      .andWhere('j.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {
       jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
@@ -64,7 +69,8 @@ export class SearchService {
       .where(
         '(j.title LIKE :q OR j.jobNumber LIKE :q OR j.description LIKE :q)',
         { q: like },
-      );
+      )
+      .andWhere('j.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {
       jobCountQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
@@ -75,11 +81,13 @@ export class SearchService {
     const templateQb = this.templateRepository
       .createQueryBuilder('t')
       .select(['t.id', 't.name', 't.type'])
-      .where('t.name LIKE :q AND t.isActive = true', { q: like });
+      .where('t.name LIKE :q AND t.isActive = true', { q: like })
+      .andWhere('t.tenant_id = :tenantId', { tenantId });
 
     const templateCountQb = this.templateRepository
       .createQueryBuilder('t')
-      .where('t.name LIKE :q AND t.isActive = true', { q: like });
+      .where('t.name LIKE :q AND t.isActive = true', { q: like })
+      .andWhere('t.tenant_id = :tenantId', { tenantId });
 
     // Build invoice query
     const invoiceQb = this.invoiceRepository
@@ -87,7 +95,8 @@ export class SearchService {
       .select(['inv.id', 'inv.invoiceNumber', 'inv.status'])
       .leftJoin('inv.client', 'client')
       .addSelect(['client.name'])
-      .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like });
+      .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like })
+      .andWhere('inv.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {
       invoiceQb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (
@@ -102,7 +111,8 @@ export class SearchService {
     const invoiceCountQb = this.invoiceRepository
       .createQueryBuilder('inv')
       .leftJoin('inv.client', 'client')
-      .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like });
+      .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like })
+      .andWhere('inv.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {
       invoiceCountQb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (

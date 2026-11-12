@@ -15,9 +15,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { randomUUID } from 'crypto';
+import { extname } from 'path';
 import { TemplatesService } from './templates.service.js';
 import {
   CreateTemplateDto,
@@ -31,14 +29,10 @@ import {
 } from './dto/template-field.dto.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
 
-const templateStorage = diskStorage({
-  destination: join(process.cwd(), 'uploads', 'templates'),
-  filename: (_req, file, cb) => {
-    const uniqueName = `${randomUUID()}${extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
-});
+const templateStorage = tenantDiskStorage('templates');
 
 @Controller('templates')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -50,12 +44,14 @@ export class TemplatesController {
   @Get()
   @RequirePermissions('templates:read')
   findAll(
+    @CurrentActor() actor: Actor,
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
   ) {
     return this.templatesService.findAll({
+      tenantId: actor.tenantId,
       search,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
       sortBy,
@@ -65,14 +61,17 @@ export class TemplatesController {
 
   @Get(':id')
   @RequirePermissions('templates:read')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.templatesService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.templatesService.findOne(id, actor.tenantId);
   }
 
   @Post()
   @RequirePermissions('templates:create')
-  create(@Body() dto: CreateTemplateDto) {
-    return this.templatesService.create(dto);
+  create(@Body() dto: CreateTemplateDto, @CurrentActor() actor: Actor) {
+    return this.templatesService.create(dto, actor.tenantId);
   }
 
   @Patch(':id')
@@ -80,14 +79,16 @@ export class TemplatesController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTemplateDto,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.update(id, dto);
+    return this.templatesService.update(id, dto, actor.tenantId);
   }
 
   @Delete(':id')
   @RequirePermissions('templates:delete')
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.templatesService.remove(id);
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentActor() actor: Actor) {
+    return this.templatesService.remove(id, actor.tenantId);
   }
 
   // ── Word Template ──
@@ -109,14 +110,19 @@ export class TemplatesController {
   uploadWord(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.uploadWordFile(id, file);
+    return this.templatesService.uploadWordFile(id, file, actor.tenantId);
   }
 
   @Get(':id/word-preview')
   @RequirePermissions('templates:read')
-  getWordPreview(@Param('id', ParseUUIDPipe) id: string) {
-    return this.templatesService.getWordPreview(id);
+  getWordPreview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.templatesService.getWordPreview(id, actor.tenantId);
   }
 
   @Post(':id/word-placeholders')
@@ -124,8 +130,14 @@ export class TemplatesController {
   setWordPlaceholders(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: WordPlaceholdersDto,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.setWordPlaceholders(id, dto.placeholders);
+    return this.templatesService.setWordPlaceholders(
+      id,
+      dto.placeholders,
+      actor.tenantId,
+    );
   }
 
   // ── Fields ──
@@ -135,8 +147,10 @@ export class TemplatesController {
   addField(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateTemplateFieldDto,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.addField(id, dto);
+    return this.templatesService.addField(id, dto, actor.tenantId);
   }
 
   // Before ':id/fields/:fieldId' — or 'reorder' would be parsed as a field id.
@@ -145,8 +159,14 @@ export class TemplatesController {
   reorderFields(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReorderFieldsDto,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.reorderFields(id, dto.fieldIds);
+    return this.templatesService.reorderFields(
+      id,
+      dto.fieldIds,
+      actor.tenantId,
+    );
   }
 
   @Patch(':id/fields/:fieldId')
@@ -155,8 +175,10 @@ export class TemplatesController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('fieldId', ParseUUIDPipe) fieldId: string,
     @Body() dto: UpdateTemplateFieldDto,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.updateField(id, fieldId, dto);
+    return this.templatesService.updateField(id, fieldId, dto, actor.tenantId);
   }
 
   @Delete(':id/fields/:fieldId')
@@ -164,7 +186,9 @@ export class TemplatesController {
   removeField(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('fieldId', ParseUUIDPipe) fieldId: string,
+
+    @CurrentActor() actor: Actor,
   ) {
-    return this.templatesService.removeField(id, fieldId);
+    return this.templatesService.removeField(id, fieldId, actor.tenantId);
   }
 }

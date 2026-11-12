@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { likeContains } from '../../common/utils/like.js';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { readFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
@@ -16,6 +16,7 @@ import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
 import { Document } from '../documents/entities/document.entity.js';
 import { DocumentFieldValue } from '../documents/entities/document-field-value.entity.js';
+import { Language } from '../settings/entities/language.entity.js';
 import { CreateTemplateDto, UpdateTemplateDto } from './dto/template.dto.js';
 import {
   CreateTemplateFieldDto,
@@ -33,9 +34,33 @@ export class TemplatesService {
     private readonly labelRepository: Repository<TemplateFieldLabel>,
   ) {}
 
+  /** Field labels may only use languages this tenant can see (global or its own). */
+  private async assertLabelLanguages(
+    labels: { languageId: string }[] | undefined,
+    tenantId: string,
+  ): Promise<void> {
+    const ids = [...new Set((labels ?? []).map((l) => l.languageId))];
+    if (ids.length === 0) return;
+    const found = await this.templateRepository.manager
+      .createQueryBuilder(Language, 'l')
+      .where('l.id IN (:...ids)', { ids })
+      .andWhere(
+        new Brackets((w) =>
+          w
+            .where('l.tenant_id IS NULL')
+            .orWhere('l.tenant_id = :tenantId', { tenantId }),
+        ),
+      )
+      .getCount();
+    if (found !== ids.length) {
+      throw new BadRequestException('Language not found');
+    }
+  }
+
   // ── Templates ──
 
   async findAll(query: {
+    tenantId: string;
     search?: string;
     isActive?: boolean;
     sortBy?: string;
@@ -47,7 +72,8 @@ export class TemplatesService {
       .createQueryBuilder('template')
       .leftJoinAndSelect('template.fields', 'fields')
       .leftJoinAndSelect('fields.labels', 'labels')
-      .leftJoinAndSelect('labels.language', 'language');
+      .leftJoinAndSelect('labels.language', 'language')
+      .where('template.tenant_id = :tenantId', { tenantId: query.tenantId });
 
     if (search) {
       qb.andWhere('template.name LIKE :search', {
@@ -68,9 +94,10 @@ export class TemplatesService {
     return data;
   }
 
-  async findOne(id: string): Promise<Template> {
+  /** A template of this tenant (404 for any other tenant's id). */
+  async findOne(id: string, tenantId: string): Promise<Template> {
     const template = await this.templateRepository.findOne({
-      where: { id },
+      where: { id, tenantId },
       relations: {
         fields: {
           labels: {
@@ -84,21 +111,25 @@ export class TemplatesService {
     return template;
   }
 
-  async create(dto: CreateTemplateDto): Promise<Template> {
-    const template = this.templateRepository.create(dto);
+  async create(dto: CreateTemplateDto, tenantId: string): Promise<Template> {
+    const template = this.templateRepository.create({ ...dto, tenantId });
     const saved = await this.templateRepository.save(template);
-    return this.findOne(saved.id);
+    return this.findOne(saved.id, tenantId);
   }
 
-  async update(id: string, dto: UpdateTemplateDto): Promise<Template> {
-    const template = await this.findOne(id);
+  async update(
+    id: string,
+    dto: UpdateTemplateDto,
+    tenantId: string,
+  ): Promise<Template> {
+    const template = await this.findOne(id, tenantId);
     Object.assign(template, dto);
     await this.templateRepository.save(template);
-    return this.findOne(id);
+    return this.findOne(id, tenantId);
   }
 
-  async remove(id: string): Promise<void> {
-    const template = await this.findOne(id);
+  async remove(id: string, tenantId: string): Promise<void> {
+    const template = await this.findOne(id, tenantId);
     // documents.template_id has no cascade — explain instead of a generic FK error.
     const used = await this.templateRepository.manager.count(Document, {
       where: { templateId: id },
@@ -119,9 +150,10 @@ export class TemplatesService {
   async uploadWordFile(
     id: string,
     file: Express.Multer.File,
+    tenantId: string,
   ): Promise<Template> {
     if (!file) throw new BadRequestException('File is required');
-    const template = await this.findOne(id);
+    const template = await this.findOne(id, tenantId);
     if (template.type !== 'word') {
       throw new BadRequestException(
         'This template is not a Word-based template',
@@ -166,16 +198,19 @@ export class TemplatesService {
     if (oldPath && oldPath !== file.path && existsSync(oldPath)) {
       unlinkSync(oldPath);
     }
-    return this.findOne(id);
+    return this.findOne(id, tenantId);
   }
 
-  async getWordPreview(id: string): Promise<{
+  async getWordPreview(
+    id: string,
+    tenantId: string,
+  ): Promise<{
     html: string;
     valid: string[];
     unlinked: string[];
     malformed: { text: string; reason: string }[];
   }> {
-    const template = await this.findOne(id);
+    const template = await this.findOne(id, tenantId);
     if (!template.wordFilePath) {
       throw new NotFoundException('No Word file uploaded for this template');
     }
@@ -223,8 +258,9 @@ export class TemplatesService {
   async setWordPlaceholders(
     id: string,
     placeholders: { find: string; fieldKey: string }[],
+    tenantId: string,
   ): Promise<Template> {
-    const template = await this.findOne(id);
+    const template = await this.findOne(id, tenantId);
     if (template.type !== 'word' || !template.wordFilePath) {
       throw new BadRequestException('Not a Word template or no file uploaded');
     }
@@ -240,15 +276,19 @@ export class TemplatesService {
     for (const ph of placeholders) {
       const existing = template.fields.find((f) => f.fieldKey === ph.fieldKey);
       if (!existing) {
-        await this.addField(id, {
-          fieldKey: ph.fieldKey,
-          fieldType: 'text',
-          groupKey: groupOf[ph.fieldKey],
-        });
+        await this.addField(
+          id,
+          {
+            fieldKey: ph.fieldKey,
+            fieldType: 'text',
+            groupKey: groupOf[ph.fieldKey],
+          },
+          tenantId,
+        );
       }
     }
 
-    return this.findOne(id);
+    return this.findOne(id, tenantId);
   }
 
   // ── Fields ──
@@ -256,8 +296,10 @@ export class TemplatesService {
   async addField(
     templateId: string,
     dto: CreateTemplateFieldDto,
+    tenantId: string,
   ): Promise<TemplateField> {
-    await this.findOne(templateId);
+    await this.findOne(templateId, tenantId);
+    await this.assertLabelLanguages(dto.labels, tenantId);
 
     // Auto-set sortOrder if not provided
     if (dto.sortOrder === undefined) {
@@ -306,7 +348,10 @@ export class TemplatesService {
     templateId: string,
     fieldId: string,
     dto: UpdateTemplateFieldDto,
+    tenantId: string,
   ): Promise<TemplateField> {
+    await this.findOne(templateId, tenantId);
+    await this.assertLabelLanguages(dto.labels, tenantId);
     const field = await this.fieldRepository.findOne({
       where: { id: fieldId, templateId },
       relations: {
@@ -348,7 +393,12 @@ export class TemplatesService {
     }) as Promise<TemplateField>;
   }
 
-  async removeField(templateId: string, fieldId: string): Promise<void> {
+  async removeField(
+    templateId: string,
+    fieldId: string,
+    tenantId: string,
+  ): Promise<void> {
+    await this.findOne(templateId, tenantId);
     const field = await this.fieldRepository.findOne({
       where: { id: fieldId, templateId },
     });
@@ -364,8 +414,12 @@ export class TemplatesService {
     await this.fieldRepository.remove(field);
   }
 
-  async reorderFields(templateId: string, fieldIds: string[]): Promise<void> {
-    await this.findOne(templateId);
+  async reorderFields(
+    templateId: string,
+    fieldIds: string[],
+    tenantId: string,
+  ): Promise<void> {
+    await this.findOne(templateId, tenantId);
     await Promise.all(
       fieldIds.map((id, i) =>
         this.fieldRepository.update({ id, templateId }, { sortOrder: i }),

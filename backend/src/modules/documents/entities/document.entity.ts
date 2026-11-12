@@ -8,6 +8,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { Tenant } from '../../tenants/entities/tenant.entity.js';
 import { Job } from '../../jobs/entities/job.entity.js';
 import { Template } from '../../templates/entities/template.entity.js';
 import { DocumentFieldValue } from './document-field-value.entity.js';
@@ -16,6 +17,13 @@ import { DocumentFieldValue } from './document-field-value.entity.js';
 export class Document {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @ManyToOne(() => Tenant)
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId: string;
 
   @ManyToOne(() => Job, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'job_id' })

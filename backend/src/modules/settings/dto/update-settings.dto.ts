@@ -3,7 +3,6 @@ import {
   IsOptional,
   IsInt,
   IsArray,
-  IsBoolean,
   Min,
   Max,
   MaxLength,
@@ -11,6 +10,7 @@ import {
   Matches,
 } from 'class-validator';
 
+/** A tenant's own settings (tenant admin). */
 export class UpdateSettingsDto {
   @IsOptional()
   @IsString()
@@ -51,42 +51,6 @@ export class UpdateSettingsDto {
   @IsString({ each: true })
   @MaxLength(20, { each: true })
   allowedFileTypes?: string[];
-
-  // ── Email / SMTP ──
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  smtpHost?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(65535)
-  smtpPort?: number;
-
-  @IsOptional()
-  @IsBoolean()
-  smtpSecure?: boolean;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  smtpUser?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  smtpPass?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  smtpFrom?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  appBaseUrl?: string;
 
   // '' = leave unchanged (GET never returns it); null = remove the stored key.
   @IsOptional()

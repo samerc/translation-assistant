@@ -33,7 +33,9 @@ export class MailService {
   constructor(private readonly settingsService: SettingsService) {}
 
   private async resolveConfig(): Promise<ResolvedMailConfig> {
-    const s = await this.settingsService.getSettings().catch(() => null);
+    const s = await this.settingsService
+      .getPlatformSettings()
+      .catch(() => null);
     return {
       host: process.env.SMTP_HOST || s?.smtpHost || 'localhost',
       port: Number(process.env.SMTP_PORT || s?.smtpPort || 25),
@@ -105,11 +107,20 @@ export class MailService {
     );
   }
 
+  /** `"Business name" <platform address>`: the platform mailbox, the sender name. */
+  private fromAs(cfg: ResolvedMailConfig, displayName?: string): string {
+    const name = displayName?.replace(/["<>\r\n]/g, '').trim();
+    if (!name) return cfg.from;
+    const address = /<([^>]+)>/.exec(cfg.from)?.[1] ?? cfg.from;
+    return `"${name.slice(0, 100)}" <${address}>`;
+  }
+
   async sendInvoiceEmail(
     to: string,
     invoiceNumber: string,
     pdfPath: string,
     note?: string,
+    sender?: { name?: string; replyTo?: string },
   ): Promise<void> {
     const cfg = await this.resolveConfig();
     const transporter = this.buildTransport(cfg);
@@ -117,7 +128,10 @@ export class MailService {
       ? `<p>${escapeHtml(note.trim())}</p>`
       : `<p>Please find attached invoice <strong>${escapeHtml(invoiceNumber)}</strong>.</p>`;
     await transporter.sendMail({
-      from: cfg.from,
+      // Sent through the platform's mailbox under the tenant's name; replies go
+      // to the person who sent it.
+      from: this.fromAs(cfg, sender?.name),
+      replyTo: sender?.replyTo,
       to,
       subject: `Invoice ${invoiceNumber}`,
       html: `${intro}<p>Thank you.</p>`,
@@ -131,6 +145,58 @@ export class MailService {
     });
     this.logger.log(
       `[INVOICE_EMAIL_SENT] to=${to} invoice=${invoiceNumber} via ${cfg.host}:${cfg.port}`,
+    );
+  }
+
+  // ── Sign-up ──
+
+  async sendEmailVerification(to: string, token: string): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    const url = `${baseUrl}/verify-email?token=${token}`;
+    await this.sendMail(
+      to,
+      'Confirm your email address',
+      `<p>Thanks for signing up for Translation Assistant.</p>
+       <p><a href="${url}">Click here to confirm your email address</a>. This link expires in 24 hours.</p>
+       <p>After that, we review new organizations and email you as soon as your account is ready.</p>
+       <p>If you didn't sign up, you can ignore this email.</p>`,
+    );
+  }
+
+  /** Someone tried to sign up with an address that already has an account. */
+  async sendSignupExistingAccount(to: string): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    await this.sendMail(
+      to,
+      'You already have an account',
+      `<p>Someone (probably you) tried to sign up for Translation Assistant with this email address, but it already has an account.</p>
+       <p><a href="${baseUrl}/login">Log in</a>, or <a href="${baseUrl}/forgot-password">reset your password</a> if you forgot it.</p>
+       <p>If this wasn't you, you can ignore this email.</p>`,
+    );
+  }
+
+  async sendTenantApproved(to: string, organization: string): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    await this.sendMail(
+      to,
+      'Your Translation Assistant account is ready',
+      `<p>Good news: <strong>${escapeHtml(organization)}</strong> has been approved.</p>
+       <p><a href="${baseUrl}/login">Log in to get started</a>.</p>`,
+    );
+  }
+
+  /** Tells the platform admins a confirmed sign-up is waiting for approval. */
+  async sendSignupAwaitingApproval(
+    to: string,
+    organization: string,
+    email: string,
+  ): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    await this.sendMail(
+      to,
+      `New sign-up waiting for approval: ${organization}`,
+      `<p><strong>${escapeHtml(organization)}</strong> (${escapeHtml(email)}) signed up and confirmed their email.</p>
+       <p><a href="${baseUrl}/platform">Review it in the platform area</a>.</p>`,
     );
   }
 

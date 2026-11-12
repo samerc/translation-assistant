@@ -3,12 +3,23 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Tenant } from '../../tenants/entities/tenant.entity.js';
 
 @Entity('freeform_job_types')
 export class FreeformJobType {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  // Job types carry prices, so each tenant keeps its own list.
+  @ManyToOne(() => Tenant)
+  @JoinColumn({ name: 'tenant_id' })
+  tenant: Tenant;
+
+  @Column({ name: 'tenant_id', type: 'uuid' })
+  tenantId: string;
 
   @Column({ length: 255 })
   name: string;

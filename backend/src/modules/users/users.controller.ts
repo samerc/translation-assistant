@@ -26,6 +26,7 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from './entities/user.entity.js';
+import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
@@ -35,25 +36,28 @@ export class UsersController {
   @Get()
   @RequirePermissions('users:read')
   @AdminOnly()
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@CurrentActor() actor: Actor) {
+    return this.usersService.findAll(actor.tenantId);
   }
 
   @Get(':id')
   @RequirePermissions('users:read')
-  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
     // Non-admins can only view their own profile via this endpoint
-    if (user.role?.name !== 'Admin' && id !== user.id) {
+    if (!actor.isAdmin && id !== actor.userId) {
       throw new ForbiddenException('You can only view your own profile');
     }
-    return this.usersService.findOne(id);
+    return this.usersService.findInTenant(id, actor.tenantId);
   }
 
   @Post()
   @RequirePermissions('users:create')
   @AdminOnly()
-  create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+  create(@Body() dto: CreateUserDto, @CurrentActor() actor: Actor) {
+    return this.usersService.create(dto, actor.tenantId);
   }
 
   @Patch(':id')
@@ -62,16 +66,16 @@ export class UsersController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
     // Same rule as /deactivate: an admin can't lock themselves out (and since
     // every caller is an admin, this also keeps at least one active admin).
-    if (id === user.id && (dto.isActive !== undefined || dto.roleId)) {
+    if (id === actor.userId && (dto.isActive !== undefined || dto.roleId)) {
       throw new ForbiddenException(
         'You cannot change your own role or active status',
       );
     }
-    return this.usersService.update(id, dto);
+    return this.usersService.update(id, dto, { tenantId: actor.tenantId });
   }
 
   // Any authenticated user can read their own profile — no users:read needed
@@ -85,7 +89,7 @@ export class UsersController {
   updateProfile(@CurrentUser() user: User, @Body() dto: UpdateUserDto) {
     // Any authenticated user can update their own profile (limited fields)
     const { roleId, isActive, ...safeDto } = dto;
-    return this.usersService.update(user.id, safeDto);
+    return this.usersService.updateSelf(user.id, safeDto);
   }
 
   // ── Invoice logo (self-service) ──
@@ -133,8 +137,11 @@ export class UsersController {
   @Patch(':id/activate')
   @RequirePermissions('users:update')
   @AdminOnly()
-  activate(@Param('id', ParseUUIDPipe) id: string) {
-    return this.usersService.activate(id);
+  activate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.usersService.activate(id, { tenantId: actor.tenantId });
   }
 
   @Patch(':id/deactivate')
@@ -142,12 +149,12 @@ export class UsersController {
   @AdminOnly()
   deactivate(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    if (id === user.id) {
+    if (id === actor.userId) {
       throw new ForbiddenException('You cannot deactivate your own account');
     }
-    return this.usersService.deactivate(id);
+    return this.usersService.deactivate(id, { tenantId: actor.tenantId });
   }
 
   @Post(':id/reset-password')
@@ -156,21 +163,23 @@ export class UsersController {
   @Throttle({ default: { limit: 10, ttl: 3600000 } })
   resetPassword(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
+    @CurrentActor() actor: Actor,
   ) {
-    if (id === user.id) {
+    if (id === actor.userId) {
       throw new ForbiddenException('Use Change password for your own account');
     }
-    return this.usersService.resetPasswordByAdmin(id);
+    return this.usersService.resetPasswordByAdmin(id, {
+      tenantId: actor.tenantId,
+    });
   }
 
   @Delete(':id')
   @RequirePermissions('users:delete')
   @AdminOnly()
-  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    if (id === user.id) {
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentActor() actor: Actor) {
+    if (id === actor.userId) {
       throw new ForbiddenException('You cannot delete your own account');
     }
-    return this.usersService.remove(id);
+    return this.usersService.remove(id, actor.tenantId);
   }
 }

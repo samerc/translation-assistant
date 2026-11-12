@@ -21,7 +21,7 @@ import {
 import PDFDocument from 'pdfkit';
 import { Invoice } from './entities/invoice.entity.js';
 import { PdfText, TextAlign, TextStyle } from './pdf-text.js';
-import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { TenantsService } from '../tenants/tenants.service.js';
 import { User } from '../users/entities/user.entity.js';
 
 interface InvoiceBranding {
@@ -35,14 +35,14 @@ export class InvoiceExportService {
   constructor(
     @InjectRepository(Invoice)
     private readonly invoiceRepository: Repository<Invoice>,
-    @InjectRepository(AppSettings)
-    private readonly settingsRepository: Repository<AppSettings>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly tenantsService: TenantsService,
   ) {}
 
   // ── Invoice branding: the creator's "My Business" details, falling back to
-  // the company details in Settings > General so an invoice always has a sender ──
+  // the organization's details in Settings > General so an invoice always has
+  // a sender ──
 
   private async getBranding(invoice: Invoice): Promise<InvoiceBranding> {
     const [creator, settings] = await Promise.all([
@@ -51,7 +51,7 @@ export class InvoiceExportService {
             where: { id: invoice.createdByUserId },
           })
         : Promise.resolve(null),
-      this.getSettings(),
+      this.tenantsService.getSettings(invoice.tenantId),
     ]);
     const ownName = creator?.businessName?.trim();
     return {
@@ -150,11 +150,6 @@ export class InvoiceExportService {
   // shift the printed day.
   private formatDate(value: string | Date): string {
     return new Date(value).toLocaleDateString(undefined, { timeZone: 'UTC' });
-  }
-
-  private async getSettings(): Promise<AppSettings | null> {
-    const settings = await this.settingsRepository.find();
-    return settings[0] || null;
   }
 
   private ensureExportDir(): string {

@@ -12,12 +12,22 @@ import { InviteToken } from './entities/invite-token.entity.js';
 import { PasswordResetToken } from './entities/password-reset-token.entity.js';
 import { Session } from './entities/session.entity.js';
 import { MailModule } from '../mail/mail.module.js';
+import { SettingsModule } from '../settings/settings.module.js';
+import { EmailVerificationToken } from './entities/email-verification-token.entity.js';
+import { TurnstileService } from './turnstile.service.js';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, InviteToken, PasswordResetToken, Session]),
+    TypeOrmModule.forFeature([
+      User,
+      InviteToken,
+      PasswordResetToken,
+      Session,
+      EmailVerificationToken,
+    ]),
     PassportModule,
     MailModule,
+    SettingsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -30,7 +40,7 @@ import { MailModule } from '../mail/mail.module.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy],
+  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, TurnstileService],
   exports: [AuthService],
 })
 export class AuthModule {}

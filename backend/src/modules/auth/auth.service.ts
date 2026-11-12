@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, In, IsNull, QueryFailedError, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { MoreThan } from 'typeorm';
@@ -21,6 +21,19 @@ import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { JwtPayload } from './strategies/jwt.strategy.js';
 import { MailService } from '../mail/mail.service.js';
+import { EmailVerificationToken } from './entities/email-verification-token.entity.js';
+import { Notification } from '../notifications/entities/notification.entity.js';
+import { TenantsService } from '../tenants/tenants.service.js';
+import { SettingsService } from '../settings/settings.service.js';
+import { TurnstileService } from './turnstile.service.js';
+import { SignupDto } from './dto/signup.dto.js';
+import { actorOf, type Actor } from '../../common/tenancy/actor.js';
+import { bindRequestTenant } from '../../common/tenancy/tenant-context.js';
+import {
+  ROLE_ADMIN,
+  ROLE_PLATFORM_ADMIN,
+  TENANT_ROLES,
+} from '../../common/tenancy/roles.js';
 
 interface LoginAttempt {
   failures: number;
@@ -35,6 +48,9 @@ const REFRESH_TOKEN_DAYS = 7;
 
 // Role given to invitees when the admin leaves the role on "Default".
 const DEFAULT_INVITE_ROLE = 'Translator';
+const VERIFY_EMAIL_HOURS = 24;
+const SIGNUP_MESSAGE =
+  'Check your email: we sent you a link to confirm your address. After that, we review new organizations and let you know when your account is ready.';
 
 @Injectable()
 export class AuthService {
@@ -53,6 +69,12 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    @InjectRepository(EmailVerificationToken)
+    private readonly verifyTokenRepository: Repository<EmailVerificationToken>,
+    private readonly tenantsService: TenantsService,
+    private readonly settingsService: SettingsService,
+    private readonly turnstile: TurnstileService,
+    private readonly dataSource: DataSource,
   ) {
     setInterval(() => this.cleanupAttempts(), 10 * 60_000);
   }
@@ -73,6 +95,7 @@ export class AuthService {
         role: {
           permissions: true,
         },
+        tenant: true,
       },
     });
 
@@ -95,6 +118,7 @@ export class AuthService {
     if (!user.isActive) {
       throw new ForbiddenException('Account is deactivated');
     }
+    this.assertCanSignIn(user);
 
     this.loginAttempts.delete(attemptKey);
 
@@ -134,6 +158,11 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (existingUser) throw new BadRequestException('Email already registered');
+    // The invitee joins the inviting organization, and only while it is active.
+    const tenant = await this.tenantsService.findOne(invite.tenantId);
+    if (tenant.status !== 'active') {
+      throw new BadRequestException('Invalid or expired invite token');
+    }
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
     const user = this.userRepository.create({
@@ -142,6 +171,8 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       roleId: invite.roleId,
+      tenantId: invite.tenantId,
+      emailVerified: true, // the invite link was delivered to this address
     });
 
     // Single use: claim the invite with a conditional UPDATE (concurrent
@@ -171,6 +202,7 @@ export class AuthService {
         role: {
           permissions: true,
         },
+        tenant: true,
       },
     });
 
@@ -203,10 +235,18 @@ export class AuthService {
         role: {
           permissions: true,
         },
+        tenant: true,
       },
     });
 
-    if (!user) throw new ForbiddenException('Access denied');
+    if (!user || !user.isActive) throw new ForbiddenException('Access denied');
+    // A suspended organization's sessions stop refreshing.
+    if (
+      !user.emailVerified ||
+      (user.tenantId && user.tenant?.status !== 'active')
+    ) {
+      throw new ForbiddenException('Access denied');
+    }
 
     // Find the active session for this refresh token (SHA-256 is deterministic → direct lookup)
     const matchedSession = await this.sessionRepository.findOne({
@@ -341,6 +381,7 @@ export class AuthService {
         role: {
           permissions: true,
         },
+        tenant: true,
       },
     });
     if (!user) throw new UnauthorizedException();
@@ -351,12 +392,16 @@ export class AuthService {
 
   async createInvite(
     email: string,
-    roleId?: string,
+    roleId: string | undefined,
+    tenantId: string,
   ): Promise<{ token: string; expiresAt: Date }> {
     // users.role_id is NOT NULL: resolve the role now, so a bad or missing role
     // fails here instead of at registration. No role picked = Translator.
+    // Only the tenant roles can be given, never Platform Admin.
     const role = await this.userRepository.manager.findOne(Role, {
-      where: roleId ? { id: roleId } : { name: DEFAULT_INVITE_ROLE },
+      where: roleId
+        ? { id: roleId, name: In(TENANT_ROLES) }
+        : { name: DEFAULT_INVITE_ROLE },
     });
     if (!role) {
       throw new BadRequestException(
@@ -370,7 +415,13 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
     await this.inviteTokenRepository.save(
-      this.inviteTokenRepository.create({ token, email, roleId, expiresAt }),
+      this.inviteTokenRepository.create({
+        token,
+        email,
+        roleId,
+        tenantId,
+        expiresAt,
+      }),
     );
     // Email the invite link (best-effort — the token is also returned so an admin can
     // copy the link manually if SMTP isn't configured yet).
@@ -487,6 +538,218 @@ export class AuthService {
     };
   }
 
+  // ── Sign-in rules beyond the password ──
+
+  /** Unverified emails and pending/suspended organizations can't sign in (said only after the password matched). */
+  private assertCanSignIn(user: User): void {
+    if (!user.emailVerified) {
+      throw new ForbiddenException(
+        'Please confirm your email address first: check your inbox for the link.',
+      );
+    }
+    if (!user.tenantId) return; // platform admin
+    if (user.tenant?.status === 'pending') {
+      throw new ForbiddenException(
+        "Your organization is waiting for approval. We'll email you as soon as it's ready.",
+      );
+    }
+    if (user.tenant?.status !== 'active') {
+      throw new ForbiddenException(
+        "Your organization's account is suspended. Please contact support.",
+      );
+    }
+  }
+
+  // ── Self sign-up ──
+
+  /**
+   * Creates an organization (pending approval) and its first admin (email not
+   * yet verified), then emails a confirmation link. The response is the same
+   * whether or not the email was already registered (no account oracle).
+   */
+  async signup(
+    dto: SignupDto,
+    ip: string,
+  ): Promise<{ message: string; token?: string }> {
+    const platform = await this.settingsService.getPlatformSettings();
+    if (!platform.signupsEnabled) {
+      throw new ForbiddenException('Sign-ups are closed at the moment');
+    }
+    await this.turnstile.verify(dto.turnstileToken, ip);
+
+    const email = dto.email.trim().toLowerCase();
+    const existing = await this.userRepository.findOne({ where: { email } });
+    if (existing) {
+      this.mailService
+        .sendSignupExistingAccount(email)
+        .catch((err: unknown) =>
+          this.logger.error(
+            `[SIGNUP_EXISTING_EMAIL_FAILED]: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      this.logger.log(`[SIGNUP_EXISTING_ACCOUNT] ip=${ip}`);
+      return { message: SIGNUP_MESSAGE };
+    }
+
+    const adminRole = await this.userRepository.manager.findOneOrFail(Role, {
+      where: { name: ROLE_ADMIN },
+    });
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    let created: { userId: string; tenantId: string };
+    try {
+      created = await this.dataSource.transaction(async (manager) => {
+        const tenant = await this.tenantsService.create(manager, {
+          name: dto.organizationName.trim(),
+          status: 'pending',
+          source: 'signup',
+        });
+        const user = await manager.save(
+          manager.create(User, {
+            email,
+            password: passwordHash,
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            roleId: adminRole.id,
+            tenantId: tenant.id,
+            emailVerified: false,
+          }),
+        );
+        return { userId: user.id, tenantId: tenant.id };
+      });
+    } catch (err) {
+      // Same email signed up concurrently: answer like any other duplicate.
+      const code = (err as { driverError?: { code?: string } }).driverError
+        ?.code;
+      if (err instanceof QueryFailedError && code === 'ER_DUP_ENTRY') {
+        return { message: SIGNUP_MESSAGE };
+      }
+      throw err;
+    }
+    this.logger.log(
+      `[SIGNUP] tenantId=${created.tenantId} userId=${created.userId} ip=${ip}`,
+    );
+
+    const token = await this.issueVerificationToken(created.userId, email);
+    // Outside production the link token is returned for testing (no inbox needed).
+    if (process.env.NODE_ENV !== 'production') {
+      return { message: SIGNUP_MESSAGE, token };
+    }
+    return { message: SIGNUP_MESSAGE };
+  }
+
+  private async issueVerificationToken(
+    userId: string,
+    email: string,
+  ): Promise<string> {
+    await this.verifyTokenRepository.update(
+      { userId, used: false },
+      { used: true },
+    );
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + VERIFY_EMAIL_HOURS * 3_600_000);
+    await this.verifyTokenRepository.save(
+      this.verifyTokenRepository.create({ token, userId, expiresAt }),
+    );
+    this.mailService
+      .sendEmailVerification(email, token)
+      .catch((err: unknown) =>
+        this.logger.error(
+          `[VERIFY_EMAIL_FAILED] userId=${userId}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    return token;
+  }
+
+  /** Confirms the address; a pending organization then waits for the platform admin. */
+  async verifyEmail(
+    token: string,
+  ): Promise<{ message: string; organizationStatus?: string }> {
+    const vt = await this.verifyTokenRepository.findOne({
+      where: { token, used: false, expiresAt: MoreThan(new Date()) },
+    });
+    if (!vt) {
+      throw new BadRequestException(
+        'This confirmation link is invalid or has expired',
+      );
+    }
+    const claim = await this.verifyTokenRepository.update(
+      { id: vt.id, used: false },
+      { used: true },
+    );
+    if (!claim.affected) {
+      throw new BadRequestException(
+        'This confirmation link is invalid or has expired',
+      );
+    }
+    await this.userRepository.update(vt.userId, { emailVerified: true });
+    const user = await this.userRepository.findOne({
+      where: { id: vt.userId },
+      relations: { tenant: true },
+    });
+    this.logger.log(`[EMAIL_VERIFIED] userId=${vt.userId}`);
+
+    if (user?.tenant?.status === 'pending') {
+      await this.notifyPlatformAdminsOfSignup(user.tenant.name, user.email);
+      return {
+        message:
+          "Thanks, your email is confirmed. We're reviewing your organization and will email you as soon as it's ready.",
+        organizationStatus: 'pending',
+      };
+    }
+    return {
+      message: 'Thanks, your email is confirmed. You can log in now.',
+      organizationStatus: user?.tenant?.status,
+    };
+  }
+
+  async resendVerification(email: string): Promise<{ message: string }> {
+    const message =
+      'If that address has an unconfirmed account, we sent a new confirmation link.';
+    const user = await this.userRepository.findOne({
+      where: { email: email.trim().toLowerCase() },
+    });
+    if (user && !user.emailVerified && user.isActive) {
+      await this.issueVerificationToken(user.id, user.email);
+    }
+    return { message };
+  }
+
+  private async notifyPlatformAdminsOfSignup(
+    organization: string,
+    email: string,
+  ): Promise<void> {
+    const admins = await this.userRepository.find({
+      where: {
+        tenantId: IsNull(),
+        isActive: true,
+        role: { name: ROLE_PLATFORM_ADMIN },
+      },
+      relations: { role: true },
+    });
+    if (!admins.length) return;
+    const repo = this.dataSource.getRepository(Notification);
+    await repo.save(
+      admins.map((a) =>
+        repo.create({
+          userId: a.id,
+          type: 'tenant_signup',
+          title: 'New sign-up waiting for approval',
+          message: `${organization} (${email}) confirmed their email.`,
+          link: '/platform',
+        }),
+      ),
+    );
+    for (const a of admins) {
+      this.mailService
+        .sendSignupAwaitingApproval(a.email, organization, email)
+        .catch((err: unknown) =>
+          this.logger.error(
+            `[SIGNUP_ADMIN_EMAIL_FAILED]: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+    }
+  }
+
   // ── File Tokens ──
 
   generateFileToken(userId: string): string {
@@ -494,6 +757,29 @@ export class AuthService {
       { sub: userId, purpose: 'file-access' },
       { expiresIn: 300 },
     );
+  }
+
+  /**
+   * The caller behind a file-view token (passport images open in a new tab, so
+   * they carry a short-lived token in the URL instead of the bearer header).
+   * Same rules as an API call: active user, active organization.
+   */
+  async actorForFileToken(token: string): Promise<Actor> {
+    const userId = this.verifyFileToken(token);
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { role: true, tenant: true },
+    });
+    if (
+      !user ||
+      !user.isActive ||
+      !user.tenantId ||
+      user.tenant?.status !== 'active'
+    ) {
+      throw new UnauthorizedException('Invalid or expired file token');
+    }
+    bindRequestTenant(user.tenantId);
+    return actorOf(user);
   }
 
   verifyFileToken(token: string): string {
@@ -645,6 +931,12 @@ export class AuthService {
       colorPalette: user.colorPalette,
       darkMode: user.darkMode,
       mustChangePassword: user.mustChangePassword,
+      // The organization the user works in; null for the platform admin.
+      tenant: user.tenant
+        ? { id: user.tenant.id, name: user.tenant.name }
+        : null,
+      isPlatformAdmin:
+        !user.tenantId && user.role?.name === ROLE_PLATFORM_ADMIN,
       role: {
         id: user.role.id,
         name: user.role.name,
