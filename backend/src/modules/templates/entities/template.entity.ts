@@ -6,8 +6,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  ManyToMany,
+  JoinTable,
   JoinColumn,
 } from 'typeorm';
+import { Language } from '../../settings/entities/language.entity.js';
 import { Tenant } from '../../tenants/entities/tenant.entity.js';
 import { TemplateField } from './template-field.entity.js';
 
@@ -51,8 +54,20 @@ export class Template {
   @Column({ length: 255, nullable: true })
   wordFileName: string;
 
+  // Inactive = draft: hidden when creating jobs. The setup wizard creates
+  // templates inactive and activates them at the end.
   @Column({ default: true })
   isActive: boolean;
+
+  // The languages the document is produced in (its field labels are asked
+  // for these). Empty = not set yet: offered for every target language.
+  @ManyToMany(() => Language)
+  @JoinTable({
+    name: 'template_languages',
+    joinColumn: { name: 'template_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'language_id', referencedColumnName: 'id' },
+  })
+  languages: Language[];
 
   @OneToMany(() => TemplateField, (field) => field.template, {
     cascade: true,

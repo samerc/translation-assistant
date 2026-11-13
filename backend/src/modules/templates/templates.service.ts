@@ -23,6 +23,24 @@ import {
   UpdateTemplateFieldDto,
 } from './dto/template-field.dto.js';
 
+/** "date_of_birth" → date, "page_count" → number, "notes" → textarea, else text. */
+export function guessFieldType(
+  key: string,
+): 'text' | 'textarea' | 'number' | 'date' {
+  const k = key.toLowerCase();
+  if (
+    /(^|_)(date|dob|born|birthday|issued|expiry|expires)(_|$)|_date$|^date_/.test(
+      k,
+    )
+  )
+    return 'date';
+  if (/(^|_)(count|number_of|qty|quantity|amount|age)(_|$)/.test(k))
+    return 'number';
+  if (/(^|_)(notes?|remarks?|comments?|description|address)(_|$)/.test(k))
+    return 'textarea';
+  return 'text';
+}
+
 @Injectable()
 export class TemplatesService {
   constructor(
@@ -39,7 +57,18 @@ export class TemplatesService {
     labels: { languageId: string }[] | undefined,
     tenantId: string,
   ): Promise<void> {
-    const ids = [...new Set((labels ?? []).map((l) => l.languageId))];
+    await this.assertLanguages(
+      (labels ?? []).map((l) => l.languageId),
+      tenantId,
+    );
+  }
+
+  /** Every id is a language this tenant can see (global or its own). */
+  private async assertLanguages(
+    languageIds: string[],
+    tenantId: string,
+  ): Promise<void> {
+    const ids = [...new Set(languageIds)];
     if (ids.length === 0) return;
     const found = await this.templateRepository.manager
       .createQueryBuilder(Language, 'l')
@@ -73,6 +102,7 @@ export class TemplatesService {
       .leftJoinAndSelect('template.fields', 'fields')
       .leftJoinAndSelect('fields.labels', 'labels')
       .leftJoinAndSelect('labels.language', 'language')
+      .leftJoinAndSelect('template.languages', 'docLanguages')
       .where('template.tenant_id = :tenantId', { tenantId: query.tenantId });
 
     if (search) {
@@ -104,6 +134,7 @@ export class TemplatesService {
             language: true,
           },
         },
+        languages: true,
       },
       order: { fields: { sortOrder: 'ASC' } },
     });
@@ -112,7 +143,13 @@ export class TemplatesService {
   }
 
   async create(dto: CreateTemplateDto, tenantId: string): Promise<Template> {
-    const template = this.templateRepository.create({ ...dto, tenantId });
+    const { languageIds, ...rest } = dto;
+    await this.assertLanguages(languageIds ?? [], tenantId);
+    const template = this.templateRepository.create({
+      ...rest,
+      tenantId,
+      languages: (languageIds ?? []).map((id) => ({ id }) as Language),
+    });
     const saved = await this.templateRepository.save(template);
     return this.findOne(saved.id, tenantId);
   }
@@ -123,7 +160,12 @@ export class TemplatesService {
     tenantId: string,
   ): Promise<Template> {
     const template = await this.findOne(id, tenantId);
-    Object.assign(template, dto);
+    const { languageIds, ...rest } = dto;
+    Object.assign(template, rest);
+    if (languageIds) {
+      await this.assertLanguages(languageIds, tenantId);
+      template.languages = languageIds.map((lid) => ({ id: lid }) as Language);
+    }
     await this.templateRepository.save(template);
     return this.findOne(id, tenantId);
   }
@@ -209,6 +251,10 @@ export class TemplatesService {
     valid: string[];
     unlinked: string[];
     malformed: { text: string; reason: string }[];
+    /** placeholder → the {#group} loop it sits in */
+    groups: Record<string, string>;
+    /** Template fields that no longer appear in the Word file. */
+    orphans: string[];
   }> {
     const template = await this.findOne(id, tenantId);
     if (!template.wordFilePath) {
@@ -252,7 +298,15 @@ export class TemplatesService {
       },
       allowedSchemes: ['http', 'https', 'data'],
     });
-    return { html: cleanHtml, valid, unlinked, malformed };
+    const orphans = fieldKeys.filter((k) => !foundValid.includes(k));
+    return {
+      html: cleanHtml,
+      valid,
+      unlinked,
+      malformed,
+      groups: { ...scan.groupOf },
+      orphans,
+    };
   }
 
   async setWordPlaceholders(
@@ -272,6 +326,15 @@ export class TemplatesService {
       result.value.replace(/<[^>]*>/g, ''),
     );
 
+    // Fields already there but in the wrong (or no) group for the loop they
+    // sit in are moved into it.
+    for (const field of template.fields) {
+      const loop = groupOf[field.fieldKey];
+      if (loop && field.groupKey !== loop) {
+        await this.fieldRepository.update(field.id, { groupKey: loop });
+      }
+    }
+
     // Create/update fields based on placeholders
     for (const ph of placeholders) {
       const existing = template.fields.find((f) => f.fieldKey === ph.fieldKey);
@@ -280,7 +343,7 @@ export class TemplatesService {
           id,
           {
             fieldKey: ph.fieldKey,
-            fieldType: 'text',
+            fieldType: guessFieldType(ph.fieldKey),
             groupKey: groupOf[ph.fieldKey],
           },
           tenantId,

@@ -12,7 +12,11 @@ import {
   UploadedFile,
   ParseUUIDPipe,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { buildExampleDocx } from './word-example.js';
+import { contentDisposition } from '../../common/utils/content-disposition.js';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { extname } from 'path';
@@ -57,6 +61,23 @@ export class TemplatesController {
       sortBy,
       sortOrder,
     });
+  }
+
+  /** A ready-made example Word template (the setup wizard links to it). */
+  @Get('example-docx')
+  @RequirePermissions('templates:read')
+  async exampleDocx(@Res() res: Response) {
+    const buf = await buildExampleDocx();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      contentDisposition('Example template.docx'),
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.send(buf);
   }
 
   @Get(':id')

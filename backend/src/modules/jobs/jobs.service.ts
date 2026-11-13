@@ -156,7 +156,21 @@ export class JobsService {
     if (ids.length === 0) return [];
     return this.templateRepository.find({
       where: { id: In(ids), tenantId },
+      relations: { languages: true },
     });
+  }
+
+  /** A template with document languages set can only produce those languages. */
+  private assertTemplateLanguage(
+    template: Template,
+    targetLanguageId: string | null | undefined,
+  ): void {
+    if (!targetLanguageId || !template.languages?.length) return;
+    if (!template.languages.some((l) => l.id === targetLanguageId)) {
+      throw new BadRequestException(
+        `The template "${template.name}" isn't available in the job's target language`,
+      );
+    }
   }
 
   async findAll(query: {
@@ -323,6 +337,8 @@ export class JobsService {
           'Template not found for one of the line items',
         );
       }
+      const t = li.templateId ? templateMap.get(li.templateId) : undefined;
+      if (t) this.assertTemplateLanguage(t, dto.targetLanguageId);
     }
 
     // Wrap all writes in a transaction
@@ -477,6 +493,7 @@ export class JobsService {
         job.tenantId,
       );
       if (!template) throw new BadRequestException('Template not found');
+      this.assertTemplateLanguage(template, job.targetLanguageId);
     }
 
     const maxSort = await this.lineItemRepository

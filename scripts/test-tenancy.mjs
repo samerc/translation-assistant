@@ -486,6 +486,61 @@ check('reject removes the pending sign-up', ok(rej) && ok(rejR) && (await req(P,
 const rejActive = await req(P, 'POST', `/platform/tenants/${a.ids.tenant}/reject`);
 check('an active organization cannot be rejected', rejActive.status === 400, show(rejActive));
 
+console.log('== template setup wizard (Word) ==');
+{
+  const { createRequire } = await import('node:module');
+  const requireBackend = createRequire(new URL('../backend/package.json', import.meta.url));
+  const PizZip = requireBackend('pizzip');
+  const rawReq = async (token, method, path, body) => {
+    const headers = { 'X-Forwarded-For': nextIp(), Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const res = await fetch(API + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, type: res.headers.get('content-type') || '', buf: Buffer.from(await res.arrayBuffer()) };
+  };
+  const docText = (buf) => new PizZip(buf).file('word/document.xml').asText().replace(/<[^>]+>/g, '');
+
+  const ex = await rawReq(a.A, 'GET', '/templates/example-docx');
+  check('example .docx downloads', ex.status === 200 && ex.type.includes('wordprocessingml') && ex.buf.length > 1000, `${ex.status} ${ex.type}`);
+  const created = await req(a.A, 'POST', '/templates', { type: 'word', name: `Wizard ${RUN}`, pricePerPage: 12, isActive: false, languageIds: [a.en] });
+  check('wizard creates a draft with its document language', ok(created) && created.data.isActive === false && created.data.languages?.map((l) => l.id).join() === a.en, show(created));
+  const tid = created.data.id;
+  const up = await req(a.A, 'POST', `/templates/${tid}/upload-word`, undefined, { form: fileForm({}, 'example.docx', ex.buf, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') });
+  check('the example file uploads as a Word template', ok(up), show(up));
+  const pv = (await req(a.A, 'GET', `/templates/${tid}/word-preview`)).data;
+  const found = [...(pv.valid ?? []), ...(pv.unlinked ?? [])];
+  check('preview finds the placeholders and the loop', found.includes('full_name') && found.includes('child_name') && pv.groups?.child_name === 'children' && pv.malformed?.length === 0, JSON.stringify(pv).slice(0, 200));
+  const sync = await req(a.A, 'POST', `/templates/${tid}/word-placeholders`, { placeholders: pv.unlinked.map((k) => ({ find: k, fieldKey: k })) });
+  const byKey = Object.fromEntries((sync.data.fields ?? []).map((f) => [f.fieldKey, f]));
+  check('fields created: loop fields grouped, types guessed', ok(sync) && byKey.child_name?.groupKey === 'children' && byKey.date_of_birth?.fieldType === 'date' && byKey.notes?.fieldType === 'textarea' && byKey.full_name?.fieldType === 'text', show(sync));
+  await req(a.A, 'POST', `/templates/${tid}/fields`, { fieldKey: 'old_one', fieldType: 'text' });
+  const pv2 = (await req(a.A, 'GET', `/templates/${tid}/word-preview`)).data;
+  check('a field missing from the file is reported as orphan', pv2.orphans?.includes('old_one') && !pv2.orphans.includes('full_name'), JSON.stringify(pv2.orphans));
+  const exp = await rawReq(a.A, 'POST', `/templates/${tid}/test-export`, {
+    languageId: a.en,
+    values: [
+      { templateFieldId: byKey.full_name.id, value: 'Rana Test' },
+      { templateFieldId: byKey.child_name.id, value: 'Kid One', entryIndex: 0 },
+      { templateFieldId: byKey.child_name.id, value: 'Kid Two', entryIndex: 1 },
+    ],
+  });
+  const text = exp.status === 200 ? docText(exp.buf) : '';
+  check('test export renders values and repeats the row', exp.status === 200 && text.includes('Rana Test') && text.includes('Kid One') && text.includes('Kid Two') && !text.includes('{full_name}'), `${exp.status} ${text.slice(0, 120)}`);
+  const expB = await rawReq(a.A, 'POST', `/templates/${b.ids.template}/test-export`, { values: [] });
+  check("test export of another organization's template → 404", expB.status === 404, String(expB.status));
+  const expT = await rawReq(a.T, 'POST', `/templates/${tid}/test-export`, { values: [] });
+  check('a translator cannot run a test export', expT.status === 403, String(expT.status));
+  const badLang = await req(a.A, 'PATCH', `/templates/${tid}`, { languageIds: ['00000000-0000-4000-8000-000000000000'] });
+  check('unknown document language refused', badLang.status === 400, show(badLang));
+  await req(a.A, 'PATCH', `/templates/${tid}`, { isActive: true });
+  const clientId = a.ids.client;
+  const wrongLang = await req(a.A, 'POST', '/jobs', { title: 'Lang check', clientId, sourceLanguageId: a.en, targetLanguageId: a.ar, lineItems: [{ description: 'p', pageCount: 1, pricePerPage: 12, templateId: tid }] });
+  check('job refused when the template is not in the target language', wrongLang.status === 400 && /target language/i.test(wrongLang.data.message), show(wrongLang));
+  const rightLang = await req(a.A, 'POST', '/jobs', { title: 'Lang ok', clientId, sourceLanguageId: a.ar, targetLanguageId: a.en, lineItems: [{ description: 'p', pageCount: 1, pricePerPage: 12, templateId: tid }] });
+  check('job accepted in a document language', ok(rightLang), show(rightLang));
+  const noLangTpl = await req(a.A, 'POST', '/jobs', { title: 'Any lang', clientId, sourceLanguageId: a.en, targetLanguageId: a.ar, lineItems: [{ description: 'p', pageCount: 1, pricePerPage: 10, templateId: a.ids.template }] });
+  check('a template without document languages works for any language', ok(noLangTpl), show(noLangTpl));
+}
+
 console.log('== invite pre-fill ==');
 const ipEmail = `prefill-${RUN}@tenancy.test`;
 const ipOrg = await req(P, 'POST', '/platform/tenants', { name: `Prefill Org ${RUN}`, adminEmail: ipEmail, adminFirstName: 'Rana', adminLastName: 'Haddad' });

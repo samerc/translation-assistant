@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import DOMPurify from 'dompurify';
 import { api, ApiError } from '@/lib/api';
 import { uid } from '@/lib/uid';
@@ -22,6 +23,7 @@ interface Template {
   pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean;
   layoutJson: object | null; wordFilePath: string | null; wordFileName: string | null;
   fields: TemplateField[];
+  languages: Language[];
 }
 
 const FIELD_TYPES = [
@@ -86,13 +88,18 @@ export default function TemplateDetailPage() {
               {template.type === 'word' ? 'Word' : template.type === 'simple' ? 'Simple' : 'Designer'}
             </span>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${template.isActive ? 'tone tone-success' : 'bg-bg text-text-muted'}`}>
-              {template.isActive ? 'Active' : 'Inactive'}
+              {template.isActive ? 'Active' : 'Draft'}
             </span>
           </div>
           {template.description && <p className="text-sm text-text-secondary mt-1">{template.description}</p>}
         </div>
-        {canDelete && <button onClick={handleDelete} className="btn btn-danger">Delete</button>}
+        <div className="flex gap-2">
+          {canEdit && <Link href={`/templates/${template.id}/setup`} className="btn btn-primary">Setup wizard</Link>}
+          {canDelete && <button onClick={handleDelete} className="btn btn-danger">Delete</button>}
+        </div>
       </div>
+
+      {canEdit && <TemplateStatus template={template} />}
 
       <div className="flex gap-1 border-b border-border mb-6">
         {tabs.filter((t) => t.show).map((tab) => (
@@ -109,10 +116,17 @@ export default function TemplateDetailPage() {
         </p>
       )}
       <fieldset disabled={!canEdit} className="min-w-0">
-      {activeTab === 'fields' && <FieldsTab template={template} languages={languages} onUpdate={loadTemplate} />}
+      {activeTab === 'fields' && (
+        <FieldsTab
+          template={template}
+          // Labels are asked in the document's languages (all languages until those are set).
+          languages={template.languages?.length ? languages.filter((l) => template.languages.some((d) => d.id === l.id)) : languages}
+          onUpdate={loadTemplate}
+        />
+      )}
       {activeTab === 'designer' && template.type === 'designer' && <DesignerTab template={template} onUpdate={loadTemplate} />}
       {activeTab === 'word' && template.type === 'word' && <WordTemplateTab template={template} onUpdate={loadTemplate} />}
-      {activeTab === 'settings' && <SettingsTab template={template} onUpdate={loadTemplate} />}
+      {activeTab === 'settings' && <SettingsTab template={template} languages={languages} onUpdate={loadTemplate} />}
       </fieldset>
     </div>
   );
@@ -276,8 +290,9 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
   };
 
   // ── Warn about missing labels ──
+  // Only the first document language is required; the others fall back to it.
   const getMissingLabels = (field: TemplateField) => {
-    return languages.filter((l) => !field.labels.some((fl) => fl.languageId === l.id));
+    return languages.slice(0, 1).filter((l) => !field.labels.some((fl) => fl.languageId === l.id));
   };
 
   const cellClass = "px-3 py-2 text-sm";
@@ -487,7 +502,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
         if (fieldsWithMissing.length === 0) return null;
         return (
           <div className="mt-4 p-3 tone tone-warning rounded-lg text-sm">
-            {fieldsWithMissing.length} field(s) have missing language labels: {fieldsWithMissing.map((f) => f.fieldKey).join(', ')}
+            {fieldsWithMissing.length} field(s) have no {languages[0]?.name} label: {fieldsWithMissing.map((f) => f.fieldKey).join(', ')}
           </div>
         );
       })()}
@@ -1111,7 +1126,28 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
 
 // ── Settings Tab ──
 
-function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
+/** What still needs doing before the template is usable, with a way into the wizard. */
+function TemplateStatus({ template }: { template: Template }) {
+  const issues: string[] = [];
+  if (template.type !== 'simple' && !template.languages?.length) issues.push('no document language');
+  if (template.type === 'word' && !template.wordFileName) issues.push('no Word file');
+  if (template.type !== 'simple' && template.fields.length === 0) issues.push('no fields');
+  if (issues.length === 0 && template.isActive) return null;
+  return (
+    <div className={`tone ${issues.length ? 'tone-warning' : 'tone-info'} rounded-lg px-4 py-3 text-sm mb-5 flex flex-wrap items-center justify-between gap-3`}>
+      <span>
+        {issues.length
+          ? <>Not ready: {issues.join(', ')}.</>
+          : <>Draft: ready, but not offered when creating jobs until you activate it.</>}
+      </span>
+      <Link href={`/templates/${template.id}/setup${issues.length ? '' : '?step=done'}`} className="font-semibold underline">
+        {issues.length ? 'Open the setup wizard' : 'Review and activate'}
+      </Link>
+    </div>
+  );
+}
+
+function SettingsTab({ template, languages, onUpdate }: { template: Template; languages: Language[]; onUpdate: () => void }) {
   const [form, setForm] = useState({
     name: template.name,
     description: template.description || '',
@@ -1119,6 +1155,7 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
     discountedPricePerPage: template.discountedPricePerPage ? String(template.discountedPricePerPage) : '',
     isActive: template.isActive,
   });
+  const [langIds, setLangIds] = useState<string[]>(template.languages?.map((l) => l.id) ?? []);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -1132,6 +1169,7 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
         pricePerPage: parseFloat(form.pricePerPage) || 0,
         discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : null,
         isActive: form.isActive,
+        languageIds: langIds,
       });
       setMessage('Saved');
       setTimeout(() => setMessage(''), 3000);
@@ -1170,6 +1208,21 @@ function SettingsTab({ template, onUpdate }: { template: Template; onUpdate: () 
               className="input w-full" />
           </div>
         </div>
+        {template.type !== 'simple' && (
+          <div>
+            <span className="block text-sm font-medium text-text mb-1.5">Document languages</span>
+            <div className="flex flex-wrap gap-2">
+              {languages.map((l) => (
+                <label key={l.id} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
+                  <input type="checkbox" checked={langIds.includes(l.id)}
+                    onChange={() => setLangIds((ids) => (ids.includes(l.id) ? ids.filter((x) => x !== l.id) : [...ids, l.id]))} />
+                  {l.name}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-text-muted mt-1">Offered for jobs translating into these languages.</p>
+          </div>
+        )}
         <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
           <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
             className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
