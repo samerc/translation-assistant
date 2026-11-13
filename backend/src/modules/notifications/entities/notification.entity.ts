@@ -30,6 +30,7 @@ export class Notification {
       'invoice_overdue',
       'job_assigned',
       'tenant_signup',
+      'tenant_deletion_request',
     ],
   })
   type: string;

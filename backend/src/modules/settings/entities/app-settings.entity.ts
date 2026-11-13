@@ -43,6 +43,11 @@ export class AppSettings {
   @Column({ default: true })
   signupsEnabled: boolean;
 
+  // Days between approving an organization's deletion and purging its data
+  // (the window in which the platform admin can still restore it).
+  @Column({ type: 'int', default: 30 })
+  deletionGraceDays: number;
+
   @UpdateDateColumn()
   updatedAt: Date;
 }

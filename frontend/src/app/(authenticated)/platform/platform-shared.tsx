@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { buttonClass } from '@/components/ui/Button';
 import { KeyIcon } from '@/components/ui/icons';
 
-export type TenantStatus = 'pending' | 'active' | 'suspended';
+export type TenantStatus = 'pending' | 'active' | 'suspended' | 'closing';
 
 export interface TenantRow {
   id: string;
@@ -17,6 +17,10 @@ export interface TenantRow {
   source: 'platform' | 'signup';
   createdAt: string;
   approvedAt: string | null;
+  deletionRequestedAt: string | null;
+  deletionRequestedByUserId: string | null;
+  deletionReason: string | null;
+  deleteAfter: string | null;
   userCount?: number;
   admins?: { id: string; email: string; name: string; emailVerified: boolean }[];
 }
@@ -25,12 +29,14 @@ export const STATUS_LABEL: Record<TenantStatus, string> = {
   pending: 'Waiting for approval',
   active: 'Active',
   suspended: 'Suspended',
+  closing: 'Scheduled for deletion',
 };
 
 const STATUS_TONE: Record<TenantStatus, string> = {
   pending: 'tone tone-warning',
   active: 'tone tone-success',
   suspended: 'tone tone-danger',
+  closing: 'tone tone-neutral',
 };
 
 export function TenantStatusBadge({ status }: { status: TenantStatus }) {

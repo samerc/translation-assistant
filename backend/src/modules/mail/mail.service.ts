@@ -96,13 +96,30 @@ export class MailService {
     );
   }
 
-  async sendInvite(to: string, token: string): Promise<void> {
+  async sendInvite(
+    to: string,
+    token: string,
+    ctx: {
+      firstName?: string;
+      organizationName?: string;
+      roleName?: string;
+    } = {},
+  ): Promise<void> {
     const { baseUrl } = await this.resolveConfig();
     const url = `${baseUrl}/register?token=${token}`;
+    const greeting = ctx.firstName
+      ? `<p>Hi ${escapeHtml(ctx.firstName)},</p>`
+      : '';
+    const org = ctx.organizationName
+      ? `<strong>${escapeHtml(ctx.organizationName)}</strong> on Translation Assistant`
+      : 'Translation Assistant';
+    const role = ctx.roleName ? ` as ${escapeHtml(ctx.roleName)}` : '';
     await this.sendMail(
       to,
-      "You've been invited to Translation Assistant",
-      `<p>You've been invited to join Translation Assistant.</p>
+      ctx.organizationName
+        ? `You've been invited to join ${ctx.organizationName.replace(/[\r\n]/g, ' ')}`
+        : "You've been invited to Translation Assistant",
+      `${greeting}<p>You've been invited to join ${org}${role}.</p>
        <p><a href="${url}">Click here to create your account</a>. This invite expires in 7 days.</p>`,
     );
   }
@@ -182,6 +199,73 @@ export class MailService {
       'Your Translation Assistant account is ready',
       `<p>Good news: <strong>${escapeHtml(organization)}</strong> has been approved.</p>
        <p><a href="${baseUrl}/login">Log in to get started</a>.</p>`,
+    );
+  }
+
+  /** Platform admins: an organization's admin asked to delete it. */
+  async sendDeletionRequested(
+    to: string,
+    organization: string,
+    requestedBy: string,
+    reason: string | null,
+  ): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    await this.sendMail(
+      to,
+      `Deletion requested: ${organization.replace(/[\r\n]/g, ' ')}`,
+      `<p><strong>${escapeHtml(organization)}</strong>: ${escapeHtml(requestedBy)} asked to delete the organization.</p>
+       ${reason ? `<p>Reason: ${escapeHtml(reason)}</p>` : ''}
+       <p><a href="${baseUrl}/platform">Review the request</a>.</p>`,
+    );
+  }
+
+  /** Organization admins: deletion approved, data purged on `deleteAfter`. */
+  async sendDeletionScheduled(
+    to: string,
+    organization: string,
+    deleteAfter: Date,
+  ): Promise<void> {
+    const date = deleteAfter.toISOString().slice(0, 10);
+    await this.sendMail(
+      to,
+      `${organization.replace(/[\r\n]/g, ' ')} is scheduled for deletion`,
+      `<p><strong>${escapeHtml(organization)}</strong> has been closed. Nobody can sign in to it any more.</p>
+       <p>All of its data (clients, jobs, documents, invoices, files and accounts) will be permanently deleted on <strong>${date}</strong>.</p>
+       <p>If this is a mistake, reply to this email before then and we can restore it.</p>`,
+    );
+  }
+
+  /** Organization admins: the organization was deleted right away (it held no data). */
+  async sendTenantDeleted(to: string, organization: string): Promise<void> {
+    await this.sendMail(
+      to,
+      `${organization.replace(/[\r\n]/g, ' ')} has been deleted`,
+      `<p><strong>${escapeHtml(organization)}</strong> and its accounts have been deleted.</p>`,
+    );
+  }
+
+  /** The requester: the platform admin declined the deletion request. */
+  async sendDeletionDeclined(
+    to: string,
+    organization: string,
+    message: string | null,
+  ): Promise<void> {
+    await this.sendMail(
+      to,
+      `Your deletion request for ${organization.replace(/[\r\n]/g, ' ')}`,
+      `<p>Your request to delete <strong>${escapeHtml(organization)}</strong> was not approved. The organization stays as it is.</p>
+       ${message ? `<p>${escapeHtml(message)}</p>` : ''}`,
+    );
+  }
+
+  /** Organization admins: restored during the grace period. */
+  async sendTenantRestored(to: string, organization: string): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    await this.sendMail(
+      to,
+      `${organization.replace(/[\r\n]/g, ' ')} has been restored`,
+      `<p><strong>${escapeHtml(organization)}</strong> is no longer scheduled for deletion. Its data is intact.</p>
+       <p><a href="${baseUrl}/login">Log in</a>.</p>`,
     );
   }
 

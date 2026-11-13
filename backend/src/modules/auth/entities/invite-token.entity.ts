@@ -27,6 +27,13 @@ export class InviteToken {
   @Column({ length: 255 })
   email: string;
 
+  // Optional, given by the inviting admin; pre-fills registration (editable there).
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  lastName: string | null;
+
   @Column({ nullable: true })
   roleId: string;
 

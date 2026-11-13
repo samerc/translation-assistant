@@ -7,7 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-export type TenantStatus = 'pending' | 'active' | 'suspended';
+export type TenantStatus = 'pending' | 'active' | 'suspended' | 'closing';
 
 /**
  * An organisation using the app (e.g. one translation office and its team).
@@ -17,6 +17,8 @@ export type TenantStatus = 'pending' | 'active' | 'suspended';
  * - pending:   self-signup waiting for platform-admin approval (no login yet)
  * - active:    normal use
  * - suspended: blocked by the platform admin; its users can't log in
+ * - closing:   deletion approved; nobody can log in, and its data is purged
+ *              at `deleteAfter` unless the platform admin restores it
  */
 @Index('IDX_tenants_status', ['status'])
 @Entity('tenants')
@@ -29,7 +31,7 @@ export class Tenant {
 
   @Column({
     type: 'enum',
-    enum: ['pending', 'active', 'suspended'],
+    enum: ['pending', 'active', 'suspended', 'closing'],
     default: 'active',
   })
   status: TenantStatus;
@@ -44,6 +46,20 @@ export class Tenant {
 
   @Column({ type: 'datetime', nullable: true })
   approvedAt: Date | null;
+
+  // ── Deletion: the organization's admin asks, the platform admin decides ──
+  @Column({ type: 'datetime', nullable: true })
+  deletionRequestedAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  deletionRequestedByUserId: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  deletionReason: string | null;
+
+  // Set when status becomes 'closing': the purge date.
+  @Column({ type: 'datetime', nullable: true })
+  deleteAfter: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

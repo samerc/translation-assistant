@@ -48,6 +48,12 @@ const REFRESH_TOKEN_DAYS = 7;
 
 // Role given to invitees when the admin leaves the role on "Default".
 const DEFAULT_INVITE_ROLE = 'Translator';
+
+/** Optional invitee name given by the inviting admin (pre-fills registration). */
+export interface InviteeNames {
+  firstName?: string;
+  lastName?: string;
+}
 const VERIFY_EMAIL_HOURS = 24;
 const SIGNUP_MESSAGE =
   'Check your email: we sent you a link to confirm your address. After that, we review new organizations and let you know when your account is ready.';
@@ -394,6 +400,7 @@ export class AuthService {
     email: string,
     roleId: string | undefined,
     tenantId: string,
+    names?: InviteeNames,
   ): Promise<{ token: string; expiresAt: Date }> {
     // users.role_id is NOT NULL: resolve the role now, so a bad or missing role
     // fails here instead of at registration. No role picked = Translator.
@@ -418,19 +425,57 @@ export class AuthService {
       this.inviteTokenRepository.create({
         token,
         email,
+        firstName: names?.firstName?.trim() || null,
+        lastName: names?.lastName?.trim() || null,
         roleId,
         tenantId,
         expiresAt,
       }),
     );
+    const tenant = await this.tenantsService.findOne(tenantId);
     // Email the invite link (best-effort — the token is also returned so an admin can
     // copy the link manually if SMTP isn't configured yet).
-    this.mailService.sendInvite(email, token).catch((err: unknown) => {
-      this.logger.error(
-        `[INVITE_EMAIL_FAILED] email=${email}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
+    this.mailService
+      .sendInvite(email, token, {
+        firstName: names?.firstName?.trim(),
+        organizationName: tenant.name,
+        roleName: role.name,
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          `[INVITE_EMAIL_FAILED] email=${email}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     return { token, expiresAt };
+  }
+
+  /**
+   * What a (still usable) invite is for: the locked email, the suggested name,
+   * the organization and role. Anyone holding the 64-char token may see it —
+   * the token is the secret that was emailed to that address.
+   */
+  async inviteDetails(token: string) {
+    const invite = await this.inviteTokenRepository.findOne({
+      where: { token, used: false, expiresAt: MoreThan(new Date()) },
+      relations: { tenant: true },
+    });
+    if (!invite || invite.tenant.status !== 'active') {
+      throw new BadRequestException(
+        'This invitation is invalid or has expired. Ask your administrator for a new one.',
+      );
+    }
+    const role = invite.roleId
+      ? await this.userRepository.manager.findOne(Role, {
+          where: { id: invite.roleId },
+        })
+      : null;
+    return {
+      email: invite.email,
+      firstName: invite.firstName ?? '',
+      lastName: invite.lastName ?? '',
+      organizationName: invite.tenant.name,
+      roleName: role?.name ?? null,
+    };
   }
 
   // ── Password Reset ──
@@ -551,6 +596,11 @@ export class AuthService {
     if (user.tenant?.status === 'pending') {
       throw new ForbiddenException(
         "Your organization is waiting for approval. We'll email you as soon as it's ready.",
+      );
+    }
+    if (user.tenant?.status === 'closing') {
+      throw new ForbiddenException(
+        'Your organization is scheduled for deletion. Contact support if this is a mistake.',
       );
     }
     if (user.tenant?.status !== 'active') {
@@ -919,6 +969,12 @@ export class AuthService {
         this.loginAttempts.delete(key);
       }
     }
+  }
+
+  /** Re-check a signed-in user's password before a destructive action. */
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    const hash = await this.loadPasswordHash(userId);
+    return !!hash && bcrypt.compare(password, hash);
   }
 
   // `password` is select: false on User, so it must be fetched on its own.

@@ -18,7 +18,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegisterDto } from './dto/register.dto.js';
-import { InviteDto } from './dto/invite.dto.js';
+import { InviteDto, InviteDetailsDto } from './dto/invite.dto.js';
 import {
   SignupDto,
   VerifyEmailDto,
@@ -183,7 +183,23 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 3600000 } })
   async createInvite(@Body() dto: InviteDto, @CurrentActor() actor: Actor) {
     // Invites always join the inviting admin's own organization.
-    return this.authService.createInvite(dto.email, dto.roleId, actor.tenantId);
+    return this.authService.createInvite(
+      dto.email,
+      dto.roleId,
+      actor.tenantId,
+      {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+      },
+    );
+  }
+
+  /** Public: what an invite link is for, to pre-fill the registration form. */
+  @Post('invite-details')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
+  async inviteDetails(@Body() dto: InviteDetailsDto) {
+    return this.authService.inviteDetails(dto.token);
   }
 
   // ── Self sign-up (public; organizations wait for platform approval) ──

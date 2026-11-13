@@ -781,6 +781,7 @@ describe('Sensitive columns are never loaded by default', () => {
       {} as any,
       settingsService,
       {} as any,
+      {} as any,
     );
     const res = await controller.updateSettings({});
     expect(res).not.toHaveProperty('smtpPass');
@@ -933,7 +934,13 @@ describe('Invites resolve their role up front', () => {
       jwtService,
       configService,
       mailService,
-      ...AUTH_EXTRAS,
+      noopRepo,
+      {
+        findOne: jest.fn().mockResolvedValue({ id: 't1', name: 'Org' }),
+      } as any,
+      {} as any,
+      {} as any,
+      {} as any,
     );
     return { svc, inviteRepo, userRepo };
   };

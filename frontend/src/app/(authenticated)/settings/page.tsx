@@ -11,6 +11,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { CheckIcon, MoonIcon, SunIcon } from '@/components/ui/icons';
 import { confirmDialog, alertDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
+import { NO_AUTOFILL } from '@/lib/no-autofill';
 import { TranslateKeyForm } from '@/components/TranslateKeyForm';
 
 interface AppSettings {
@@ -206,6 +207,114 @@ function GeneralSettings() {
           onSaved={(keySet) => setSettings({ ...settings, googleTranslateKeySet: keySet })}
         />
       </div>
+      <DeleteOrganizationCard />
+    </div>
+  );
+}
+
+interface DeletionRequest {
+  requested: boolean;
+  requestedAt?: string;
+  requestedBy?: string | null;
+  reason?: string | null;
+}
+
+/** Organization admin: ask the platform admin to delete the organization. */
+function DeleteOrganizationCard() {
+  const { user } = useAuth();
+  const orgName = user?.tenant?.name ?? '';
+  const [request, setRequest] = useState<DeletionRequest | null>(null);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ confirmName: '', password: '', reason: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    api.get<DeletionRequest>('/organization/deletion-request').then(setRequest).catch(() => setRequest({ requested: false }));
+  }, []);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      const res = await api.post<DeletionRequest>('/organization/deletion-request', {
+        confirmName: form.confirmName,
+        password: form.password,
+        ...(form.reason.trim() ? { reason: form.reason.trim() } : {}),
+      });
+      setRequest(res);
+      setOpen(false);
+      setForm({ confirmName: '', password: '', reason: '' });
+      toast.success('Request sent. You will get an email when it is handled.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Failed to send the request.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const withdraw = async () => {
+    if (!(await confirmDialog({ title: 'Withdraw the deletion request?', message: 'Your organization stays as it is.', confirmText: 'Withdraw' }))) return;
+    setBusy(true);
+    try {
+      setRequest(await api.delete<DeletionRequest>('/organization/deletion-request'));
+      toast.success('Deletion request withdrawn.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to withdraw the request.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!request) return null;
+
+  return (
+    <div className="card p-6 mt-6">
+      <h3 className="font-semibold text-text mb-1">Delete organization</h3>
+      {request.requested ? (
+        <>
+          <div className="tone tone-warning rounded-lg p-3 text-sm mt-2">
+            Deletion requested{request.requestedBy ? ` by ${request.requestedBy}` : ''}
+            {request.requestedAt ? ` on ${new Date(request.requestedAt).toLocaleDateString()}` : ''}. It is waiting for approval;
+            nothing has been deleted yet. You&apos;ll get an email when it is handled.
+          </div>
+          <button type="button" onClick={withdraw} disabled={busy} className="btn btn-secondary mt-4">Withdraw request</button>
+        </>
+      ) : !open ? (
+        <>
+          <p className="text-sm text-text-secondary mb-4">
+            Ask for {orgName ? <strong>{orgName}</strong> : 'your organization'} and everything in it to be deleted: clients, jobs, documents,
+            invoices, templates, files and every user account. Once approved, nobody can sign in, and the data is permanently
+            deleted after a grace period. Download anything you must keep (for example invoices) first.
+          </p>
+          <button type="button" onClick={() => setOpen(true)} className="btn btn-danger">Request deletion…</button>
+        </>
+      ) : (
+        <form onSubmit={submit} className="space-y-4 mt-3">
+          {error && <div className="p-3 tone tone-danger rounded-lg text-sm" role="alert">{error}</div>}
+          <div>
+            <label htmlFor="del-reason" className="block text-sm font-medium text-text mb-1.5">Reason <span className="text-text-muted font-normal">(optional)</span></label>
+            <textarea id="del-reason" rows={2} maxLength={500} className="input w-full resize-none" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+          </div>
+          <div>
+            <label htmlFor="del-name" className="block text-sm font-medium text-text mb-1.5">
+              Type <strong>{orgName}</strong> to confirm
+            </label>
+            <input id="del-name" {...NO_AUTOFILL} className="input" required value={form.confirmName} onChange={(e) => setForm({ ...form, confirmName: e.target.value })} />
+          </div>
+          <div>
+            <label htmlFor="del-password" className="block text-sm font-medium text-text mb-1.5">Your password</label>
+            <input id="del-password" type="password" autoComplete="current-password" className="input" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy || form.confirmName.trim() !== orgName.trim()} className="btn btn-danger">
+              {busy ? 'Sending…' : 'Send deletion request'}
+            </button>
+            <button type="button" onClick={() => { setOpen(false); setError(''); }} className="btn btn-secondary">Cancel</button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -928,6 +1037,8 @@ function UsersSettings() {
   const [loadError, setLoadError] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRoleId, setInviteRoleId] = useState('');
+  const [inviteFirst, setInviteFirst] = useState('');
+  const [inviteLast, setInviteLast] = useState('');
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ link: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -949,10 +1060,14 @@ function UsersSettings() {
       const res = await api.post<{ token: string }>('/auth/invite', {
         email: inviteEmail,
         ...(inviteRoleId ? { roleId: inviteRoleId } : {}),
+        ...(inviteFirst.trim() ? { firstName: inviteFirst.trim() } : {}),
+        ...(inviteLast.trim() ? { lastName: inviteLast.trim() } : {}),
       });
       const link = `${window.location.origin}/register?token=${res.token}`;
       setInviteResult({ link });
       setInviteEmail('');
+      setInviteFirst('');
+      setInviteLast('');
     } catch (err) {
       setError(err instanceof ApiError ? String(err.message) : 'Failed to create invite.');
     } finally {
@@ -1008,21 +1123,31 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
         <h3 className="font-semibold text-text mb-1">Invite a user</h3>
         <p className="text-sm text-text-secondary mb-4">Generates an invite link (also emailed if SMTP is configured).</p>
         {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
-        <form onSubmit={invite} className="flex flex-col sm:flex-row gap-3 sm:items-end">
-          <div className="flex-1">
-            <label htmlFor="inviteEmail" className="block text-sm font-medium text-text mb-1.5">Email</label>
-            <input id="inviteEmail" type="email" required value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className={inputClass} />
+        <form onSubmit={invite} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:items-end">
+          <div>
+            <label htmlFor="inviteFirst" className="block text-sm font-medium text-text mb-1.5">First name <span className="text-text-muted font-normal">(optional)</span></label>
+            <input id="inviteFirst" {...NO_AUTOFILL} maxLength={100} value={inviteFirst} onChange={(e) => setInviteFirst(e.target.value)} className={inputClass} />
           </div>
-          <div className="sm:w-48">
+          <div>
+            <label htmlFor="inviteLast" className="block text-sm font-medium text-text mb-1.5">Last name <span className="text-text-muted font-normal">(optional)</span></label>
+            <input id="inviteLast" {...NO_AUTOFILL} maxLength={100} value={inviteLast} onChange={(e) => setInviteLast(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label htmlFor="inviteEmail" className="block text-sm font-medium text-text mb-1.5">Email</label>
+            <input id="inviteEmail" type="email" {...NO_AUTOFILL} required value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className={inputClass} />
+          </div>
+          <div>
             <label htmlFor="inviteRole" className="block text-sm font-medium text-text mb-1.5">Role</label>
             <select id="inviteRole" value={inviteRoleId} onChange={(e) => setInviteRoleId(e.target.value)} className={inputClass}>
               <option value="">Default (Translator)</option>
               {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
-          <button type="submit" disabled={inviteBusy} className="btn btn-primary">
-            {inviteBusy ? 'Creating...' : 'Create invite'}
-          </button>
+          <div className="sm:col-span-2">
+            <button type="submit" disabled={inviteBusy} className="btn btn-primary">
+              {inviteBusy ? 'Creating...' : 'Create invite'}
+            </button>
+          </div>
         </form>
         {inviteResult && (
           <div className="mt-4 p-3 tone tone-success rounded-lg text-sm break-all">
@@ -1092,6 +1217,8 @@ function EmailSettings() {
   });
   const [signupsEnabled, setSignupsEnabled] = useState(true);
   const [signupBusy, setSignupBusy] = useState(false);
+  const [graceDays, setGraceDays] = useState('30');
+  const [graceBusy, setGraceBusy] = useState(false);
   const [passSet, setPassSet] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1102,6 +1229,7 @@ function EmailSettings() {
   useEffect(() => {
     api.get<Record<string, unknown>>('/platform/settings').then((s) => {
       setSignupsEnabled(s.signupsEnabled !== false);
+      setGraceDays(String(s.deletionGraceDays ?? 30));
       setForm({
         smtpHost: (s.smtpHost as string) || '',
         smtpPort: s.smtpPort != null ? String(s.smtpPort) : '',
@@ -1167,6 +1295,19 @@ function EmailSettings() {
     }
   };
 
+  const saveGrace = async (e: FormEvent) => {
+    e.preventDefault();
+    setGraceBusy(true);
+    try {
+      await api.patch('/platform/settings', { deletionGraceDays: parseInt(graceDays, 10) });
+      toast.success('Grace period saved.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to save.');
+    } finally {
+      setGraceBusy(false);
+    }
+  };
+
   const inputClass = 'input';
   if (!loaded) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -1186,6 +1327,21 @@ function EmailSettings() {
             {signupsEnabled ? 'Close sign-ups' : 'Open sign-ups'}
           </button>
         </div>
+      </div>
+
+      <div className="card p-6">
+        <h3 className="font-semibold text-text mb-1">Organization deletion</h3>
+        <p className="text-sm text-text-secondary mb-4">
+          When you approve deleting an organization that holds data, it is closed at once and permanently deleted after this many days.
+          Until then you can restore it. Empty organizations are deleted right away.
+        </p>
+        <form onSubmit={saveGrace} className="flex items-end gap-3">
+          <div>
+            <label htmlFor="graceDays" className="block text-sm font-medium text-text mb-1.5">Grace period (days)</label>
+            <input id="graceDays" type="number" min={1} max={365} required className="input w-32" value={graceDays} onChange={(e) => setGraceDays(e.target.value)} />
+          </div>
+          <button type="submit" disabled={graceBusy} className="btn btn-primary">{graceBusy ? 'Saving…' : 'Save'}</button>
+        </form>
       </div>
 
       <div className="card p-6">
@@ -1239,7 +1395,7 @@ function EmailSettings() {
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="flex-1">
             <label htmlFor="testEmail" className="block text-sm font-medium text-text mb-1.5">Recipient</label>
-            <input id="testEmail" type="email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className={inputClass} />
+            <input id="testEmail" type="email" {...NO_AUTOFILL} value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className={inputClass} />
           </div>
           <button onClick={sendTest} disabled={testing || !testEmail} className="btn btn-primary">
             {testing ? 'Sending...' : 'Send test'}

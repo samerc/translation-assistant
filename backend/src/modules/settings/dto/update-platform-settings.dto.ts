@@ -49,4 +49,10 @@ export class UpdatePlatformSettingsDto {
   @IsOptional()
   @IsBoolean()
   signupsEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  deletionGraceDays?: number;
 }

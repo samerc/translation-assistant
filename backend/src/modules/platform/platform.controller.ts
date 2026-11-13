@@ -18,10 +18,12 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { PlatformService } from './platform.service.js';
+import { TenantDeletionService } from './tenant-deletion.service.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { UsersService } from '../users/users.service.js';
 import {
   CreateTenantDto,
+  DeclineDeletionDto,
   ListTenantsQuery,
   TenantInviteDto,
   UpdateTenantDto,
@@ -49,6 +51,7 @@ export class PlatformController {
     private readonly platformService: PlatformService,
     private readonly settingsService: SettingsService,
     private readonly usersService: UsersService,
+    private readonly deletion: TenantDeletionService,
   ) {}
 
   // ── Organizations ──
@@ -61,8 +64,18 @@ export class PlatformController {
 
   @Get('tenants/:id')
   @RequirePermissions('platform:read')
-  getTenant(@Param('id', ParseUUIDPipe) id: string) {
-    return this.platformService.getTenant(id);
+  async getTenant(@Param('id', ParseUUIDPipe) id: string) {
+    // Counts only (to tell an empty organization apart) — never the records.
+    const [tenant, dataCounts, platform] = await Promise.all([
+      this.platformService.getTenant(id),
+      this.deletion.dataCounts(id),
+      this.settingsService.getPlatformSettings(),
+    ]);
+    return {
+      ...tenant,
+      dataCounts,
+      deletionGraceDays: platform.deletionGraceDays,
+    };
   }
 
   @Post('tenants')
@@ -109,11 +122,49 @@ export class PlatformController {
     return { message: 'Sign-up rejected and removed' };
   }
 
+  // ── Deletion ──
+
+  /** Empty → deleted now; otherwise closing for the grace period. */
+  @Post('tenants/:id/delete')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('platform:delete')
+  approveDeletion(@Param('id', ParseUUIDPipe) id: string) {
+    return this.deletion.approve(id);
+  }
+
+  @Post('tenants/:id/decline-deletion')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('platform:update')
+  declineDeletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DeclineDeletionDto,
+  ) {
+    return this.deletion.decline(id, dto.message);
+  }
+
+  @Post('tenants/:id/restore')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('platform:update')
+  restore(@Param('id', ParseUUIDPipe) id: string) {
+    return this.deletion.restore(id);
+  }
+
+  @Post('tenants/:id/purge')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions('platform:delete')
+  async purge(@Param('id', ParseUUIDPipe) id: string) {
+    await this.deletion.purgeNow(id);
+    return { deleted: true };
+  }
+
   @Post('tenants/:id/invite')
   @RequirePermissions('platform:create')
   @Throttle({ default: { limit: 20, ttl: 3600000 } })
   invite(@Param('id', ParseUUIDPipe) id: string, @Body() dto: TenantInviteDto) {
-    return this.platformService.inviteToTenant(id, dto.email, dto.roleId);
+    return this.platformService.inviteToTenant(id, dto.email, dto.roleId, {
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+    });
   }
 
   // ── Accounts of tenant users (support: lockouts, offboarding) ──
