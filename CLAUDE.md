@@ -16,7 +16,9 @@ Each **organization (tenant)** has its own users, clients, jobs, documents, temp
 - **Per tenant**: `TenantSettings` (branding, currency, invoice prefix, upload limits, Google Translate key — each tenant pays its own, no platform fallback); job/invoice numbering (`UQ_jobs_tenant_number`, `UQ_invoices_tenant_number`; each starts at JOB-0001/INV-0001, serialized by `lockTenantSettings()` on the tenant's settings row); uploads in `uploads/<tenantId>/{jobs,passports,templates}` (`tenantDiskStorage()`); upload limits read via the request tenant in `FileValidationPipe`.
 - **Status**: pending (sign-up awaiting approval) / suspended → login refused with a clear message, `JwtStrategy` rejects existing access tokens, refresh refused; suspending revokes all its sessions.
 - **Sign-up** (`/signup`, public): `POST /auth/signup` creates a pending tenant + its Admin (email unverified) and emails a 24 h link (`EmailVerificationToken`); same answer for an already-registered email (that address gets an "you already have an account" mail). `POST /auth/verify-email` → platform admins get an in-app `tenant_signup` notification + email; approval → the admin is emailed. Turnstile bot check when `TURNSTILE_SECRET_KEY`/`TURNSTILE_SITE_KEY` are set (site key served by `GET /auth/signup-status`); throttled 5/h per IP; honeypot. Platform settings `signupsEnabled` switch. Unconfirmed sign-ups are deleted after 7 days (`SignupCleanupScheduler`, 03:30). Non-production returns the verification token (like password reset).
-- **Tests**: `node scripts/test-tenancy.mjs` (live, ~200 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval) — runs in CI against MariaDB (`tenancy` job).
+- **Deletion** (`platform/tenant-deletion.service.ts`): the organization's Admin only *requests* it (`POST /organization/deletion-request`: typed org name + password + optional reason; withdraw with `DELETE`) → platform admins get a `tenant_deletion_request` notification + email. The platform admin approves (`POST /platform/tenants/:id/delete`, also without a request) or declines (`/decline-deletion`, emails the requester). Approve: **empty** (no clients/jobs/documents/invoices/templates — users don't count) → purged at once; otherwise status **`closing`** (login refused, sessions revoked, admins emailed) with `deleteAfter` = now + `AppSettings.deletionGraceDays` (default 30, 1–365, Settings → Email & Sign-ups); `/restore` → active, `/purge` → now. `TenantPurgeScheduler` (03:45) purges due ones. Purge deletes rows in FK-safe order (invoices → documents → jobs → templates → clients → tenant lists → invites → users + their tokens/sessions/notifications → settings → tenant), then `uploads/<tenantId>`. The platform admin sees only `dataCounts`, never records. Pending sign-ups are rejected, not deleted. **Billing (later)**: a request doesn't stop billing; approval (→ closing) cancels/doesn't renew; restore resumes.
+- **Invites carry an optional first/last name** (`InviteToken.firstName/lastName`; all three invite forms). `POST /auth/invite-details {token}` (public, 20/min) returns email, names, organization and role for a usable invite; `/register` shows the organization, locks the email (server still enforces the match) and pre-fills the editable names.
+- **Tests**: `node scripts/test-tenancy.mjs` (live, ~240 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill, deletion request/decline/approve/restore/purge) — runs in CI against MariaDB (`tenancy` job).
 
 ## Tech Stack
 - **Runtime:** Node ≥ 22.12 (backend `engines`). NestJS 12 packages are ESM-only; the backend compiles to CommonJS and loads them via native `require(esm)`. Jest needs `--experimental-vm-modules` for the same, so `npm test`/`test:e2e` invoke jest through `node` with that flag.
@@ -205,18 +207,18 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 ## Database Entities
 
 ### Auth & Users
-- **Tenant** — name, status (pending/active/suspended), source (platform/signup), plan (reserved), approvedAt
+- **Tenant** — name, status (pending/active/suspended/closing), source (platform/signup), plan (reserved), approvedAt, deletionRequestedAt/ByUserId/Reason, deleteAfter
 - **TenantSettings** — tenantId (1:1), companyName, companyAddress, companyLogo, baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. Invoice exports use the creator's My Business details, falling back to these
 - **User** — email (unique platform-wide), password (bcrypt), firstName, lastName, avatar, isActive, emailVerified, colorPalette, darkMode, mustChangePassword, roleId, tenantId (NULL = platform admin), refreshToken
 - **EmailVerificationToken** — token, userId, expiresAt, used (self sign-up, 24 h)
 - **Role** — name, description. M2M with Permission via `role_permissions`
 - **Permission** — resource, action (e.g., `clients:create`)
-- **InviteToken** — token, email, roleId, tenantId, expiresAt, used, usedByUserId
+- **InviteToken** — token, email, firstName, lastName (optional, pre-fill), roleId, tenantId, expiresAt, used, usedByUserId
 - **Session** — userId, refreshTokenHash, ip, userAgent, lastUsedAt, revoked. One row per active login; powers session list/revoke and logout-everywhere.
 - **PasswordResetToken** — token, userId, expiresAt, used. 32-byte single-use, 30-min expiry.
 
 ### Settings
-- **AppSettings** (platform, one row) — smtpHost/Port/Secure/User/Pass/From, appBaseUrl, signupsEnabled
+- **AppSettings** (platform, one row) — smtpHost/Port/Secure/User/Pass/From, appBaseUrl, signupsEnabled, deletionGraceDays
 - **Language** — code, name, direction (ltr/rtl), isActive, tenantId (NULL = global, managed by the platform admin; unique (tenant, code), global codes unique via the service)
 - **LabelOption** — category (email/phone/address), value, sortOrder, tenantId (NULL = global). Configurable labels for client contact info.
 - **FreeformJobType** — name, description, prices, isActive, tenantId (per organization)
@@ -279,11 +281,15 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET /sessions` — List active sessions
 - `DELETE /sessions/:sessionId` — Revoke a specific session
 - `GET /profile` — Get current user
-- `POST /invite` — Generate invite token (admin only, `@AdminOnly()`)
+- `POST /invite` — Generate invite token (admin only, `@AdminOnly()`; optional firstName/lastName)
+- `POST /invite-details` — Public: email/names/organization/role of a usable invite (pre-fills `/register`)
 - `POST /file-token` — Short-lived token for file viewing
 - `POST /forgot-password` — Request a password reset token
 - `POST /verify-reset-token` — Check a reset token is valid (returns masked email)
 - `POST /reset-password` — Set a new password with a valid token
+
+### Organization (`/api/organization`) — the caller's own (Admin)
+- `GET/POST/DELETE /deletion-request` — status / request (confirmName, password, reason?) / withdraw
 
 ### Users (`/api/users`)
 - Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`, `POST /:id/reset-password` (admin: one-time temporary password)
@@ -300,7 +306,8 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 
 ### Platform (`/api/platform`) — platform admin only
 - `GET /tenants?status=&search=` (with user counts, admins, status counts), `GET /tenants/:id` (+ accounts), `POST /tenants` (name, adminEmail → invite), `PATCH /tenants/:id`
-- `POST /tenants/:id/approve|suspend|reactivate|reject` (reject = delete a pending sign-up), `POST /tenants/:id/invite`
+- `POST /tenants/:id/approve|suspend|reactivate|reject` (reject = delete a pending sign-up), `POST /tenants/:id/invite` (optional firstName/lastName)
+- `POST /tenants/:id/delete` (empty → purge now, else closing), `/decline-deletion`, `/restore`, `/purge`; `GET /tenants/:id` adds `dataCounts` + `deletionGraceDays`
 - `POST /users/:id/reset-password`, `PATCH /users/:id/activate|deactivate` (tenant users only)
 - `GET/PATCH /settings` (SMTP, app URL, signupsEnabled), CRUD `/languages`, CRUD `/labels` (global lists)
 - `POST /api/mail/test` — SMTP test (platform admin)

@@ -8,6 +8,7 @@ import { JOB_STATUS_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
+import { NO_AUTOFILL } from '@/lib/no-autofill';
 import { toast } from '@/lib/toast';
 
 interface ClientEmail { id: string; email: string; label: string | null; isPrimary: boolean; }
@@ -674,7 +675,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: {
   return (
     <div>
       <label className="block text-sm font-medium text-text mb-1.5">{label}</label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required}
+      <input type={type} {...NO_AUTOFILL} value={value} onChange={(e) => onChange(e.target.value)} required={required}
         className="input w-full" />
     </div>
   );

@@ -13,6 +13,7 @@ import { User } from '../users/entities/user.entity.js';
 import { Role } from '../roles/entities/role.entity.js';
 import { Session } from '../auth/entities/session.entity.js';
 import { InviteToken } from '../auth/entities/invite-token.entity.js';
+import type { InviteeNames } from '../auth/auth.service.js';
 import { EmailVerificationToken } from '../auth/entities/email-verification-token.entity.js';
 import { PasswordResetToken } from '../auth/entities/password-reset-token.entity.js';
 import { AuthService } from '../auth/auth.service.js';
@@ -84,7 +85,13 @@ export class PlatformService {
       .addSelect('COUNT(*)', 'count')
       .groupBy('t.status')
       .getRawMany<{ status: TenantStatus; count: string | number }>();
+    const deletionRequests = await this.tenantRepository
+      .createQueryBuilder('t')
+      .where('t.deletionRequestedAt IS NOT NULL')
+      .andWhere("t.status != 'closing'")
+      .getCount();
     return {
+      deletionRequests,
       data: tenants.map((t) => ({
         ...t,
         admins: admins
@@ -140,13 +147,21 @@ export class PlatformService {
         source: 'platform',
       }),
     );
-    const invite = await this.inviteToTenant(tenant.id, email);
+    const invite = await this.inviteToTenant(tenant.id, email, undefined, {
+      firstName: dto.adminFirstName,
+      lastName: dto.adminLastName,
+    });
     this.logger.log(`[TENANT_CREATED] tenantId=${tenant.id}`);
     return { tenant, invite };
   }
 
   /** Invite someone into an organization — by default as its Admin. */
-  async inviteToTenant(tenantId: string, email: string, roleId?: string) {
+  async inviteToTenant(
+    tenantId: string,
+    email: string,
+    roleId?: string,
+    names?: InviteeNames,
+  ) {
     const tenant = await this.tenantsService.findOne(tenantId);
     if (tenant.status !== 'active') {
       throw new BadRequestException(
@@ -160,7 +175,7 @@ export class PlatformService {
           .getRepository(Role)
           .findOneOrFail({ where: { name: ROLE_ADMIN } })
       ).id;
-    return this.authService.createInvite(email, role, tenantId);
+    return this.authService.createInvite(email, role, tenantId, names);
   }
 
   async updateTenant(id: string, dto: UpdateTenantDto) {

@@ -10,6 +10,7 @@ import { toast } from '@/lib/toast';
 import { formatDate, todayLocal } from '@/lib/format';
 import { useNow } from '@/lib/use-now';
 import { RequirePermission } from '@/components/RequirePermission';
+import { NO_AUTOFILL } from '@/lib/no-autofill';
 
 interface InvoiceItem {
   id: string;
@@ -518,7 +519,7 @@ function InvoiceDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Recipient</label>
-                <input type="email" value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
+                <input type="email" {...NO_AUTOFILL} value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
                   placeholder="Leave blank to use the client's email on file"
                   className="input w-full" />
               </div>

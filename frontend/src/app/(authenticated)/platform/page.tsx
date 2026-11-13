@@ -15,6 +15,7 @@ import { RowChevron, TableCard } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { BuildingIcon, PlusIcon } from '@/components/ui/icons';
+import { NO_AUTOFILL } from '@/lib/no-autofill';
 import {
   RequirePlatformAdmin,
   TenantStatusBadge,
@@ -26,6 +27,7 @@ import {
 interface TenantList {
   data: TenantRow[];
   counts: Partial<Record<TenantStatus, number>>;
+  deletionRequests: number;
 }
 
 type Filter = 'all' | TenantStatus;
@@ -38,6 +40,8 @@ export default function PlatformPage() {
   );
 }
 
+const EMPTY_FORM = { name: '', adminEmail: '', adminFirstName: '', adminLastName: '' };
+
 function Organizations() {
   const router = useRouter();
   const [list, setList] = useState<TenantList | null>(null);
@@ -47,7 +51,7 @@ function Organizations() {
   const debouncedSearch = useDebounce(search, 300);
   const [reloadKey, setReloadKey] = useState(0);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', adminEmail: '' });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -80,11 +84,16 @@ function Organizations() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.post<{ tenant: TenantRow; invite: { token: string } }>('/platform/tenants', form);
+      const res = await api.post<{ tenant: TenantRow; invite: { token: string } }>('/platform/tenants', {
+        name: form.name,
+        adminEmail: form.adminEmail,
+        ...(form.adminFirstName.trim() ? { adminFirstName: form.adminFirstName.trim() } : {}),
+        ...(form.adminLastName.trim() ? { adminLastName: form.adminLastName.trim() } : {}),
+      });
       const link = `${window.location.origin}/register?token=${res.invite.token}`;
       const copied = await copyToClipboard(link);
       setShowForm(false);
-      setForm({ name: '', adminEmail: '' });
+      setForm(EMPTY_FORM);
       reload();
       await alertDialog({
         title: 'Organization created',
@@ -170,10 +179,29 @@ function Organizations() {
             <Field label="Admin's email" htmlFor="org-admin" required>
               <Input
                 id="org-admin"
+                {...NO_AUTOFILL}
                 type="email"
                 value={form.adminEmail}
                 onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
                 required
+              />
+            </Field>
+            <Field label="Admin's first name" htmlFor="org-admin-first" hint="Optional">
+              <Input
+                id="org-admin-first"
+                {...NO_AUTOFILL}
+                value={form.adminFirstName}
+                onChange={(e) => setForm({ ...form, adminFirstName: e.target.value })}
+                maxLength={100}
+              />
+            </Field>
+            <Field label="Admin's last name" htmlFor="org-admin-last" hint="Optional">
+              <Input
+                id="org-admin-last"
+                {...NO_AUTOFILL}
+                value={form.adminLastName}
+                onChange={(e) => setForm({ ...form, adminLastName: e.target.value })}
+                maxLength={100}
               />
             </Field>
           </div>
@@ -195,6 +223,13 @@ function Organizations() {
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
+
+      {!!list?.deletionRequests && (
+        <Alert tone="warning" className="mb-4">
+          {list.deletionRequests === 1 ? 'One organization has' : `${list.deletionRequests} organizations have`} asked to be deleted.
+          Open it to approve or decline.
+        </Alert>
+      )}
 
       {loadError && <Alert className="mb-4">Couldn&apos;t load organizations. Try again in a moment.</Alert>}
 
@@ -230,6 +265,12 @@ function Organizations() {
                 </td>
                 <td>
                   <TenantStatusBadge status={t.status} />
+                  {t.deletionRequestedAt && t.status !== 'closing' && (
+                    <div className="text-xs text-danger font-medium mt-1">Deletion requested</div>
+                  )}
+                  {t.status === 'closing' && t.deleteAfter && (
+                    <div className="text-xs text-text-muted mt-1">Deleted on {formatDate(t.deleteAfter)}</div>
+                  )}
                   {t.status === 'pending' && !!t.admins?.length && !t.admins.some((a) => a.emailVerified) && (
                     <div className="text-xs text-text-muted mt-1">Email not confirmed yet</div>
                   )}

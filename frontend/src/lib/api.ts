@@ -23,6 +23,7 @@ class ApiError extends Error {
 const NO_REFRESH = [
   '/auth/login',
   '/auth/register',
+  '/auth/invite-details',
   '/auth/refresh',
   '/auth/forgot-password',
   '/auth/verify-reset-token',
