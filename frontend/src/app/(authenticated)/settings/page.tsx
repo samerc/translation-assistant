@@ -1548,9 +1548,9 @@ function BusinessSettings() {
               : <span className="text-xs text-text-muted">No logo</span>}
           </div>
           <div className="flex flex-col gap-2">
-            <label className="btn btn-primary cursor-pointer inline-block text-center">
+            <label className={`btn btn-primary cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
               {uploading ? 'Working…' : logo ? 'Replace logo' : 'Upload logo'}
-              <input type="file" accept="image/png,image/jpeg" onChange={handleLogoChange} disabled={uploading} className="hidden" />
+              <input type="file" accept="image/png,image/jpeg" onChange={handleLogoChange} disabled={uploading} className="sr-only" />
             </label>
             {logo && (
               <button type="button" onClick={removeLogo} disabled={uploading}
