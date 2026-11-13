@@ -189,8 +189,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     // Don't log 4xx client errors at error level (they're expected)
     if (status < 500) {
-      // Only log 4xx at debug level, skip validation errors entirely
-      if (status !== 400) {
+      // Skip ordinary validation 400s — except refused file uploads, so we
+      // can always tell why someone's file wasn't accepted.
+      const isUpload = String(
+        request.headers?.['content-type'] ?? '',
+      ).startsWith('multipart/form-data');
+      if (status !== 400 || isUpload) {
         this.logger.warn(
           `${method} ${url} → ${status} | user=${userId} ip=${ip} | ${this.getExceptionMessage(exception)}`,
         );

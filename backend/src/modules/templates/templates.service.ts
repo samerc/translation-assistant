@@ -10,7 +10,10 @@ import { readFileSync, existsSync, unlinkSync } from 'fs';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
-import { scanWordPlaceholders } from './word-placeholders.js';
+import {
+  noPlaceholdersMessage,
+  scanWordPlaceholders,
+} from './word-placeholders.js';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
@@ -216,7 +219,12 @@ export class TemplatesService {
         'The uploaded file could not be read as a Word document',
       );
     });
-    const scan = scanWordPlaceholders(result.value.replace(/<[^>]*>/g, ''));
+    const text = result.value
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+    const scan = scanWordPlaceholders(text);
 
     if (scan.malformed.length > 0) {
       const list = scan.malformed.map((m) => `${m.text} (${m.reason})`);
@@ -226,9 +234,7 @@ export class TemplatesService {
     }
 
     if (scan.fields.length === 0) {
-      throw new BadRequestException(
-        'No placeholders found in the Word file. Add placeholders like {full_name} where field values should go.',
-      );
+      throw new BadRequestException(noPlaceholdersMessage(text));
     }
 
     // Save first, then delete the replaced file — a failed save must not
