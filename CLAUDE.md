@@ -65,7 +65,7 @@ translation-assistant/
 - `docker compose down` — Stop all containers
 - `cd backend && npm test` — unit tests; `npm run test:e2e` — DB-free security e2e suite (both run in CI)
 - `bash scripts/test-integration.sh` — live integration suite (~172 checks; needs backend on :3005 + frontend on :3080 + a scratch DB; creates its own organization as the platform admin, then runs as that organization's admin)
-- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~200 checks; backend on :3005, non-production, scratch DB; also in CI)
+- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~250 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
 
 ## Dependencies
 - Dependabot (`.github/dependabot.yml`): weekly grouped minor/patch per app, majors as separate PRs. TypeScript 7 majors ignored (no JS API; ts-jest/typescript-eslint unsupported).
@@ -232,7 +232,9 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - **PassportCopy** — label, filePath, originalName, mimeType, fileSize. Reference images for name spellings.
 
 ### Templates
-- **Template** — type (designer/word/simple), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive
+- **Template** — type (designer/word/simple), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive (false = **draft**, hidden when creating jobs), languages (M2M `template_languages`: the document languages)
+  - **Setup wizard** (`/templates/new`, `/templates/:id/setup?step=`; `templates/setup-wizard.tsx`): ① name/price/document languages/type → ② Word file (instructions, example .docx from `GET /templates/example-docx`, upload; unlinked placeholders become fields automatically and loop fields are moved into their group) → ③ fields (labels only in the document languages — the first is required, others fall back to it; type guessed from the name by `guessFieldType()`; fields missing from the file flagged via preview `orphans`) → ④ try it (`POST /templates/:id/test-export` renders sample values, nothing saved) → ⑤ activate or save as draft. Designer skips ②; pricing-only goes ① → ⑤. New templates are created as drafts
+  - **Document languages**: a template with languages set is only offered (job form, add-document) and accepted (`POST /jobs`, add line item → 400) for those target languages; none set = any language
   - **Designer type**: layout built with block-based designer, stored in layoutJson
   - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
     - Repeatable groups: `{#group_key}` … `{/group_key}` repeats the enclosed paragraphs/table row once per entry (no nesting). One scanner (`templates/word-placeholders.ts`) validates upload + preview; "Create Fields for All" puts fields found inside a loop into that group; preview warns when a loop field has a different `groupKey`. A group field used outside any loop exports its first entry
@@ -327,7 +329,9 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `PATCH /:id/fields/reorder` — Reorder fields
 - `POST /:id/upload-word` — Upload Word template file
 - `GET /:id/word-preview` — Get HTML preview + placeholder validation
-- `POST /:id/word-placeholders` — Auto-create fields from placeholders
+- `POST /:id/word-placeholders` — Auto-create fields from placeholders (and move loop fields into their group)
+- `GET /example-docx` — Example Word template; `POST /:id/test-export` — render with sample values (`templates:update`)
+- Create/update take `languageIds` (document languages); create takes `isActive` (wizard: false = draft)
 
 ### Jobs (`/api/jobs`)
 - Full CRUD with search, status filter (one status or comma-separated), `hasDeadline=true`, client filter, sort, pagination
@@ -395,7 +399,8 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/clients` — Client list with search, type filter, sort, pagination
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)
 - `/templates` — Template list (table + card view toggle, search, status filter, sort)
-- `/templates/:id` — Template detail (Fields tab with inline table editor, Layout Designer tab, Word Template tab, Settings tab)
+- `/templates/new`, `/templates/:id/setup` — Setup wizard (see Templates entity)
+- `/templates/:id` — Template detail (status line + Setup wizard button, Fields tab with inline table editor limited to the document languages, Layout Designer tab, Word Template tab, Settings tab with document languages)
 - `/jobs` — Jobs list with search, status filter, sort, pagination
 - `/jobs/new` — Create job form (type, client, languages, line items with template selection, pricing, deadline)
 - `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files, linked invoice display, "Create Invoice" button on delivered jobs)

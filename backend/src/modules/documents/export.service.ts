@@ -23,6 +23,8 @@ import {
   WidthType,
 } from 'docx';
 import { Document } from './entities/document.entity.js';
+import { Template } from '../templates/entities/template.entity.js';
+import { Language } from '../settings/entities/language.entity.js';
 
 interface LayoutBlock {
   id: string;
@@ -109,7 +111,58 @@ export class ExportService {
   constructor(
     @InjectRepository(Document)
     private readonly documentRepository: Repository<Document>,
+    @InjectRepository(Template)
+    private readonly templateRepository: Repository<Template>,
+    @InjectRepository(Language)
+    private readonly languageRepository: Repository<Language>,
   ) {}
+
+  /**
+   * Render a template with sample values, exactly like a real document export
+   * (the setup wizard's "Try it" step). Nothing is stored except the temp file.
+   */
+  async exportTest(
+    templateId: string,
+    tenantId: string,
+    values: { templateFieldId: string; value: string; entryIndex?: number }[],
+    languageId?: string,
+  ): Promise<{ filePath: string; fileName: string; downloadName: string }> {
+    const template = await this.templateRepository.findOne({
+      where: { id: templateId, tenantId },
+      relations: { fields: { labels: { language: true } } },
+    });
+    if (!template) throw new NotFoundException('Template not found');
+    const language = languageId
+      ? await this.languageRepository.findOne({ where: { id: languageId } })
+      : null;
+    if (language && language.tenantId && language.tenantId !== tenantId) {
+      throw new NotFoundException('Language not found');
+    }
+    const byId = new Map(template.fields.map((f) => [f.id, f]));
+    const fieldValues = values
+      .filter((v) => byId.has(v.templateFieldId) && v.value !== '')
+      .map((v) => {
+        const field = byId.get(v.templateFieldId)!;
+        return {
+          templateField: field,
+          value: v.value,
+          entryIndex: field.groupKey ? (v.entryIndex ?? 0) : null,
+        };
+      });
+    const doc = {
+      template,
+      fieldValues,
+      job: { jobNumber: 'TEST', targetLanguage: language ?? undefined },
+    } as unknown as Document;
+    const downloadName = `TEST ${template.name}.docx`;
+    if (template.type === 'word') {
+      return { ...(await this.exportWordTemplate(doc)), downloadName };
+    }
+    if (template.type === 'designer') {
+      return { ...(await this.exportDesignerTemplate(doc)), downloadName };
+    }
+    throw new BadRequestException('Pricing-only templates have no document');
+  }
 
   async exportDocument(
     documentId: string,

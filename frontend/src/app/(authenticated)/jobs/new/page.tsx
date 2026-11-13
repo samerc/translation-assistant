@@ -16,7 +16,7 @@ import { Alert } from '@/components/ui/Alert';
 interface Client { id: string; name: string; type: string; }
 interface Contact { id: string; firstName: string; lastName: string; }
 interface Language { id: string; code: string; name: string; isActive: boolean; }
-interface Template { id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; }
+interface Template { id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; languages?: { id: string }[]; }
 interface FreeformJobType { id: string; name: string; description: string | null; pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean; }
 
 interface LineItem {
@@ -107,9 +107,12 @@ export default function NewJobPage() {
   };
 
   // Filter templates based on job type
+  // A template whose document languages are set is offered only for those target languages.
+  const fitsTarget = (t: Template) =>
+    !form.targetLanguageId || !t.languages?.length || t.languages.some((l) => l.id === form.targetLanguageId);
   const availableTemplates = form.type === 'freeform'
     ? templates.filter((t) => t.type === 'simple')
-    : templates.filter((t) => t.type !== 'simple');
+    : templates.filter((t) => t.type !== 'simple' && fitsTarget(t));
 
   const handleTemplateSelect = (key: string, templateId: string) => {
     const tmpl = templates.find((t) => t.id === templateId);

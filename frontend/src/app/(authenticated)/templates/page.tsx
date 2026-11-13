@@ -1,16 +1,15 @@
 'use client';
 
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
-import { toast } from '@/lib/toast';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { TEMPLATE_TYPE_BADGE } from '@/lib/status';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, SearchInput, Select } from '@/components/ui/Field';
+import { SearchInput } from '@/components/ui/Field';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -38,14 +37,11 @@ export default function TemplatesPage() {
   const { baseCurrency } = useSettings();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('ASC');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ type: 'designer' as 'designer' | 'word' | 'simple', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
   const [view, setView] = useState<ViewMode>('table');
   const router = useRouter();
 
@@ -74,28 +70,6 @@ export default function TemplatesPage() {
     }
   };
 
-  const handleCreate = async (e: FormEvent) => {
-    e.preventDefault();
-    if (saving) return;
-    setSaving(true);
-    try {
-      const created = await api.post<Template>('/templates', {
-        type: form.type,
-        name: form.name,
-        description: form.description || undefined,
-        pricePerPage: form.pricePerPage ? parseFloat(form.pricePerPage) : 0,
-        discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : undefined,
-      });
-      setShowForm(false);
-      setForm({ type: 'designer', name: '', description: '', pricePerPage: '', discountedPricePerPage: '' });
-      router.push(`/templates/${created.id}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : 'Failed to create template.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const filtered = Boolean(search || statusFilter);
   const empty = templates.length === 0 && !loadError && (
     <EmptyState
@@ -111,41 +85,9 @@ export default function TemplatesPage() {
         title="Templates"
         description="Document layouts and per-page pricing."
         actions={hasPermission('templates:create') && (
-          <Button variant="primary" icon={<PlusIcon />} onClick={() => setShowForm(true)}>New template</Button>
+          <Button variant="primary" icon={<PlusIcon />} onClick={() => router.push('/templates/new')}>New template</Button>
         )}
       />
-
-      {showForm && (
-        <form onSubmit={handleCreate} className="card p-5 mb-6">
-          <h2 className="font-semibold text-text mb-4">New template</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <Field label="Type" htmlFor="tpl-type">
-              <Select id="tpl-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as 'designer' | 'word' | 'simple' })}>
-                <option value="designer">Designer (build layout)</option>
-                <option value="word">Word (upload .docx)</option>
-                <option value="simple">Simple (pricing only)</option>
-              </Select>
-            </Field>
-            <Field label="Name" htmlFor="tpl-name" required>
-              <Input id="tpl-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            </Field>
-            <Field label="Description" htmlFor="tpl-desc">
-              <Input id="tpl-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </Field>
-            <Field label="Price per page" htmlFor="tpl-price">
-              <Input id="tpl-price" type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} />
-            </Field>
-            <Field label="Discounted price" htmlFor="tpl-disc">
-              <Input id="tpl-disc" type="number" step="0.01" min="0" value={form.discountedPricePerPage} placeholder="Optional"
-                onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} />
-            </Field>
-          </div>
-          <div className="flex gap-2 mt-4">
-            <Button type="submit" variant="primary" disabled={saving}>{saving ? 'Creating…' : 'Create & configure fields'}</Button>
-            <Button onClick={() => setShowForm(false)}>Cancel</Button>
-          </div>
-        </form>
-      )}
 
       {loadError && <Alert className="mb-4">Couldn&apos;t load templates. Please refresh or try again.</Alert>}
 
@@ -159,7 +101,7 @@ export default function TemplatesPage() {
           options={[
             { value: '', label: 'All' },
             { value: 'true', label: 'Active' },
-            { value: 'false', label: 'Inactive' },
+            { value: 'false', label: 'Draft' },
           ]}
         />
         <span className="text-sm text-text-muted ml-auto tabular-nums">{templates.length} template{templates.length !== 1 ? 's' : ''}</span>
@@ -249,5 +191,5 @@ function TemplateTypeBadge({ type }: { type: string }) {
 }
 
 function ActiveBadge({ active }: { active: boolean }) {
-  return <Badge dot tone={active ? 'tone tone-success' : 'tone tone-neutral'}>{active ? 'Active' : 'Inactive'}</Badge>;
+  return <Badge dot tone={active ? 'tone tone-success' : 'tone tone-neutral'}>{active ? 'Active' : 'Draft'}</Badge>;
 }

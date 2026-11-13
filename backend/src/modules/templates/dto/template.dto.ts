@@ -43,6 +43,18 @@ export class CreateTemplateDto {
   @Min(0)
   @Max(999999.99)
   discountedPricePerPage?: number;
+
+  /** false = draft (the setup wizard activates it at the end). */
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  /** The languages the document is produced in. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('all', { each: true })
+  languageIds?: string[];
 }
 
 export class UpdateTemplateDto {
@@ -77,6 +89,42 @@ export class UpdateTemplateDto {
   @IsArray()
   @ArrayMaxSize(200)
   layoutJson?: object[];
+
+  /** The languages the document is produced in. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('all', { each: true })
+  languageIds?: string[];
+}
+
+/** Sample values for a test export (nothing is saved). */
+export class TestExportValueDto {
+  @IsUUID()
+  templateFieldId: string;
+
+  @IsString()
+  @MaxLength(5000)
+  value: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(499)
+  entryIndex?: number;
+}
+
+export class TestExportDto {
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @ValidateNested({ each: true })
+  @Type(() => TestExportValueDto)
+  values: TestExportValueDto[];
+
+  /** Which document language to render labels / direction in. */
+  @IsOptional()
+  @IsUUID()
+  languageId?: string;
 }
 
 // ── DTOs for inline @Body() endpoints ──

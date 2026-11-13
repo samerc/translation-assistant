@@ -159,8 +159,13 @@ function fileNameFrom(header: string | null): string | null {
 }
 
 // Fetch a generated file (PDF/DOCX export) and hand it to the browser as a download.
-async function download(endpoint: string, fallbackName: string, method = 'POST'): Promise<void> {
-  const res = await authedFetch(endpoint, { method });
+async function download(endpoint: string, fallbackName: string, method = 'POST', body?: unknown): Promise<void> {
+  const res = await authedFetch(
+    endpoint,
+    body === undefined
+      ? { method }
+      : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(withHoneypot(method, body)) },
+  );
   if (!res.ok) throw await toApiError(res, 'Download failed');
   const blob = await res.blob();
   const fileName = fileNameFrom(res.headers.get('Content-Disposition')) || fallbackName;
