@@ -1,4 +1,8 @@
-import { scanWordPlaceholders } from './word-placeholders.js';
+import {
+  noPlaceholdersMessage,
+  scanWordPlaceholders,
+  toFieldKey,
+} from './word-placeholders.js';
 
 describe('scanWordPlaceholders', () => {
   it('finds fields and records which group loop each sits in', () => {
@@ -49,5 +53,43 @@ describe('scanWordPlaceholders', () => {
       expect.stringMatching(/invalid characters/),
       expect.stringMatching(/Mismatched braces/),
     ]);
+  });
+});
+
+describe('noPlaceholdersMessage', () => {
+  it('explains what to add when the document has no placeholders at all', () => {
+    expect(noPlaceholdersMessage('Birth certificate. Name: John')).toMatch(
+      /no placeholders yet.*\{full_name\}/,
+    );
+  });
+
+  it('recognises Word mail-merge fields and suggests the replacement', () => {
+    const msg = noPlaceholdersMessage(
+      'Name: «Full Name» Born: «Date_of_birth»',
+    );
+    expect(msg).toMatch(/mail-merge fields \(2\)/);
+    expect(msg).toContain('«Full Name» → {full_name}');
+    expect(msg).toContain('«Date_of_birth» → {date_of_birth}');
+  });
+
+  it('recognises <<…>> and […] markers', () => {
+    expect(noPlaceholdersMessage('Name: <<name>>')).toContain(
+      '<<name>> → {name}',
+    );
+    expect(noPlaceholdersMessage('Name: [Holder Name]')).toContain(
+      '[Holder Name] → {holder_name}',
+    );
+  });
+
+  it('turns names into valid keys', () => {
+    expect(toFieldKey(' Date of Birth ')).toBe('date_of_birth');
+    expect(toFieldKey('2nd name')).toBe('_2nd_name');
+  });
+});
+
+describe('double braces', () => {
+  it('tells the user to use single braces', () => {
+    const { malformed } = scanWordPlaceholders('Name: {{full_name}}');
+    expect(malformed[0].reason).toMatch(/single braces: \{full_name\}/);
   });
 });

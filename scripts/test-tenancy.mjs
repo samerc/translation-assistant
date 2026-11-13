@@ -507,6 +507,18 @@ console.log('== template setup wizard (Word) ==');
   const up = await req(a.A, 'POST', `/templates/${tid}/upload-word`, undefined, { form: fileForm({}, 'example.docx', ex.buf, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') });
   check('the example file uploads as a Word template', ok(up), show(up));
   const pv = (await req(a.A, 'GET', `/templates/${tid}/word-preview`)).data;
+  // Refused files explain themselves: mail-merge style, and no placeholders at all.
+  const variant = (fn) => {
+    const zip = new PizZip(ex.buf);
+    zip.file('word/document.xml', fn(zip.file('word/document.xml').asText()));
+    return zip.generate({ type: 'nodebuffer' });
+  };
+  const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const t2 = (await req(a.A, 'POST', '/templates', { type: 'word', name: `Wizard refusals ${RUN}`, isActive: false })).data.id;
+  const merge = await req(a.A, 'POST', `/templates/${t2}/upload-word`, undefined, { form: fileForm({}, 'merge.docx', variant((x) => x.replace(/\{[#/]?([a-z_]+)\}/g, '«$1»')), DOCX) });
+  check('mail-merge style file refused with how to convert it', merge.status === 400 && /mail-merge/.test(merge.data.message) && /«full_name» → \{full_name\}/.test(merge.data.message), show(merge));
+  const plain = await req(a.A, 'POST', `/templates/${t2}/upload-word`, undefined, { form: fileForm({}, 'plain.docx', variant((x) => x.replace(/\{[^}]*\}/g, 'x')), DOCX) });
+  check('file without placeholders refused with what to add', plain.status === 400 && /no placeholders yet/.test(plain.data.message), show(plain));
   const found = [...(pv.valid ?? []), ...(pv.unlinked ?? [])];
   check('preview finds the placeholders and the loop', found.includes('full_name') && found.includes('child_name') && pv.groups?.child_name === 'children' && pv.malformed?.length === 0, JSON.stringify(pv).slice(0, 200));
   const sync = await req(a.A, 'POST', `/templates/${tid}/word-placeholders`, { placeholders: pv.unlinked.map((k) => ({ find: k, fieldKey: k })) });

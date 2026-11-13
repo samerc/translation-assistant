@@ -21,10 +21,50 @@ export interface PlaceholderScan {
 
 function reasonFor(inner: string): string {
   if (!inner.trim()) return 'Empty placeholder';
+  if (inner.startsWith('{'))
+    return `Double braces — use single braces: {${inner.replace(/[{}]/g, '').trim()}}`;
   if (/\s/.test(inner))
     return `Contains spaces — use underscores instead (e.g., {${inner.trim().replace(/\s+/g, '_')}})`;
   if (/^[0-9]/.test(inner)) return 'Cannot start with a number';
   return 'Contains invalid characters — use only letters, numbers, and underscores';
+}
+
+/** Other placeholder styles people use (mail merge, other tools) — none of them work here. */
+const OTHER_STYLES: { label: string; pattern: RegExp }[] = [
+  { label: 'Word mail-merge fields', pattern: /«\s*([^«»\n]{1,60}?)\s*»/g },
+  { label: '<<…>> markers', pattern: /<<\s*([^<>\n]{1,60}?)\s*>>/g },
+  { label: '[…] markers', pattern: /\[\s*([A-Za-z_][\w ]{0,58}?)\s*\]/g },
+];
+
+/** `Full Name` → `full_name` (the suggested replacement). */
+export function toFieldKey(name: string): string {
+  const key = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return /^[0-9]/.test(key) ? `_${key}` : key || 'field';
+}
+
+/**
+ * When a document has no {placeholders}, explain why — and if it uses
+ * another placeholder style, say how to convert it.
+ */
+export function noPlaceholdersMessage(text: string): string {
+  for (const { label, pattern } of OTHER_STYLES) {
+    const found = [...text.matchAll(pattern)].map((m) => m[0].trim());
+    const unique = [...new Set(found)];
+    if (unique.length === 0) continue;
+    const examples = unique
+      .slice(0, 3)
+      .map((raw) => {
+        const inner = raw.replace(/^(«|<<|\[)|(»|>>|\])$/g, '');
+        return `${raw} → {${toFieldKey(inner)}}`;
+      })
+      .join(', ');
+    return `No {placeholders} found, but the file uses ${label} (${unique.length}). Replace each with a name in single braces — for example ${examples} — then upload it again.`;
+  }
+  return 'This Word file has no placeholders yet. Type a name in braces where each value should go — for example {full_name} or {date_of_birth} — then upload it again. The setup wizard has an example file you can copy.';
 }
 
 /** Scan the plain text of a Word document for placeholders and group loops. */
