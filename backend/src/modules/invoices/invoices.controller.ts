@@ -210,8 +210,8 @@ export class InvoicesController {
       );
     }
     const { filePath } = await this.exportService.exportPdf(id);
-    // Sent from the platform's mailbox under the sender's business name (My
-    // Business, else the organization); replies go to the sender.
+    // Sent from the platform's mailbox under the organization's name; replies
+    // go to the sender.
     const settings = await this.tenantsService.getSettings(actor.tenantId);
     try {
       await this.mailService.sendInvoiceEmail(
@@ -220,7 +220,7 @@ export class InvoicesController {
         filePath,
         dto.message,
         {
-          name: user.businessName || settings.companyName,
+          name: settings.companyName,
           replyTo: user.email,
         },
       );

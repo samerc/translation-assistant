@@ -87,6 +87,8 @@ export default function JobDetailPage() {
       .catch(() => setLinkedInvoices([]));
   }, [id, canReadInvoices]);
 
+  const activeInvoice = linkedInvoices.find((inv) => inv.status !== 'cancelled');
+
   if (!job) return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
 
   const handleDelete = async () => {
@@ -183,7 +185,12 @@ export default function JobDetailPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap lg:flex-nowrap items-center flex-shrink-0">
-          {job.status === 'delivered' && hasPermission('invoices:create') && (
+          {/* A job is billed once: while a non-cancelled invoice holds it, open that one instead. */}
+          {activeInvoice ? (
+            <Button variant="primary" onClick={() => router.push(`/invoices/${activeInvoice.id}`)}>
+              View invoice {activeInvoice.invoiceNumber}
+            </Button>
+          ) : job.status === 'delivered' && hasPermission('invoices:create') && (
             <Button variant="primary" onClick={() => router.push(`/invoices/new?jobId=${job.id}`)}>
               Create Invoice
             </Button>

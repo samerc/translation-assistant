@@ -8,7 +8,12 @@ import {
   Param,
   UseGuards,
   ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { sniffImageMime } from '../../common/utils/file-signature.js';
 import { AuthGuard } from '@nestjs/passport';
 import { SettingsService } from './settings.service.js';
 import { UpdateSettingsDto } from './dto/update-settings.dto.js';
@@ -53,6 +58,52 @@ export class SettingsController {
   ) {
     return this.present(
       await this.settingsService.updateTenantSettings(actor.tenantId, dto),
+      actor,
+    );
+  }
+
+  // ── Organization logo (printed on invoices) ──
+  // Stored inline as a base64 data URL; PNG/JPEG only (the formats both the PDF
+  // and Word exporters embed), max 1 MB.
+  @Patch('logo')
+  @RequirePermissions('settings:update')
+  @AdminOnly()
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      limits: { fileSize: 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (['image/png', 'image/jpeg'].includes(file.mimetype)) cb(null, true);
+        else
+          cb(
+            new BadRequestException('Logo must be a PNG or JPEG image'),
+            false,
+          );
+      },
+    }),
+  )
+  async uploadLogo(
+    @CurrentActor() actor: Actor,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Logo file is required');
+    // Build the data URL from the real content (magic bytes), never the
+    // client-declared type (guards against spoofed/SVG payloads).
+    const mime = sniffImageMime(file.buffer);
+    if (!mime)
+      throw new BadRequestException('Logo must be a valid PNG or JPEG image');
+    const dataUrl = `data:${mime};base64,${file.buffer.toString('base64')}`;
+    return this.present(
+      await this.settingsService.setLogo(actor.tenantId, dataUrl),
+      actor,
+    );
+  }
+
+  @Delete('logo')
+  @RequirePermissions('settings:update')
+  @AdminOnly()
+  async removeLogo(@CurrentActor() actor: Actor) {
+    return this.present(
+      await this.settingsService.setLogo(actor.tenantId, null),
       actor,
     );
   }

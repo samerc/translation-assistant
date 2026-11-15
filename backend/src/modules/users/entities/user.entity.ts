@@ -46,18 +46,6 @@ export class User {
   @Column({ default: false })
   mustChangePassword: boolean;
 
-  // ── Per-user invoice branding (appears on invoices this user issues) ──
-  @Column({ length: 150, nullable: true })
-  businessName: string;
-
-  @Column({ type: 'text', nullable: true })
-  businessAddress: string;
-
-  // Logo stored inline as a `data:image/...;base64,` URL (PNG/JPEG only) so it
-  // embeds straight into PDF/Word exports and the UI with no file-serving layer.
-  @Column({ type: 'mediumtext', nullable: true })
-  logo: string | null;
-
   // The organisation the user belongs to. Null only for platform admins, who
   // manage tenants but never see tenant data.
   @ManyToOne(() => Tenant, { nullable: true })

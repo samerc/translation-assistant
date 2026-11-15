@@ -31,8 +31,26 @@ export class TenantSettings {
   @Column({ type: 'text', nullable: true })
   companyAddress: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  // Logo stored inline as a `data:image/...;base64,` URL (PNG/JPEG, ≤1 MB) so
+  // it embeds straight into PDF/Word invoices with no file-serving layer.
+  @Column({ type: 'mediumtext', nullable: true })
   companyLogo: string | null;
+
+  /** VAT / tax registration number, printed under the address on invoices. */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  companyTaxId: string | null;
+
+  /** How to pay (bank, IBAN, transfer services) — printed at the end of invoices. */
+  @Column({ type: 'text', nullable: true })
+  bankDetails: string | null;
+
+  /** Payment terms / footer pre-filled into each new invoice's notes. */
+  @Column({ type: 'text', nullable: true })
+  invoiceFooter: string | null;
+
+  /** Date display everywhere (app, PDF, Word): DD/MM/YYYY, MM/DD/YYYY or YYYY-MM-DD. */
+  @Column({ length: 10, default: 'DD/MM/YYYY' })
+  dateFormat: string;
 
   @Column({ length: 10, default: 'USD' })
   baseCurrency: string;

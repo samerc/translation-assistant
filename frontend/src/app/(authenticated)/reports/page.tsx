@@ -1,15 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency } from '@/lib/format';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar,
-  PieChart, Pie, Cell,
-} from 'recharts';
+import { useNow } from '@/lib/use-now';
 import { RequirePermission } from '@/components/RequirePermission';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+
+// recharts is only fetched when a chart is on screen (see charts.tsx).
+const chartFallback = () => <div className="h-[350px]" aria-hidden="true" />;
+const RevenueChart = dynamic(() => import('./charts').then((m) => m.RevenueChart), { ssr: false, loading: chartFallback });
+const ClientChart = dynamic(() => import('./charts').then((m) => m.ClientChart), { ssr: false, loading: chartFallback });
+const StatusChart = dynamic(() => import('./charts').then((m) => m.StatusChart), { ssr: false, loading: chartFallback });
 
 interface RevenueData { period: string; revenue: number; }
 interface ClientData { clientId: string; clientName: string; invoiceCount: number; totalRevenue: number; }
@@ -37,24 +42,54 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
+type Range = '6m' | '12m' | 'year' | 'last-year';
+const RANGES: { value: Range; label: string }[] = [
+  { value: '6m', label: 'Last 6 months' },
+  { value: '12m', label: 'Last 12 months' },
+  { value: 'year', label: 'This year' },
+  { value: 'last-year', label: 'Last year' },
+];
+
+const ym = (y: number, m: number) => `${y}-${String(m + 1).padStart(2, '0')}`;
+
+/** `from`/`to` months (YYYY-MM, inclusive) for a range ending this month. */
+function rangeMonths(range: Range, now: Date): { from: string; to: string } {
+  const y = now.getFullYear(), m = now.getMonth();
+  if (range === 'year') return { from: ym(y, 0), to: ym(y, m) };
+  if (range === 'last-year') return { from: ym(y - 1, 0), to: ym(y - 1, 11) };
+  const back = range === '6m' ? 5 : 11;
+  const start = new Date(y, m - back, 1);
+  return { from: ym(start.getFullYear(), start.getMonth()), to: ym(y, m) };
+}
+
+/** "2026-05" → "May 2026"; weekly "202646" → "Wk 46 2026". */
+function periodLabel(period: string): string {
+  const month = /^(\d{4})-(\d{2})$/.exec(period);
+  if (month) {
+    return new Date(Number(month[1]), Number(month[2]) - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  }
+  const week = /^(\d{4})(\d{2})$/.exec(period);
+  return week ? `Wk ${Number(week[2])} ${week[1]}` : period;
+}
+
 function ReportsPage() {
   const { baseCurrency } = useSettings();
-  const [activeTab, setActiveTab] = useState('revenue');
+  const now = useNow(60 * 60 * 1000);
+  const [activeTab, setActiveTab] = useState<'revenue' | 'client' | 'status'>('revenue');
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [clientData, setClientData] = useState<ClientData[]>([]);
   const [statusData, setStatusData] = useState<StatusData[]>([]);
-  const [period, setPeriod] = useState('monthly');
+  const [period, setPeriod] = useState<'monthly' | 'weekly'>('monthly');
+  const [range, setRange] = useState<Range>('6m');
+  const { from, to } = rangeMonths(range, new Date(now));
 
   useEffect(() => {
     // `ignore` drops a slower response for a tab/period the user has already left.
     let ignore = false;
     if (activeTab === 'revenue') {
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth() - 6, 1);
-      const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`;
-      api.get<RevenueData[]>(`/reports/revenue?period=${period}&from=${fromStr}`)
-        // Aggregates come back as strings from the DB — coerce for recharts + toFixed.
-        .then((rows) => { if (!ignore) setRevenueData(rows.map((r) => ({ ...r, revenue: Number(r.revenue) }))); })
+      api.get<RevenueData[]>(`/reports/revenue?period=${period}&from=${from}&to=${to}`)
+        // Aggregates come back as strings from the DB — coerce for the chart.
+        .then((rows) => { if (!ignore) setRevenueData(rows.map((r) => ({ period: periodLabel(String(r.period)), revenue: Number(r.revenue) }))); })
         .catch(() => { if (!ignore) setRevenueData([]); });
     } else if (activeTab === 'client') {
       api.get<ClientData[]>('/reports/by-client')
@@ -70,86 +105,74 @@ function ReportsPage() {
         .catch(() => { if (!ignore) setStatusData([]); });
     }
     return () => { ignore = true; };
-  }, [activeTab, period]);
+  }, [activeTab, period, from, to]);
 
-  const tabs = [
-    { key: 'revenue', label: 'Revenue' },
-    { key: 'client', label: 'By Client' },
-    { key: 'status', label: 'Job Status' },
-  ];
+  const total = revenueData.reduce((sum, r) => sum + r.revenue, 0);
+  const bestPeriod = revenueData.reduce<RevenueData | null>((best, r) => (r.revenue > (best?.revenue ?? 0) ? r : best), null);
+  const money = (n: number) => formatCurrency(n, baseCurrency);
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-text mb-6">Reports</h1>
+      <PageHeader title="Reports" description="Payments received, who they came from, and where your jobs stand." />
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-bg border border-border rounded-lg p-1 w-fit">
-        {tabs.map((tab) => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab.key ? 'bg-surface text-text shadow-sm' : 'text-text-muted hover:text-text'
-            }`}>
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-6">
+        <SegmentedControl
+          label="Report"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'revenue', label: 'Revenue' },
+            { value: 'client', label: 'By client' },
+            { value: 'status', label: 'Job status' },
+          ]}
+        />
       </div>
 
-      {/* Revenue Tab */}
+      {/* Revenue */}
       {activeTab === 'revenue' && (
-        <div className="card p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-semibold text-text">Revenue Over Time</h2>
-            <div className="flex gap-1 bg-bg border border-border rounded-lg p-1">
-              <button onClick={() => setPeriod('monthly')}
-                className={`px-3 py-1 rounded-md text-xs font-medium ${period === 'monthly' ? 'bg-surface text-text shadow-sm' : 'text-text-muted'}`}>
-                Monthly
-              </button>
-              <button onClick={() => setPeriod('weekly')}
-                className={`px-3 py-1 rounded-md text-xs font-medium ${period === 'weekly' ? 'bg-surface text-text shadow-sm' : 'text-text-muted'}`}>
-                Weekly
-              </button>
+        <div className="space-y-6">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <SegmentedControl label="Date range" value={range} onChange={setRange} options={RANGES} />
+            <SegmentedControl
+              label="Group by"
+              value={period}
+              onChange={setPeriod}
+              options={[{ value: 'monthly', label: 'Monthly' }, { value: 'weekly', label: 'Weekly' }]}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="card p-5">
+              <p className="text-sm text-text-secondary">Received in this period</p>
+              <p className="text-2xl font-bold text-text mt-1">{money(total)}</p>
+            </div>
+            <div className="card p-5">
+              <p className="text-sm text-text-secondary">Best {period === 'weekly' ? 'week' : 'month'}</p>
+              <p className="text-2xl font-bold text-text mt-1">
+                {bestPeriod ? <>{money(bestPeriod.revenue)} <span className="text-sm font-medium text-text-secondary">· {bestPeriod.period}</span></> : '—'}
+              </p>
             </div>
           </div>
-          {revenueData.length === 0 ? (
-            <div className="text-center py-16 text-text-muted text-sm">No revenue data yet</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={revenueData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="period" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px' }}
-                  labelStyle={{ color: 'var(--color-text)' }}
-                  itemStyle={{ color: 'var(--color-primary)' }}
-                />
-                <Line type="monotone" dataKey="revenue" stroke="var(--color-primary)" strokeWidth={2} dot={{ fill: 'var(--color-primary)' }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
+          <div className="card p-6">
+            <h2 className="text-lg font-semibold text-text mb-6">Payments received ({baseCurrency})</h2>
+            {total === 0 ? (
+              <div className="text-center py-16 text-text-muted text-sm">No payments recorded in this period.</div>
+            ) : (
+              <RevenueChart data={revenueData} currency={baseCurrency} />
+            )}
+          </div>
         </div>
       )}
 
-      {/* By Client Tab */}
+      {/* By client (all time) */}
       {activeTab === 'client' && (
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-text mb-6">Revenue by Client</h2>
+          <h2 className="text-lg font-semibold text-text">Revenue by client</h2>
+          <p className="text-sm text-text-secondary mb-6">All time · payments received ({baseCurrency})</p>
           {clientData.length === 0 ? (
-            <div className="text-center py-16 text-text-muted text-sm">No client data yet</div>
+            <div className="text-center py-16 text-text-muted text-sm">No invoices yet.</div>
           ) : (
             <>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={clientData.slice(0, 10)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis dataKey="clientName" tick={{ fill: 'var(--color-text-secondary)', fontSize: 11 }} angle={-20} textAnchor="end" height={60} />
-                  <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px' }}
-                    labelStyle={{ color: 'var(--color-text)' }}
-                  />
-                  <Bar dataKey="totalRevenue" fill="var(--color-primary)" radius={[4, 4, 0, 0]} name="Revenue" />
-                </BarChart>
-              </ResponsiveContainer>
+              <ClientChart data={clientData.slice(0, 10)} currency={baseCurrency} />
               <div className="mt-6 overflow-x-auto">
                 <table className="data-table min-w-[400px]">
                   <thead>
@@ -164,7 +187,7 @@ function ReportsPage() {
                       <tr key={c.clientId} className="border-b border-border last:border-0">
                         <td className="py-2 text-text">{c.clientName}</td>
                         <td className="py-2 text-text-secondary text-right">{c.invoiceCount}</td>
-                        <td className="py-2 text-text font-medium text-right">{formatCurrency(c.totalRevenue, baseCurrency)}</td>
+                        <td className="py-2 text-text font-medium text-right">{money(c.totalRevenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -175,28 +198,16 @@ function ReportsPage() {
         </div>
       )}
 
-      {/* Job Status Tab */}
+      {/* Job status */}
       {activeTab === 'status' && (
         <div className="card p-6">
-          <h2 className="text-lg font-semibold text-text mb-6">Jobs by Status</h2>
+          <h2 className="text-lg font-semibold text-text mb-6">Jobs by status</h2>
           {statusData.length === 0 ? (
-            <div className="text-center py-16 text-text-muted text-sm">No job data yet</div>
+            <div className="text-center py-16 text-text-muted text-sm">No jobs yet.</div>
           ) : (
             <div className="flex flex-col lg:flex-row items-start gap-8">
               <div className="w-full lg:w-1/2">
-              <ResponsiveContainer width="100%" height={320}>
-                <PieChart>
-                  <Pie data={statusData} dataKey="count" nameKey="status" cx="50%" cy="50%"
-                    innerRadius={60} outerRadius={120} paddingAngle={2}
-                    label={false}
-                    labelLine={false}>
-                    {statusData.map((entry) => (
-                      <Cell key={entry.status} fill={STATUS_COLORS[entry.status] || '#9ca3af'} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+                <StatusChart data={statusData.map((s) => ({ ...s, label: STATUS_LABELS[s.status] || s.status }))} colors={STATUS_COLORS} />
               </div>
               <div className="w-full lg:flex-1 overflow-x-auto">
                 <table className="data-table min-w-[300px]">

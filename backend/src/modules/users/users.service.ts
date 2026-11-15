@@ -74,12 +74,7 @@ export class UsersService {
       },
       order: { firstName: 'ASC', lastName: 'ASC' },
     });
-    // Drop the (potentially large) base64 logo from list responses — it's only
-    // needed on the single-user branding form, served by findOne().
-    return users.map((u) => {
-      const { logo, ...rest } = this.sanitize(u);
-      return rest;
-    });
+    return users.map((u) => this.sanitize(u));
   }
 
   /** One user of the caller's tenant (admin view). */
@@ -143,12 +138,6 @@ export class UsersService {
     await this.userRepository.update(id, dto);
     // Deactivating cuts off existing sessions immediately, whichever endpoint did it.
     if (dto.isActive === false) await this.revokeAllSessions(id);
-    return this.findOne(id);
-  }
-
-  /** Set (data URL) or clear (null) the user's own invoice logo. */
-  async setLogo(id: string, logo: string | null): Promise<Partial<User>> {
-    await this.userRepository.update(id, { logo });
     return this.findOne(id);
   }
 

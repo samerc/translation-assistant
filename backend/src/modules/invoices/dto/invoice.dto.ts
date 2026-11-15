@@ -16,7 +16,7 @@ import {
   Matches,
   IsEmail,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateInvoiceItemDto {
   @IsString()
@@ -64,6 +64,9 @@ export class CreateInvoiceDto {
   notes?: string;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @Matches(/^[A-Z]{3}$/, {
     message: 'Currency must be a 3-letter code, like USD, EUR or AED',
   })
@@ -99,6 +102,9 @@ export class UpdateInvoiceDto {
   notes?: string;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @Matches(/^[A-Z]{3}$/, {
     message: 'Currency must be a 3-letter code, like USD, EUR or AED',
   })

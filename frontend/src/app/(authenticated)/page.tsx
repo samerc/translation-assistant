@@ -50,10 +50,13 @@ function TenantDashboard() {
   }, [canSeeStats]);
 
   const currency = stats?.currency || 'USD';
+  // Right on the first visit and every one after (unlike "Welcome back").
+  const hour = new Date(useNow()).getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
     <div>
-      <PageHeader title={`Welcome back, ${user?.firstName ?? ''}`} description="Here's where your work stands today." />
+      <PageHeader title={`${greeting}, ${user?.firstName ?? ''}`} description="Here's where your work stands today." />
 
       {user?.role?.name === 'Admin' && <GettingStarted />}
 
@@ -156,18 +159,20 @@ function GettingStarted() {
     if (dismissed) return;
     const safe = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
     Promise.all([
-      safe(api.get<{ companyName: string }>('/settings'), { companyName: '' }),
+      safe(api.get<{ companyName: string; companyAddress: string | null }>('/settings'), { companyName: '', companyAddress: null }),
       safe(api.get<unknown[]>('/templates'), []),
       safe(api.get<{ total: number }>('/clients?limit=1'), { total: 0 }),
       safe(api.get<unknown[]>('/users'), []),
       safe(api.get<{ configured: boolean }>('/translate/status'), { configured: false }),
-    ]).then(([settings, templates, clients, users, gt]) => {
+      safe(api.get<unknown[]>('/auth/invites'), []),
+    ]).then(([settings, templates, clients, users, gt, invites]) => {
       setSteps([
-        { done: Boolean(settings.companyName?.trim()), title: 'Add your company details', hint: 'Name and address appear on invoices.', href: '/settings' },
+        // The name comes from the organization; the address is what the admin adds.
+        { done: Boolean(settings.companyName?.trim() && settings.companyAddress?.trim()), title: 'Add your company details', hint: 'Address, logo and payment details appear on invoices.', href: '/settings?tab=general' },
         { done: templates.length > 0, title: 'Create a document template', hint: 'Birth certificates, diplomas, contracts…', href: '/templates' },
         { done: clients.total > 0, title: 'Add your first client', hint: 'A company or a person you translate for.', href: '/clients' },
-        { done: users.length > 1, title: 'Invite a translator', hint: 'Settings › Users › Invite.', href: '/settings' },
-        { done: gt.configured, title: 'Connect Google Translate (optional)', hint: 'Turns on the GT helper in documents.', href: '/settings' },
+        { done: users.length > 1 || invites.length > 0, title: 'Invite a translator', hint: 'Settings › Users › Invite.', href: '/settings?tab=users' },
+        { done: gt.configured, title: 'Connect Google Translate (optional)', hint: 'Turns on the GT helper in documents.', href: '/settings?tab=general' },
       ]);
     });
   }, [dismissed]);

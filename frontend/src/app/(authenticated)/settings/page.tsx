@@ -1,17 +1,22 @@
 'use client';
 
-import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect, Suspense, FormEvent, ChangeEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useSettings } from '@/lib/settings-context';
 import { useTheme, PALETTE_OPTIONS } from '@/lib/theme-context';
 import { JOB_STATUS_BADGE } from '@/lib/status';
 import { Button } from '@/components/ui/Button';
+import { Field, Input, Select, Textarea } from '@/components/ui/Field';
+import { CurrencySelect } from '@/components/ui/CurrencySelect';
 import { Badge } from '@/components/ui/Badge';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { CheckIcon, MoonIcon, SunIcon } from '@/components/ui/icons';
 import { confirmDialog, alertDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { NO_AUTOFILL } from '@/lib/no-autofill';
+import { formatDate, formatDateTime, describeUserAgent } from '@/lib/format';
 import { TranslateKeyForm } from '@/components/TranslateKeyForm';
 
 interface AppSettings {
@@ -19,6 +24,10 @@ interface AppSettings {
   companyName: string;
   companyAddress: string | null;
   companyLogo: string | null;
+  companyTaxId: string | null;
+  bankDetails: string | null;
+  invoiceFooter: string | null;
+  dateFormat: string;
   baseCurrency: string;
   invoicePrefix: string | null;
   maxUploadSizeMb: number;
@@ -41,15 +50,25 @@ interface LabelOption {
   sortOrder: number;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'business' | 'email' | 'users' | 'roles' | 'freeform';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'users' | 'roles' | 'freeform';
 
 export default function SettingsPage() {
+  // useSearchParams needs a Suspense boundary for the static build.
+  return (
+    <Suspense fallback={null}>
+      <SettingsTabs />
+    </Suspense>
+  );
+}
+
+function SettingsTabs() {
   const { user } = useAuth();
+  const requestedTab = useSearchParams().get('tab') as Tab | null;
   // The platform admin manages the platform (email, sign-ups, global lists);
   // an organization's Admin manages that organization.
   const isPlatformAdmin = Boolean(user?.isPlatformAdmin);
   const isAdmin = !isPlatformAdmin && user?.role?.name === 'Admin';
-  const [selectedTab, setActiveTab] = useState<Tab | null>(null);
+  const [selectedTab, setActiveTab] = useState<Tab | null>(requestedTab);
 
   // Administration tabs (their writes are admin-only server-side) are shown to
   // the matching admin; everyone keeps the personal tabs.
@@ -69,7 +88,6 @@ export default function SettingsPage() {
             ]
           : []),
         { id: 'appearance', label: 'Appearance' },
-        { id: 'business', label: 'My Business' },
         { id: 'security', label: 'Security' },
         ...(isAdmin
           ? [
@@ -108,7 +126,6 @@ export default function SettingsPage() {
       {activeTab === 'labels' && isPlatformAdmin && <LabelsSettings />}
       {activeTab === 'uploads' && isAdmin && <UploadSettings />}
       {activeTab === 'appearance' && <AppearanceSettings />}
-      {activeTab === 'business' && <BusinessSettings />}
       {activeTab === 'security' && <SecuritySettings />}
       {activeTab === 'freeform' && isAdmin && <FreeformTypesSettings />}
       {activeTab === 'users' && isAdmin && <UsersSettings />}
@@ -121,6 +138,8 @@ export default function SettingsPage() {
 // ── General Settings ──
 
 function GeneralSettings() {
+  const { refreshUser } = useAuth();
+  const { reload: reloadAppSettings } = useSettings();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -139,11 +158,18 @@ function GeneralSettings() {
     try {
       const updated = await api.patch<AppSettings>('/settings', {
         companyName: settings.companyName,
-        companyAddress: settings.companyAddress,
+        companyAddress: settings.companyAddress ?? '',
+        companyTaxId: settings.companyTaxId ?? '',
+        bankDetails: settings.bankDetails ?? '',
+        invoiceFooter: settings.invoiceFooter ?? '',
         baseCurrency: settings.baseCurrency,
-        invoicePrefix: settings.invoicePrefix,
+        invoicePrefix: settings.invoicePrefix ?? '',
+        dateFormat: settings.dateFormat,
       });
       setSettings(updated);
+      // Dates, currency and invoice defaults across the app follow right away.
+      reloadAppSettings();
+      await refreshUser();
       setMessage('Settings saved');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
@@ -156,48 +182,59 @@ function GeneralSettings() {
   if (!settings) return loadError ? <div className="max-w-4xl p-3 tone tone-danger rounded-lg text-sm">{loadError}</div> : <LoadingSpinner />;
 
   return (
-    <div className="max-w-4xl">
-      <form onSubmit={handleSubmit}>
+    <div className="max-w-4xl space-y-6">
+      <OrganizationLogo logo={settings.companyLogo} onChange={(companyLogo) => setSettings({ ...settings, companyLogo })} />
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div className="card p-6 space-y-5">
-          <InputField
-            label="Company Name"
-            value={settings.companyName}
-            onChange={(v) => setSettings({ ...settings, companyName: v })}
-          />
           <div>
-            <label className="block text-sm font-medium text-text mb-1.5">Company Address</label>
-            <textarea
-              value={settings.companyAddress || ''}
-              onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
-              rows={3}
-              className="input w-full resize-none"
-            />
+            <h3 className="font-semibold text-text">Your business on invoices</h3>
+            <p className="text-sm text-text-secondary mt-1">Every invoice of the organization shows these details. Leave anything blank to omit it.</p>
           </div>
-          <InputField
-            label="Base Currency"
-            value={settings.baseCurrency}
-            onChange={(v) => setSettings({ ...settings, baseCurrency: v })}
-            placeholder="USD"
-          />
-          <InputField
-            label="Invoice Prefix"
-            value={settings.invoicePrefix || ''}
-            onChange={(v) => setSettings({ ...settings, invoicePrefix: v })}
-            placeholder="INV-"
-          />
+          <Field label="Company name" htmlFor="org-name">
+            <Input id="org-name" value={settings.companyName} onChange={(e) => setSettings({ ...settings, companyName: e.target.value })} maxLength={255} />
+          </Field>
+          <Field label="Address" htmlFor="org-address">
+            <Textarea id="org-address" value={settings.companyAddress || ''} rows={3} className="resize-none" placeholder="Street, city, country"
+              onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })} maxLength={1000} />
+          </Field>
+          <Field label="Tax / VAT number" htmlFor="org-tax" hint="optional">
+            <Input id="org-tax" value={settings.companyTaxId || ''} onChange={(e) => setSettings({ ...settings, companyTaxId: e.target.value })} maxLength={100} />
+          </Field>
+          <Field label="Payment details" htmlFor="org-bank" hint="printed at the end of invoices">
+            <Textarea id="org-bank" value={settings.bankDetails || ''} rows={3} className="resize-none" maxLength={2000}
+              placeholder={'Bank, IBAN, transfer services…\ne.g. IBAN LB00 0000 0000 0000 — Bank of Beirut'}
+              onChange={(e) => setSettings({ ...settings, bankDetails: e.target.value })} />
+          </Field>
+          <Field label="Default invoice notes" htmlFor="org-footer" hint="pre-filled on each new invoice, editable there">
+            <Textarea id="org-footer" value={settings.invoiceFooter || ''} rows={2} className="resize-none" maxLength={2000}
+              placeholder="e.g. Payment due within 30 days. Thank you for your business."
+              onChange={(e) => setSettings({ ...settings, invoiceFooter: e.target.value })} />
+          </Field>
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn btn-primary"
-          >
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-          {message && <span className="text-sm text-success">{message}</span>}
+        <div className="card p-6 grid gap-5 sm:grid-cols-3">
+          <Field label="Currency" htmlFor="org-currency">
+            <CurrencySelect id="org-currency" value={settings.baseCurrency} onChange={(e) => setSettings({ ...settings, baseCurrency: e.target.value })} />
+          </Field>
+          <Field label="Invoice number prefix" htmlFor="org-prefix">
+            <Input id="org-prefix" value={settings.invoicePrefix || ''} placeholder="INV-" maxLength={15}
+              onChange={(e) => setSettings({ ...settings, invoicePrefix: e.target.value })} />
+          </Field>
+          <Field label="Date format" htmlFor="org-date-format">
+            <Select id="org-date-format" value={settings.dateFormat} onChange={(e) => setSettings({ ...settings, dateFormat: e.target.value })}>
+              <option value="DD/MM/YYYY">DD/MM/YYYY (15/11/2026)</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY (11/15/2026)</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD (2026-11-15)</option>
+            </Select>
+          </Field>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+          {message && <span className="text-sm text-success" role="status">{message}</span>}
         </div>
       </form>
-      <div className="card p-6 mt-6">
+      <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">Google Translate</h3>
         <p className="text-sm text-text-secondary mb-4">
           Powers the GT helper on document pages. {settings.googleTranslateKeySet ? 'A key is saved.' : 'No key is set, so the GT helper is off.'}
@@ -276,7 +313,7 @@ function DeleteOrganizationCard() {
         <>
           <div className="tone tone-warning rounded-lg p-3 text-sm mt-2">
             Deletion requested{request.requestedBy ? ` by ${request.requestedBy}` : ''}
-            {request.requestedAt ? ` on ${new Date(request.requestedAt).toLocaleDateString()}` : ''}. It is waiting for approval;
+            {request.requestedAt ? ` on ${formatDate(request.requestedAt)}` : ''}. It is waiting for approval;
             nothing has been deleted yet. You&apos;ll get an email when it is handled.
           </div>
           <button type="button" onClick={withdraw} disabled={busy} className="btn btn-secondary mt-4">Withdraw request</button>
@@ -395,8 +432,9 @@ function LanguagesSettings() {
         <form onSubmit={handleSubmit} className="card p-5 mb-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Code</label>
+              <label htmlFor="lang-code" className="block text-sm font-medium text-text mb-1.5">Code</label>
               <input
+                id="lang-code"
                 value={form.code}
                 onChange={(e) => setForm({ ...form, code: e.target.value })}
                 required
@@ -406,8 +444,9 @@ function LanguagesSettings() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Name</label>
+              <label htmlFor="lang-name" className="block text-sm font-medium text-text mb-1.5">Name</label>
               <input
+                id="lang-name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 required
@@ -416,8 +455,9 @@ function LanguagesSettings() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Direction</label>
+              <label htmlFor="lang-dir" className="block text-sm font-medium text-text mb-1.5">Direction</label>
               <select
+                id="lang-dir"
                 value={form.direction}
                 onChange={(e) => setForm({ ...form, direction: e.target.value as 'ltr' | 'rtl' })}
                 className="input w-full"
@@ -703,11 +743,12 @@ function UploadSettings() {
     <div className="max-w-4xl space-y-6">
       {/* Max Upload Size */}
       <div className="card p-6">
-        <label className="block text-sm font-medium text-text mb-1.5">
+        <label htmlFor="max-upload" className="block text-sm font-medium text-text mb-1.5">
           Max Upload Size (MB)
         </label>
         <div className="flex gap-3 items-center">
           <input
+            id="max-upload"
             type="number"
             min={1}
             max={100}
@@ -797,32 +838,6 @@ function FileTypePills({ title, description, items, inputValue, onInputChange, o
           Add
         </button>
       </div>
-    </div>
-  );
-}
-
-// ── Shared Components ──
-
-function InputField({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-text mb-1.5">{label}</label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="input w-full"
-      />
     </div>
   );
 }
@@ -998,9 +1013,9 @@ function SecuritySettings() {
                     {s.ipAddress}
                     {s.current && <span className="ml-2 text-xs font-medium text-primary">This device</span>}
                   </div>
-                  <div className="text-xs text-text-muted mt-0.5">{s.userAgent}</div>
+                  <div className="text-xs text-text-muted mt-0.5" title={s.userAgent}>{describeUserAgent(s.userAgent)}</div>
                   <div className="text-xs text-text-muted mt-0.5">
-                    Last used: {new Date(s.lastUsedAt).toLocaleString()}
+                    Last used: {formatDateTime(s.lastUsedAt)}
                   </div>
                 </div>
                 <button
@@ -1029,10 +1044,32 @@ interface AdminUser {
   role?: { id: string; name: string };
 }
 interface RoleOption { id: string; name: string }
+interface PendingInvite {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  role: string | null;
+  token: string;
+  expiresAt: string;
+  expired: boolean;
+}
+
+const inviteLink = (token: string) => `${window.location.origin}/register?token=${token}`;
+
+async function copyText(text: string, what = 'Link') {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`${what} copied`);
+  } catch {
+    toast.error('Copy failed — select the link and copy it by hand.');
+  }
+}
 
 function UsersSettings() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [invites, setInvites] = useState<PendingInvite[]>([]);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -1048,6 +1085,7 @@ function UsersSettings() {
       .then((res) => { setUsers(res); setLoadError(false); })
       .catch(() => setLoadError(true));
     api.get<RoleOption[]>('/roles').then(setRoles).catch(() => {});
+    api.get<PendingInvite[]>('/auth/invites').then(setInvites).catch(() => {});
   };
   useEffect(load, []);
 
@@ -1063,15 +1101,42 @@ function UsersSettings() {
         ...(inviteFirst.trim() ? { firstName: inviteFirst.trim() } : {}),
         ...(inviteLast.trim() ? { lastName: inviteLast.trim() } : {}),
       });
-      const link = `${window.location.origin}/register?token=${res.token}`;
-      setInviteResult({ link });
+      setInviteResult({ link: inviteLink(res.token) });
       setInviteEmail('');
       setInviteFirst('');
       setInviteLast('');
+      load();
     } catch (err) {
       setError(err instanceof ApiError ? String(err.message) : 'Failed to create invite.');
     } finally {
       setInviteBusy(false);
+    }
+  };
+
+  const resendInvite = async (inv: PendingInvite) => {
+    try {
+      const res = await api.post<{ token: string }>(`/auth/invites/${inv.id}/resend`);
+      await copyText(inviteLink(res.token), 'New link');
+      toast.success(`Invite sent again to ${inv.email}`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to resend the invite.');
+    }
+  };
+
+  const cancelInvite = async (inv: PendingInvite) => {
+    if (!(await confirmDialog({
+      title: 'Cancel invite',
+      message: `Cancel the invite for ${inv.email}? Its link stops working.`,
+      confirmText: 'Cancel invite',
+      cancelText: 'Keep it',
+      danger: true,
+    }))) return;
+    try {
+      await api.delete(`/auth/invites/${inv.id}`);
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to cancel the invite.');
     }
   };
 
@@ -1121,7 +1186,7 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
       {/* Invite */}
       <div className="card p-6">
         <h3 className="font-semibold text-text mb-1">Invite a user</h3>
-        <p className="text-sm text-text-secondary mb-4">Generates an invite link (also emailed if SMTP is configured).</p>
+        <p className="text-sm text-text-secondary mb-4">We email them a link to join (valid 7 days). You can also copy the link and send it yourself.</p>
         {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         <form onSubmit={invite} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:items-end">
           <div>
@@ -1150,11 +1215,54 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
           </div>
         </form>
         {inviteResult && (
-          <div className="mt-4 p-3 tone tone-success rounded-lg text-sm break-all">
-            Invite link: <a href={inviteResult.link} className="underline font-medium">{inviteResult.link}</a>
+          <div className="mt-4 p-3 tone tone-success rounded-lg text-sm flex flex-col sm:flex-row sm:items-center gap-3" role="status">
+            <span className="break-all flex-1">Invite created. Link: <span className="font-medium">{inviteResult.link}</span></span>
+            <Button size="sm" onClick={() => copyText(inviteResult.link)}>Copy link</Button>
           </div>
         )}
       </div>
+
+      {/* Pending invites */}
+      {invites.length > 0 && (
+        <div className="card p-6">
+          <h3 className="font-semibold text-text mb-4">Pending invites</h3>
+          <div className="overflow-x-auto">
+            <table className="data-table min-w-[520px]">
+              <thead>
+                <tr className="border-b border-border text-left text-text-secondary">
+                  <th className="py-2 font-semibold">Invited</th>
+                  <th className="py-2 font-semibold">Role</th>
+                  <th className="py-2 font-semibold">Expires</th>
+                  <th className="py-2 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invites.map((inv) => (
+                  <tr key={inv.id} className="border-b border-border last:border-0">
+                    <td className="py-2">
+                      <div className="text-text">{[inv.firstName, inv.lastName].filter(Boolean).join(' ') || inv.email}</div>
+                      {(inv.firstName || inv.lastName) && <div className="text-xs text-text-muted">{inv.email}</div>}
+                    </td>
+                    <td className="py-2 text-text-secondary">{inv.role || '—'}</td>
+                    <td className="py-2">
+                      {inv.expired
+                        ? <Badge tone="tone tone-danger">Expired</Badge>
+                        : <span className="text-text-secondary">{formatDate(inv.expiresAt)}</span>}
+                    </td>
+                    <td className="py-2 text-right whitespace-nowrap">
+                      {!inv.expired && (
+                        <button onClick={() => copyText(inviteLink(inv.token))} className="text-xs font-medium text-primary-text hover:underline mr-3">Copy link</button>
+                      )}
+                      <button onClick={() => resendInvite(inv)} className="text-xs font-medium text-primary-text hover:underline mr-3">Resend</button>
+                      <button onClick={() => cancelInvite(inv)} className="text-xs font-medium text-danger hover:underline">Cancel</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* User list */}
       <div className="card p-6">
@@ -1454,48 +1562,11 @@ function RolesSettings() {
   );
 }
 
-// ── My Business (per-user invoice branding) ──
+// ── Organization logo (on invoices) ──
 
-interface UserBranding {
-  businessName?: string | null;
-  businessAddress?: string | null;
-  logo?: string | null;
-}
-
-function BusinessSettings() {
-  const { user } = useAuth();
-  const [businessName, setBusinessName] = useState('');
-  const [businessAddress, setBusinessAddress] = useState('');
-  const [logo, setLogo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+function OrganizationLogo({ logo, onChange }: { logo: string | null; onChange: (logo: string | null) => void }) {
   const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!user) return;
-    api.get<UserBranding>('/users/profile/me')
-      .then((u) => {
-        setBusinessName(u.businessName || '');
-        setBusinessAddress(u.businessAddress || '');
-        setLogo(u.logo || null);
-      })
-      .catch(() => setError('Failed to load your business details'))
-      .finally(() => setLoading(false));
-  }, [user]);
-
-  const saveDetails = async (e: FormEvent) => {
-    e.preventDefault();
-    setSaving(true); setMessage(''); setError('');
-    try {
-      await api.patch('/users/profile/me', { businessName, businessAddress });
-      setMessage('Business details saved');
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Failed to save');
-    } finally { setSaving(false); }
-  };
 
   const handleLogoChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1503,87 +1574,48 @@ function BusinessSettings() {
     if (!file) return;
     if (!['image/png', 'image/jpeg'].includes(file.type)) { setError('Logo must be a PNG or JPEG image'); return; }
     if (file.size > 1024 * 1024) { setError('Logo must be under 1MB'); return; }
-    setUploading(true); setError(''); setMessage('');
+    setUploading(true); setError('');
     try {
       const fd = new FormData();
       fd.append('logo', file);
-      const updated = await api.upload<UserBranding>('/users/profile/me/logo', fd, 'PATCH');
-      setLogo(updated.logo || null);
-      setMessage('Logo updated');
-      setTimeout(() => setMessage(''), 3000);
+      const updated = await api.upload<AppSettings>('/settings/logo', fd, 'PATCH');
+      onChange(updated.companyLogo || null);
+      toast.success('Logo updated');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to upload logo');
     } finally { setUploading(false); }
   };
 
   const removeLogo = async () => {
-    setUploading(true); setError(''); setMessage('');
+    setUploading(true); setError('');
     try {
-      const updated = await api.delete<UserBranding>('/users/profile/me/logo');
-      setLogo(updated.logo || null);
-      setMessage('Logo removed');
-      setTimeout(() => setMessage(''), 3000);
+      const updated = await api.delete<AppSettings>('/settings/logo');
+      onChange(updated.companyLogo || null);
+      toast.success('Logo removed');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Failed to remove logo');
     } finally { setUploading(false); }
   };
 
-  if (loading) return <LoadingSpinner />;
-
   return (
-    <div className="max-w-4xl space-y-6">
-      <p className="text-sm text-text-secondary">
-        These details appear on the invoices <span className="font-medium text-text">you</span> issue.
-        Each user has their own business identity — leave anything blank to omit it.
-      </p>
-
-      {/* Logo */}
-      <div className="card p-6">
-        <h3 className="font-semibold text-text mb-1">Logo</h3>
-        <p className="text-sm text-text-secondary mb-4">PNG or JPEG, up to 1MB. Shown beside your business name on invoices.</p>
-        <div className="flex items-center gap-5">
-          <div className="w-40 h-20 rounded-lg border border-border bg-bg flex items-center justify-center overflow-hidden">
-            {logo
-              ? <img src={logo} alt="Business logo" className="max-w-full max-h-full object-contain" />
-              : <span className="text-xs text-text-muted">No logo</span>}
-          </div>
-          <div className="flex flex-col gap-2">
-            <label className={`btn btn-primary cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
-              {uploading ? 'Working…' : logo ? 'Replace logo' : 'Upload logo'}
-              <input type="file" accept="image/png,image/jpeg" onChange={handleLogoChange} disabled={uploading} className="sr-only" />
-            </label>
-            {logo && (
-              <button type="button" onClick={removeLogo} disabled={uploading}
-                className="btn btn-danger">
-                Remove
-              </button>
-            )}
-          </div>
+    <div className="card p-6">
+      <h3 className="font-semibold text-text mb-1">Logo</h3>
+      <p className="text-sm text-text-secondary mb-4">PNG or JPEG, up to 1MB. Shown beside your company name on invoices.</p>
+      <div className="flex items-center gap-5">
+        <div className="w-40 h-20 rounded-lg border border-border bg-bg flex items-center justify-center overflow-hidden">
+          {logo
+            ? <img src={logo} alt="Company logo" className="max-w-full max-h-full object-contain" />
+            : <span className="text-xs text-text-muted">No logo</span>}
+        </div>
+        <div className="flex flex-col gap-2">
+          <label className={`btn btn-secondary cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${uploading ? 'opacity-60 pointer-events-none' : ''}`}>
+            {uploading ? 'Working…' : logo ? 'Replace logo' : 'Upload logo'}
+            <input type="file" accept="image/png,image/jpeg" onChange={handleLogoChange} disabled={uploading} className="sr-only" />
+          </label>
+          {logo && <Button variant="danger" onClick={removeLogo} disabled={uploading}>Remove</Button>}
         </div>
       </div>
-
-      {/* Name + address */}
-      <form onSubmit={saveDetails} className="card p-6 space-y-5">
-        <InputField label="Business Name" value={businessName} onChange={setBusinessName} placeholder="Your business name" />
-        <div>
-          <label className="block text-sm font-medium text-text mb-1.5">Business Address</label>
-          <textarea
-            value={businessAddress}
-            onChange={(e) => setBusinessAddress(e.target.value)}
-            rows={3}
-            placeholder="Street, city, country"
-            className="input w-full resize-none"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <button type="submit" disabled={saving}
-            className="btn btn-primary">
-            {saving ? 'Saving…' : 'Save Changes'}
-          </button>
-          {message && <span className="text-sm text-success">{message}</span>}
-          {error && <span className="text-sm text-danger">{error}</span>}
-        </div>
-      </form>
+      {error && <p className="text-sm text-danger mt-3" role="alert">{error}</p>}
     </div>
   );
 }
@@ -1683,24 +1715,24 @@ function FreeformTypesSettings() {
         <form onSubmit={submit} className="card p-5 mb-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1">
-              <label className="block text-sm font-medium text-text mb-1.5">Name</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Certified Translation"
+              <label htmlFor="ff-name" className="block text-sm font-medium text-text mb-1.5">Name</label>
+              <input id="ff-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Certified Translation"
                 className="input w-full" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Price / Page</label>
-              <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} placeholder="0.00"
+              <label htmlFor="ff-price" className="block text-sm font-medium text-text mb-1.5">Price / Page</label>
+              <input id="ff-price" type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })} placeholder="0.00"
                 className="input w-full" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1.5">Discounted / Page (optional)</label>
-              <input type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} placeholder="—"
+              <label htmlFor="ff-disc" className="block text-sm font-medium text-text mb-1.5">Discounted / Page (optional)</label>
+              <input id="ff-disc" type="number" step="0.01" min="0" value={form.discountedPricePerPage} onChange={(e) => setForm({ ...form, discountedPricePerPage: e.target.value })} placeholder="—"
                 className="input w-full" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-text mb-1.5">Description (optional)</label>
-            <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Short note used as the default line-item description"
+            <label htmlFor="ff-desc" className="block text-sm font-medium text-text mb-1.5">Description (optional)</label>
+            <input id="ff-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Short note used as the default line-item description"
               className="input w-full" />
           </div>
           <div className="flex gap-2">
