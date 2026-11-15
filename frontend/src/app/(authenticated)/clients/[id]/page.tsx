@@ -6,6 +6,7 @@ import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { JOB_STATUS_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
+import { useAuth } from '@/lib/auth-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
 import { NO_AUTOFILL } from '@/lib/no-autofill';
@@ -607,10 +608,11 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
   );
 }
 
-// ── Jobs Tab (placeholder) ──
+// ── Jobs Tab ──
 
 function JobsTab({ clientId }: { clientId: string }) {
   const { baseCurrency } = useSettings();
+  const pricesHidden = !!useAuth().user?.tenant?.pricesHidden;
   const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string } | null; targetLanguage: { code: string } | null; calculatedTotal: number; createdAt: string }[]>([]);
   const router = useRouter();
 
@@ -636,7 +638,7 @@ function JobsTab({ clientId }: { clientId: string }) {
                 <th className="text-left">Title</th>
                 <th className="text-left">Languages</th>
                 <th className="text-left">Status</th>
-                <th className="text-left">Total</th>
+                {!pricesHidden && <th className="text-left">Total</th>}
                 <th className="text-left">Created</th>
               </tr>
             </thead>
@@ -646,7 +648,7 @@ function JobsTab({ clientId }: { clientId: string }) {
                   <td className="px-4 py-3 font-medium text-text">{j.title}</td>
                   <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage?.code?.toUpperCase() ?? '—'} → {j.targetLanguage?.code?.toUpperCase() ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
-                  <td className="px-4 py-3 text-text-secondary">{formatCurrency(j.calculatedTotal, baseCurrency)}</td>
+                  {!pricesHidden && <td className="px-4 py-3 text-text-secondary">{formatCurrency(j.calculatedTotal, baseCurrency)}</td>}
                   <td className="px-4 py-3 text-text-secondary">{formatDate(j.createdAt)}</td>
                 </tr>
               ))}

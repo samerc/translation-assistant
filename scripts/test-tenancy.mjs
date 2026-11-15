@@ -694,6 +694,69 @@ const pendDel = await req(P, 'POST', `/platform/tenants/${pendOrg?.id}/delete`);
 check('a pending sign-up is rejected, not deleted', ok(pend) && pendDel.status === 400, show(pendDel));
 await req(P, 'PATCH', '/platform/settings', { deletionGraceDays: 30 });
 
+console.log('== job assignment + translator price visibility ==');
+{
+  // Assign on create (admins), only to colleagues of the same organization.
+  const base = { clientId: a.ids.client, sourceLanguageId: a.ar, targetLanguageId: a.en, lineItems: [{ description: 'page', pageCount: 2, pricePerPage: 10, templateId: a.ids.template }] };
+  const handed = await req(a.A, 'POST', '/jobs', { ...base, title: `Handed ${RUN}`, assignToUserId: a.ids.translator });
+  check('admin creates a job assigned to a translator', ok(handed) && handed.data.assignedUsers.length === 1 && handed.data.assignedUsers[0].userId === a.ids.translator, show(handed));
+  const crossAssign = await req(a.A, 'POST', '/jobs', { ...base, title: 'x', assignToUserId: b.ids.translator });
+  check("assigning a new job to another organization's user → 400", crossAssign.status === 400, show(crossAssign));
+  const trAssign = await req(a.T, 'POST', '/jobs', { ...base, title: 'x', assignToUserId: a.ids.admin });
+  check('a translator cannot hand a job to someone else', trAssign.status === 403, show(trAssign));
+  const self = await req(a.A, 'POST', '/jobs', { ...base, title: `Mine ${RUN}` });
+  check('without a choice the creator is assigned (the admin translates)', ok(self) && self.data.assignedUsers[0]?.userId === a.ids.admin, show(self));
+
+  // Whose jobs: ?assignee= (admins).
+  const ofTr = await req(a.A, 'GET', `/jobs?assignee=${a.ids.translator}&limit=100`);
+  check("assignee filter: the translator's jobs only", ok(ofTr) && ofTr.data.data.some((j) => j.id === handed.data.id) && !ofTr.data.data.some((j) => j.id === self.data.id), show(ofTr));
+  check('job list rows carry assignee names', ofTr.data.data.find((j) => j.id === handed.data.id)?.assignees?.[0]?.firstName === 'Tr');
+  const mine = await req(a.A, 'GET', '/jobs?assignee=me&limit=100');
+  check('assignee=me: the admin\'s own jobs', ok(mine) && mine.data.data.some((j) => j.id === self.data.id) && !mine.data.data.some((j) => j.id === handed.data.id), show(mine));
+  const otherOrg = await req(a.A, 'GET', `/jobs?assignee=${b.ids.translator}`);
+  check("assignee = another organization's user → no jobs", ok(otherOrg) && otherOrg.data.total === 0, show(otherOrg));
+  check('assignee must be an id', (await req(a.A, 'GET', '/jobs?assignee=1%20OR%201')).status === 400);
+  const trSees = await req(a.T, 'GET', `/jobs?assignee=${a.ids.admin}&limit=100`);
+  check('a translator\'s list stays their own whatever the filter', ok(trSees) && !trSees.data.data.some((j) => j.id === self.data.id), show(trSees));
+  const users = await req(a.A, 'GET', '/users');
+  check('users list: open job count per person', ok(users) && users.data.find((u) => u.id === a.ids.translator)?.openJobCount >= 2, show(users));
+
+  // View-only assignment: the API says so.
+  await req(a.A, 'POST', `/jobs/${self.data.id}/users`, { userId: a.ids.translator, permissionLevel: 'view' });
+  const viewJob = await req(a.T, 'GET', `/jobs/${self.data.id}`);
+  check("job detail: myAccess 'view' for a view-only assignee", ok(viewJob) && viewJob.data.myAccess === 'view', show(viewJob));
+  check("job detail: myAccess 'edit' for an admin", (await req(a.A, 'GET', `/jobs/${self.data.id}`)).data.myAccess === 'edit');
+  const viewDocs = (await req(a.A, 'GET', `/documents/by-job/${self.data.id}`)).data;
+  const viewDoc = await req(a.T, 'GET', `/documents/${viewDocs[0]?.id}`);
+  check("document: myAccess 'view' for a view-only assignee", ok(viewDoc) && viewDoc.data.myAccess === 'view', show(viewDoc));
+
+  // Prices: on by default; the admin turns them off for translators.
+  check('translators see prices by default', (await req(a.T, 'GET', `/jobs/${handed.data.id}`)).data.calculatedTotal !== undefined);
+  check('only an admin can change it', (await req(a.T, 'PATCH', '/settings', { translatorsSeePrices: false })).status === 403);
+  check('admin hides prices from translators', ok(await req(a.A, 'PATCH', '/settings', { translatorsSeePrices: false })));
+  const noPrice = (r) => ok(r) && !/pricePerPage|calculatedTotal|finalPrice|lineTotal|paymentAmount/.test(r.text);
+  check('profile tells the frontend', (await req(a.T, 'GET', '/auth/profile')).data.tenant?.pricesHidden === true);
+  check('translator: job detail without prices', noPrice(await req(a.T, 'GET', `/jobs/${handed.data.id}`)));
+  check('translator: job list without prices', noPrice(await req(a.T, 'GET', '/jobs')));
+  check('translator: templates without prices', noPrice(await req(a.T, 'GET', '/templates')) && noPrice(await req(a.T, 'GET', `/templates/${a.ids.template}`)));
+  check('translator: freeform types without prices', noPrice(await req(a.T, 'GET', '/settings/freeform-job-types')));
+  check('translator: document without prices', noPrice(await req(a.T, 'GET', `/documents/${a.ids.doc}`)));
+  check('translator: search without prices', noPrice(await req(a.T, 'GET', `/search?q=${encodeURIComponent('Job A')}`)));
+  check('admin still sees prices', (await req(a.A, 'GET', `/jobs/${handed.data.id}`)).data.calculatedTotal !== undefined);
+  check("organization B's translators unaffected", (await req(b.T, 'GET', `/jobs/${b.ids.job}`)).data.calculatedTotal !== undefined);
+  // A translator's own job is priced from the templates, whatever they send.
+  const own = await req(a.T, 'POST', '/jobs', { ...base, title: `Tr priced ${RUN}`, finalPrice: 1, lineItems: [{ description: 'page', pageCount: 3, pricePerPage: 999, templateId: a.ids.template }, { description: 'Type A', pageCount: 2, pricePerPage: 999 }] });
+  const ownAdmin = (await req(a.A, 'GET', `/jobs/${own.data?.id}`)).data;
+  check('translator job: template + freeform list prices, no final price', ok(own) && Number(ownAdmin.calculatedTotal) === 3 * 10 + 2 * 5 && ownAdmin.finalPrice == null, `${show(own)} total=${ownAdmin?.calculatedTotal}`);
+  const li = ownAdmin.lineItems?.find((l) => l.pageCount === 3);
+  await req(a.T, 'PATCH', `/jobs/${own.data?.id}/line-items/${li?.id}`, { pricePerPage: 999, pageCount: 4 });
+  await req(a.T, 'PATCH', `/jobs/${own.data?.id}`, { finalPrice: 1, paymentAmount: 1, paymentCurrency: 'USD' });
+  const after = (await req(a.A, 'GET', `/jobs/${own.data?.id}`)).data;
+  check('translator edits keep the price (pages still change)', Number(after.calculatedTotal) === 4 * 10 + 2 * 5 && after.finalPrice == null && after.paymentAmount == null, `total=${after.calculatedTotal} final=${after.finalPrice}`);
+  await req(a.A, 'PATCH', '/settings', { translatorsSeePrices: true });
+  check('turned back on: translators see prices again', (await req(a.T, 'GET', `/jobs/${handed.data.id}`)).data.calculatedTotal !== undefined);
+}
+
 console.log(`\nTENANCY: ${pass} pass, ${fail} fail`);
 if (fail) {
   console.log('\nFailures:\n' + failures.map((f) => ' - ' + f).join('\n'));

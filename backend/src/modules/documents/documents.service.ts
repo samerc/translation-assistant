@@ -61,6 +61,15 @@ export class DocumentsService {
     }
   }
 
+  /** 'edit' for admins and edit assignees, else 'view' (call after an access check). */
+  async accessLevel(jobId: string, actor: Actor): Promise<'edit' | 'view'> {
+    if (actor.isAdmin) return 'edit';
+    const assignment = await this.jobUserRepository.findOne({
+      where: { jobId, userId: actor.userId },
+    });
+    return assignment?.permissionLevel === 'edit' ? 'edit' : 'view';
+  }
+
   async verifyDocumentAccess(
     documentId: string,
     actor: Actor,

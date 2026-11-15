@@ -23,6 +23,7 @@ import {
   CreateFreeformJobTypeDto,
   UpdateFreeformJobTypeDto,
 } from './dto/freeform-job-type.dto.js';
+import { HidePricesInterceptor } from '../../common/tenancy/hide-prices.interceptor.js';
 import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
@@ -148,6 +149,7 @@ export class SettingsController {
   // ── Freeform job types (per tenant) ──
 
   @Get('freeform-job-types')
+  @UseInterceptors(HidePricesInterceptor)
   @RequirePermissions('settings:read')
   findAllFreeformJobTypes(@CurrentActor() actor: Actor) {
     return this.settingsService.findAllFreeformJobTypes(actor.tenantId);

@@ -11,6 +11,7 @@ import { formatCurrency, localDateString, todayLocal } from '@/lib/format';
 import { CurrencySelect } from '@/components/ui/CurrencySelect';
 import { Button } from '@/components/ui/Button';
 import { RequirePermission } from '@/components/RequirePermission';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
 interface LineItem { description: string; jobId: string; quantity: number; unitPrice: number; }
@@ -182,13 +183,11 @@ function NewInvoicePage() {
             </div>
             <div>
               <label htmlFor="invoice-issue" className="block text-sm font-medium text-text-secondary mb-1">Issue Date<span className="text-danger ml-0.5" aria-hidden="true">*</span></label>
-              <input id="invoice-issue" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required
-                className="input w-full" />
+              <DateInput id="invoice-issue" value={issueDate} onChange={setIssueDate} required />
             </div>
             <div>
               <label htmlFor="invoice-due" className="block text-sm font-medium text-text-secondary mb-1">Due Date<span className="text-danger ml-0.5" aria-hidden="true">*</span></label>
-              <input id="invoice-due" type="date" min={issueDate} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required
-                className="input w-full" />
+              <DateInput id="invoice-due" min={issueDate} value={dueDate} onChange={setDueDate} required />
             </div>
             <div>
               <label htmlFor="invoice-tax" className="block text-sm font-medium text-text-secondary mb-1">Tax Rate (%)</label>

@@ -43,7 +43,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const savedDark = localStorage.getItem('darkMode');
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isPalette(savedPalette)) setPaletteState(savedPalette);
-    if (savedDark) setDarkModeState(savedDark === 'true');
+    if (savedDark) { setDarkModeState(savedDark === 'true'); return; }
+    // No choice made on this browser yet (e.g. the login page on a new device):
+    // follow the system setting, live.
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    setDarkModeState(media.matches);
+    const follow = (e: MediaQueryListEvent) => { if (!localStorage.getItem('darkMode')) setDarkModeState(e.matches); };
+    media.addEventListener('change', follow);
+    return () => media.removeEventListener('change', follow);
   }, []);
 
   // On login, adopt the user's saved preferences (cross-device), once per login.
@@ -67,14 +74,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('palette', palette);
   }, [palette]);
 
+  const signedIn = Boolean(user);
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
-    localStorage.setItem('darkMode', String(darkMode));
-  }, [darkMode]);
+    // Remembered once it is a choice (the account's or the user's) — not while following the system.
+    if (signedIn) localStorage.setItem('darkMode', String(darkMode));
+  }, [darkMode, signedIn]);
 
   const setPalette = (p: Palette) => { setPaletteState(p); persist({ colorPalette: p }); };
-  const setDarkMode = (d: boolean) => { setDarkModeState(d); persist({ darkMode: d }); };
-  const toggleDarkMode = () => setDarkModeState((prev) => { persist({ darkMode: !prev }); return !prev; });
+  const setDarkMode = (d: boolean) => { setDarkModeState(d); localStorage.setItem('darkMode', String(d)); persist({ darkMode: d }); };
+  const toggleDarkMode = () => setDarkMode(!darkMode);
 
   return (
     <ThemeContext.Provider value={{ palette, darkMode, setPalette, setDarkMode, toggleDarkMode }}>

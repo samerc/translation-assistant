@@ -33,6 +33,7 @@ import { bindRequestTenant } from '../../common/tenancy/tenant-context.js';
 import {
   ROLE_ADMIN,
   ROLE_PLATFORM_ADMIN,
+  ROLE_TRANSLATOR,
   TENANT_ROLES,
 } from '../../common/tenancy/roles.js';
 
@@ -1081,6 +1082,10 @@ export class AuthService {
             id: user.tenant.id,
             name: user.tenant.name,
             dateFormat: settings?.dateFormat || 'DD/MM/YYYY',
+            // Translators of an organization that hides prices see none (the API strips them too).
+            pricesHidden:
+              user.role?.name === ROLE_TRANSLATOR &&
+              settings?.translatorsSeePrices === false,
           }
         : null,
       isPlatformAdmin:

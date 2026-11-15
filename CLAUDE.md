@@ -13,12 +13,12 @@ Each **organization (tenant)** has its own users, clients, jobs, documents, temp
 - **Safety net**: `TenantIsolationSubscriber` (TypeORM `afterLoad`) throws 404 + logs `[TENANT_ISOLATION_VIOLATION]` if an entity with another tenant's `tenantId` is loaded during a tenant request. The request tenant lives in AsyncLocalStorage (`tenant-context.ts`): opened by `TenantContextMiddleware` (Nest module middleware, after body parsers), bound by `JwtStrategy` / `actorForFileToken`. Not covered: raw/aggregate queries and partial selects without tenantId — scope those explicitly. Cron jobs and platform/public requests have no tenant bound.
 - **Platform admin**: role `Platform Admin`, `tenantId` NULL, permissions `platform:*` + notifications read/update only — so every tenant endpoint 403s for it (`PermissionsGuard`; `actorOf` also refuses). `/api/platform/*` is guarded by `PlatformAdminGuard` (role name + no tenant). It sees organizations' user accounts (names/emails/roles) to help with lockouts, never business data.
 - **Fixed roles**: Admin / Translator / Viewer (shared rows; the user's tenant comes from `users.tenant_id`) + Platform Admin. Permissions are enforced by the seed on **every boot** (`ROLE_DEFINITIONS` in `config/seed.ts`) — change permissions there, no migration. `/api/roles` is read-only and lists only the 3 tenant roles; tenant admins can't assign Platform Admin (users, invites).
-- **Per tenant**: `TenantSettings` (the organization's one business identity on invoices — name, address, logo, tax number, payment details, default invoice notes — plus currency, date format, invoice prefix, upload limits, Google Translate key — each tenant pays its own, no platform fallback); job/invoice numbering (`UQ_jobs_tenant_number`, `UQ_invoices_tenant_number`; each starts at JOB-0001/INV-0001, serialized by `lockTenantSettings()` on the tenant's settings row); uploads in `uploads/<tenantId>/{jobs,passports,templates}` (`tenantDiskStorage()`); upload limits read via the request tenant in `FileValidationPipe`.
+- **Per tenant**: `TenantSettings` (the organization's one business identity on invoices — name, address, logo, tax number, payment details, default invoice notes — plus currency, date format, invoice prefix, upload limits, whether Translators see prices, Google Translate key — each tenant pays its own, no platform fallback); job/invoice numbering (`UQ_jobs_tenant_number`, `UQ_invoices_tenant_number`; each starts at JOB-0001/INV-0001, serialized by `lockTenantSettings()` on the tenant's settings row); uploads in `uploads/<tenantId>/{jobs,passports,templates}` (`tenantDiskStorage()`); upload limits read via the request tenant in `FileValidationPipe`.
 - **Status**: pending (sign-up awaiting approval) / suspended → login refused with a clear message, `JwtStrategy` rejects existing access tokens, refresh refused; suspending revokes all its sessions.
 - **Sign-up** (`/signup`, public): `POST /auth/signup` creates a pending tenant + its Admin (email unverified) and emails a 24 h link (`EmailVerificationToken`); same answer for an already-registered email (that address gets an "you already have an account" mail). `POST /auth/verify-email` → platform admins get an in-app `tenant_signup` notification + email; approval → the admin is emailed. Turnstile bot check when `TURNSTILE_SECRET_KEY`/`TURNSTILE_SITE_KEY` are set (site key served by `GET /auth/signup-status`); throttled 5/h per IP; honeypot. Platform settings `signupsEnabled` switch. Unconfirmed sign-ups are deleted after 7 days (`SignupCleanupScheduler`, 03:30). Non-production returns the verification token (like password reset).
 - **Deletion** (`platform/tenant-deletion.service.ts`): the organization's Admin only *requests* it (`POST /organization/deletion-request`: typed org name + password + optional reason; withdraw with `DELETE`) → platform admins get a `tenant_deletion_request` notification + email. The platform admin approves (`POST /platform/tenants/:id/delete`, also without a request) or declines (`/decline-deletion`, emails the requester). Approve: **empty** (no clients/jobs/documents/invoices/templates — users don't count) → purged at once; otherwise status **`closing`** (login refused, sessions revoked, admins emailed) with `deleteAfter` = now + `AppSettings.deletionGraceDays` (default 30, 1–365, Settings → Email & Sign-ups); `/restore` → active, `/purge` → now. `TenantPurgeScheduler` (03:45) purges due ones. Purge deletes rows in FK-safe order (invoices → documents → jobs → templates → clients → tenant lists → invites → users + their tokens/sessions/notifications → settings → tenant), then `uploads/<tenantId>`. The platform admin sees only `dataCounts`, never records. Pending sign-ups are rejected, not deleted. **Billing (later)**: a request doesn't stop billing; approval (→ closing) cancels/doesn't renew; restore resumes.
 - **Invites carry an optional first/last name** (`InviteToken.firstName/lastName`; all three invite forms). `POST /auth/invite-details {token}` (public, 20/min) returns email, names, organization and role for a usable invite; `/register` shows the organization, locks the email (server still enforces the match) and pre-fills the editable names.
-- **Tests**: `node scripts/test-tenancy.mjs` (live, ~270 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill + pending invites list/resend/cancel, organization logo/identity/date format, deletion request/decline/approve/restore/purge) — runs in CI against MariaDB (`tenancy` job).
+- **Tests**: `node scripts/test-tenancy.mjs` (live, ~300 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill + pending invites list/resend/cancel, organization logo/identity/date format, deletion request/decline/approve/restore/purge, job assignment + `myAccess`, translator price hiding) — runs in CI against MariaDB (`tenancy` job).
 
 ## Tech Stack
 - **Runtime:** Node ≥ 22.12 (backend `engines`). NestJS 12 packages are ESM-only; the backend compiles to CommonJS and loads them via native `require(esm)`. Jest needs `--experimental-vm-modules` for the same, so `npm test`/`test:e2e` invoke jest through `node` with that flag.
@@ -29,6 +29,7 @@ Each **organization (tenant)** has its own users, clients, jobs, documents, temp
 - **Auth:** JWT + refresh tokens, RBAC
 - **File uploads:** Local disk, validated by magic bytes (no image compression)
 - **Word export:** `docx` npm library
+- **Email:** nodemailer via `MailService` (`mail/mail.service.ts`): every message uses one inline-styled layout (`emailLayout`; `heading`/`para`/`button` helpers — buttons also spell out the link) plus a generated plain-text part (`toPlainText`). User text always through `escapeHtml`. Invoice emails come from the organization's name, Reply-To the sender, with amount due, due date and payment details; deletion scheduled/declined mails are Reply-To the platform admin who acted
 - **PDF export:** `pdfkit` library (invoice export). Text goes through `PdfText` (`invoices/pdf-text.ts`): embedded Noto Sans + Noto Sans Arabic (npm `@expo-google-fonts/*`, OFL), own line wrapping, and Unicode bidi via `bidi-js` — each line is drawn as direction runs on one alphabetic baseline (fontkit shapes Arabic but does no bidi, and pdfkit wrapping drops spaces between Arabic words). Never use `doc.text` / Helvetica directly for user data. Rows are measured, pages break with a repeated table header, totals stay together, page numbers when >1 page. Not covered: CJK, Hebrew, Thai, Devanagari; `→`-style symbols missing from Noto Sans
 - **Translation helper:** Google Cloud Translation API. Key set per organization by its admin in Settings > General (`TenantSettings.googleTranslateApiKey`, never returned — only `googleTranslateKeySet`); no platform-wide fallback (each organization pays its own). No key → `POST /translate` is a 503 (never fake text); Google errors/timeouts are 502/504. `GET /translate/status` drives the document page's "not set up" banner
 - **Charts:** `recharts` (reporting page)
@@ -65,7 +66,7 @@ translation-assistant/
 - `docker compose down` — Stop all containers
 - `cd backend && npm test` — unit tests; `npm run test:e2e` — DB-free security e2e suite (both run in CI)
 - `bash scripts/test-integration.sh` — live integration suite (~172 checks; needs backend on :3005 + frontend on :3080 + a scratch DB; creates its own organization as the platform admin, then runs as that organization's admin)
-- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~270 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
+- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~300 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
 
 ## Dependencies
 - Dependabot (`.github/dependabot.yml`): weekly grouped minor/patch per app, majors as separate PRs. TypeScript 7 majors ignored (no JS API; ts-jest/typescript-eslint unsupported).
@@ -93,13 +94,14 @@ translation-assistant/
 - All IDs are UUIDs (not sequential integers) — prevents enumeration
 - JWT secret required via env var in production (crashes on startup if missing)
 - Password complexity enforced: uppercase, lowercase, number, special character required
-- Job access control: `JobAccessGuard` checks user assignment, admins bypass
+- Job access control: `JobAccessGuard` checks user assignment, admins bypass. `GET /jobs/:id` and `GET /documents/:id` carry `myAccess` (`edit` | `view`) so the UI offers only what the caller may do (view-only assignees: no Save, status, Edit, uploads)
+- **Translator price visibility** (`TenantSettings.translatorsSeePrices`, default on; Settings › General › Team): when off, `HidePricesInterceptor` (`common/tenancy/hide-prices.interceptor.ts`, on the jobs/templates/documents/search controllers + `GET /settings/freeform-job-types`) strips every money field (`PRICE_KEYS`) from a **Translator's** responses; their writes can't set prices either — new line items take the list price (`JobsService.applyListPrices`: template, else the freeform type with that name/description, else 0), `finalPrice`/payment fields and line-item price edits are dropped, sorting by price is ignored. Admins and Viewers always see prices. The profile carries `tenant.pricesHidden` for the UI
 - View-only users blocked from write operations on jobs, documents and invoices (`verifyJobAccess`/`verifyDocumentAccess`/`verifyInvoiceAccess` take a `'view' | 'edit'` level — pass `'edit'` on every write)
 - `User.password` and `User.refreshToken` are `select: false` — never returned by any query (JobUser.user is eager). Code that needs the hash selects it explicitly (`loadPasswordHash`, `changePassword`)
 - Emailing an invoice needs `invoices:update` + edit access, rate-limited to 10/hour (it sends branded mail to any address)
 - Settings responses never include `smtpPass` (platform settings → `smtpPassSet`) or `googleTranslateApiKey` / `tenantId` (tenant settings → `googleTranslateKeySet`, admins)
 - Download headers go through `contentDisposition()` (`common/utils/content-disposition.ts`): ASCII `filename` + RFC 5987 `filename*`, exposed via CORS `exposedHeaders`; document exports download as `JOB-0001 Template name.docx`
-- Non-admin job list filtered to only assigned jobs (innerJoin on job_users)
+- Non-admin job list filtered to only assigned jobs (innerJoin on job_users); admins filter with `?assignee=<userId>|me|none`
 - ALL document endpoints verify job access via `verifyDocumentAccess()`/`verifyJobAccess()`
 - ALL invoice endpoints verify access via `verifyInvoiceAccess()` (creator or linked job access)
 - Document clone validates access to both source and target jobs
@@ -183,7 +185,7 @@ translation-assistant/
 - Frontend: no setState directly in effects or `Date.now()` in render (React Compiler lint) — derive state, use `useNow()` + `formatTimeAgo()`, `uid()` for client ids, `useSyncExternalStore` for module stores (see `lib/toast.tsx`, `lib/confirm.tsx`). `api.*` resolves empty response bodies as `undefined`.
 - Frontend API calls: always `api.*` — including uploads (`api.upload(path, formData, 'POST')`) and file exports (`api.download(path, fallbackName)`); never raw `fetch` with the token, which skips refresh. `authedFetch` refreshes at most once at a time (shared promise + `navigator.locks` across tabs, because refresh tokens are one-time use) and never refreshes on `/auth/login|register|…` (there a 401 means bad credentials). `ApiError.message` is always a string (validation arrays joined).
 - Async click/submit handlers: `try/catch/finally` — busy flags reset in `finally`, errors shown (`toast.error` or the form's error area). Client fields use `<ClientPicker>` (`components/ui/ClientPicker.tsx`): a searchable combobox that queries `/clients?search=` as you type — never a `<select>` of a fetched list (the API caps pages at 100). `useClient(id)` (`lib/use-client.ts`) loads one client by id.
-- Dates and money: frontend `formatDate()` / `formatDateTime()` / `formatCurrency()` (`lib/format.ts`) — dates follow the organization's `dateFormat` (carried on the profile as `tenant.dateFormat`, set by the auth context), amounts use the currency symbol where one exists. Backend documents use `formatDateOnly()` / `formatMoney()` (`common/utils/display-format.ts`). Never `toLocaleDateString()` or `` `${currency} ${n.toFixed(2)}` ``. Currency inputs are `<CurrencySelect>` (`components/ui/CurrencySelect.tsx`)
+- Dates and money: frontend `formatDate()` / `formatDateTime()` / `formatCurrency()` (`lib/format.ts`) — dates follow the organization's `dateFormat` (carried on the profile as `tenant.dateFormat`, set by the auth context), amounts use the currency symbol where one exists. Backend documents use `formatDateOnly()` / `formatMoney()` (`common/utils/display-format.ts`). Never `toLocaleDateString()` or `` `${currency} ${n.toFixed(2)}` ``. Currency inputs are `<CurrencySelect>` (`components/ui/CurrencySelect.tsx`). Date inputs are `<DateInput>` (`components/ui/DateInput.tsx`: typed in the organization's format, calendar button, value stays `YYYY-MM-DD`) — never a native `type="date"` (it shows the browser's locale format)
 - All API routes prefixed with `/api/`
 - RBAC permissions follow `resource:action` format (e.g., `clients:create`)
 - Database migrations managed via ORM (synchronize in dev, migrations in prod)
@@ -196,7 +198,7 @@ translation-assistant/
 Eight palettes (user selects in Settings > Appearance; saved per user in `colorPalette`):
 Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, Slate & Amber `#334155`, Violet `#7C3AED`, Orchid `#A21CAF`, Copper `#C2410C`, Forest `#15803D`.
 - A palette only sets `--brand`, `--brand-hover`, `--brand-accent` (`globals.css` `[data-palette]`); all tints, dark-mode lifts and text-on-tint colours are derived. Adding one = a CSS line + `PALETTE_OPTIONS` (`lib/theme-context.tsx`) + the `@IsIn` list in `UpdateUserDto`.
-- Light + dark mode supported (separate toggle from palette). Text on a tinted background uses `text-primary-text` / tone classes, never `text-primary` (unreadable in dark mode).
+- Light + dark mode supported (separate toggle from palette). Until a choice is saved on the browser (e.g. login/sign-up on a new device) the theme follows the system `prefers-color-scheme`. `--color-text-muted` meets 4.5:1 on cards and the page background in both modes — keep it that way. Text on a tinted background uses `text-primary-text` / tone classes, never `text-primary` (unreadable in dark mode).
 
 ## UI Kit (`frontend/src/components/ui/`)
 - Use these instead of hand-written class strings: `Button`/`buttonClass()` (primary/secondary/ghost/danger; Cancel = secondary), `Input`/`Select`/`Textarea`/`SearchInput`/`Field`, `Badge`, `PageHeader`, `EmptyState`, `Alert`, `SegmentedControl` (≤4 options), `TableCard`/`SortableTh`/`RowChevron`/`Pagination` (`DataTable.tsx`), `ClientPicker`, outline icons in `icons.tsx`.
@@ -209,7 +211,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 
 ### Auth & Users
 - **Tenant** — name, status (pending/active/suspended/closing), source (platform/signup), plan (reserved), approvedAt, deletionRequestedAt/ByUserId/Reason, deleteAfter
-- **TenantSettings** — tenantId (1:1), companyName, companyAddress, companyLogo (inline PNG/JPEG data URL, ≤1 MB, `PATCH/DELETE /settings/logo`), companyTaxId, bankDetails (printed as "Payment details" on invoices), invoiceFooter (pre-fills new invoices' notes), dateFormat (`DD/MM/YYYY` default | `MM/DD/YYYY` | `YYYY-MM-DD`), baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. The single business identity of the organization: invoice PDF/Word exports and invoice emails use these (there is no per-user "My Business" any more)
+- **TenantSettings** — tenantId (1:1), companyName, companyAddress, companyLogo (inline PNG/JPEG data URL, ≤1 MB, `PATCH/DELETE /settings/logo`), companyTaxId, bankDetails (printed as "Payment details" on invoices), invoiceFooter (pre-fills new invoices' notes), dateFormat (`DD/MM/YYYY` default | `MM/DD/YYYY` | `YYYY-MM-DD`), translatorsSeePrices (default true), baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. The single business identity of the organization: invoice PDF/Word exports and invoice emails use these (there is no per-user "My Business" any more)
 - **User** — email (unique platform-wide), password (bcrypt), firstName, lastName, avatar, isActive, emailVerified, colorPalette, darkMode, mustChangePassword, roleId, tenantId (NULL = platform admin), refreshToken
 - **EmailVerificationToken** — token, userId, expiresAt, used (self sign-up, 24 h)
 - **Role** — name, description. M2M with Permission via `role_permissions`
@@ -296,7 +298,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET/POST/DELETE /deletion-request` — status / request (confirmName, password, reason?) / withdraw
 
 ### Users (`/api/users`)
-- Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`, `POST /:id/reset-password` (admin: one-time temporary password)
+- Full CRUD + `PATCH /:id/activate`, `PATCH /:id/deactivate`, `POST /:id/reset-password` (admin: one-time temporary password). `GET /` (admin) includes each user's `openJobCount` (quote/accepted/in progress jobs they're assigned to)
 - `GET /profile/me` + `PATCH /profile/me` — Read / self-update own profile, no `users:*` permission needed (no role/active change)
 - `POST /change-password`
 
@@ -337,7 +339,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - Create/update take `languageIds` (document languages); create takes `isActive` (wizard: false = draft)
 
 ### Jobs (`/api/jobs`)
-- Full CRUD with search, status filter (one status or comma-separated), `hasDeadline=true`, client filter, sort, pagination
+- Full CRUD with search, status filter (one status or comma-separated), `hasDeadline=true`, client filter, `assignee=<userId>|me|none` (admins), sort, pagination; list rows carry `assignees` (names). `POST /` takes `assignToUserId` (admins; an active user of the organization — default: the creator, so an admin can be the translator); assigning refuses deactivated users
 - `PATCH /:id/status` — Update job status
 - `POST /:id/reopen` — Reopen a locked job
 - `POST/DELETE /:id/users/:userId` — Assign/remove users
@@ -398,13 +400,13 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/platform/tenants/:id` — Organization detail: rename, approve/reject/suspend/reactivate, accounts (reset password, (de)activate), invite another admin
 - `/forgot-password` — Request a reset link (public). In dev shows the generated reset link directly (no email service).
 - `/reset-password?token=` — Verify token and set a new password (public)
-- `/` — Dashboard: summary cards (reports:read), Upcoming deadlines (open jobs, overdue in red), admin Getting started checklist. The platform admin is redirected to `/platform`
+- `/` — Dashboard: summary cards (reports:read), Upcoming deadlines (open jobs, overdue in red; admins toggle Everyone / Mine), admin Getting started checklist. The platform admin is redirected to `/platform`
 - `/clients` — Client list with search, type filter, sort, pagination
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)
 - `/templates` — Template list (table + card view toggle, search, status filter, sort)
 - `/templates/new`, `/templates/:id/setup` — Setup wizard (see Templates entity)
 - `/templates/:id` — Template detail (status line + Setup wizard button, Fields tab with inline table editor limited to the document languages, Layout Designer tab, Word Template tab, Settings tab with document languages)
-- `/jobs` — Jobs list with search, status filter, sort, pagination
+- `/jobs` — Jobs list with search, status filter, Assigned column, admin "Assigned to" filter (`?assignee=`: everyone / mine / unassigned / a colleague), sort, pagination
 - `/jobs/new` — Create job form (type, client, languages, line items with template selection, pricing, deadline)
 - `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files, linked invoice display, "Create Invoice" button on delivered jobs)
 - `/documents/:id` — Document fill page (template fields, GT popup, save/complete/export)
@@ -414,7 +416,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
 - `/notifications` — Full notifications list with read/unread filter
 - `/reports` — Reports page (Revenue: range presets — last 6/12 months, this/last year — with total + best month, monthly/weekly; Revenue line chart, By Client bar chart, Job Status donut chart via recharts — charts live in `reports/charts.tsx`, loaded with `next/dynamic` so recharts stays off other pages)
-- `/settings` — Settings (`?tab=general|users|…` opens a tab). Organization admin: General (identity + logo, currency, invoice prefix, date format, Google Translate, delete organization), File Uploads, Appearance, Security, Freeform Types, Users (invite + pending invites: copy link / resend / cancel), Roles (read-only). Platform admin: Email & Sign-ups, Languages, Labels (global), Appearance, Security
+- `/settings` — Settings (`?tab=general|users|…` opens a tab). Organization admin: General (identity + logo, currency, invoice prefix, date format, Team: translators see prices, Google Translate, delete organization), File Uploads, Appearance, Security, Freeform Types, Users (open jobs per person → their job list; invite + pending invites: copy link / resend / cancel), Roles (read-only). Platform admin: Email & Sign-ups, Languages, Labels (global), Appearance, Security
 
 ## File Upload Validation
 - `FileValidationPipe` checks every upload against:

@@ -11,6 +11,7 @@ import { humanize } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { TranslateKeyForm } from '@/components/TranslateKeyForm';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface Language { id: string; code: string; name: string; direction: string; }
 interface FieldLabel { id: string; languageId: string; label: string; language: Language; }
@@ -20,6 +21,8 @@ interface Doc {
   id: string; jobId: string; templateId: string; status: string; clonedFromId: string | null;
   template: { id: string; name: string; type: string; fields: TemplateField[] };
   fieldValues: FieldValue[];
+  /** 'view' = a view-only assignment: read and export only. */
+  myAccess?: 'edit' | 'view';
 }
 interface Job { id: string; title: string; jobNumber: string; status: string; sourceLanguage: Language; targetLanguage: Language | null; }
 
@@ -97,7 +100,10 @@ export default function DocumentFillPage() {
     return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
   }
 
-  const locked = LOCKED_JOB_STATUSES.includes(job.status);
+  const jobLocked = LOCKED_JOB_STATUSES.includes(job.status);
+  const viewOnly = doc.myAccess === 'view';
+  // Either way the values can't be changed, only read and exported.
+  const locked = jobLocked || viewOnly;
   const targetLang = job.targetLanguage;
   const sourceLang = job.sourceLanguage;
   const fields = [...doc.template.fields].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -234,13 +240,11 @@ export default function DocumentFillPage() {
             className="input w-full resize-none"
           />
         ) : field.fieldType === 'date' ? (
-          <input
-            type="date"
+          <DateInput
             id={inputId}
             value={val}
             disabled={locked}
-            onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
-            className="input w-full"
+            onChange={(v) => setValue(field.id, pageNum, v, entryIdx)}
           />
         ) : field.fieldType === 'number' ? (
           <input
@@ -303,9 +307,14 @@ export default function DocumentFillPage() {
         </div>
       </div>
 
-      {locked && (
+      {jobLocked && (
         <Alert tone="warning" className="mb-4 max-w-2xl">
           This job is {job.status}, so its documents are read-only. Reopen the job to make changes.
+        </Alert>
+      )}
+      {viewOnly && !jobLocked && (
+        <Alert tone="info" className="mb-4 max-w-2xl">
+          You have view-only access to this job: you can read and export this document, not change it.
         </Alert>
       )}
       {!locked && gtConfigured === false && (

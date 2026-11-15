@@ -122,11 +122,12 @@ export default function TemplateDetailPage() {
           // Labels are asked in the document's languages (all languages until those are set).
           languages={template.languages?.length ? languages.filter((l) => template.languages.some((d) => d.id === l.id)) : languages}
           onUpdate={loadTemplate}
+          readOnly={!canEdit}
         />
       )}
-      {activeTab === 'designer' && template.type === 'designer' && <DesignerTab template={template} onUpdate={loadTemplate} />}
-      {activeTab === 'word' && template.type === 'word' && <WordTemplateTab template={template} onUpdate={loadTemplate} />}
-      {activeTab === 'settings' && <SettingsTab template={template} languages={languages} onUpdate={loadTemplate} />}
+      {activeTab === 'designer' && template.type === 'designer' && <DesignerTab template={template} onUpdate={loadTemplate} readOnly={!canEdit} />}
+      {activeTab === 'word' && template.type === 'word' && <WordTemplateTab template={template} onUpdate={loadTemplate} readOnly={!canEdit} />}
+      {activeTab === 'settings' && <SettingsTab template={template} languages={languages} onUpdate={loadTemplate} readOnly={!canEdit} />}
       </fieldset>
     </div>
   );
@@ -134,7 +135,7 @@ export default function TemplateDetailPage() {
 
 // ── Fields Tab ──
 
-function FieldsTab({ template, languages, onUpdate }: { template: Template; languages: Language[]; onUpdate: () => void }) {
+function FieldsTab({ template, languages, onUpdate, readOnly }: { template: Template; languages: Language[]; onUpdate: () => void; readOnly: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkGroup, setBulkGroup] = useState('');
   const [showBulkGroup, setShowBulkGroup] = useState(false);
@@ -317,9 +318,11 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
             </>
           )}
         </div>
-        <button onClick={startNewRow} className="btn btn-primary">
-          + Add Field
-        </button>
+        {!readOnly && (
+          <button onClick={startNewRow} className="btn btn-primary">
+            + Add Field
+          </button>
+        )}
       </div>
 
       {/* Bulk group assignment */}
@@ -350,10 +353,12 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
         <table className="data-table">
           <thead>
             <tr>
-              <th className="px-3 w-10">
-                <input type="checkbox" checked={sorted.length > 0 && selected.size === sorted.length} onChange={toggleAll}
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
-              </th>
+              {!readOnly && (
+                <th className="px-3 w-10">
+                  <input type="checkbox" checked={sorted.length > 0 && selected.size === sorted.length} onChange={toggleAll}
+                    aria-label="Select all fields" className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
+                </th>
+              )}
               <th className="px-3 text-left">Field Key</th>
               <th className="px-3 text-left w-24">Type</th>
               <th className="px-3 text-center w-16">Req.</th>
@@ -363,12 +368,12 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                   {l.name} <span className="text-text-muted uppercase">({l.code})</span>
                 </th>
               ))}
-              <th className="px-3 text-right w-24">Actions</th>
+              {!readOnly && <th className="px-3 text-right w-24">Actions</th>}
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && !newRow && (
-              <tr><td colSpan={5 + languages.length + 1} className="px-4 py-12 text-center text-text-muted">No fields yet. Click &quot;+ Add Field&quot; to start.</td></tr>
+              <tr><td colSpan={(readOnly ? 4 : 6) + languages.length} className="px-4 py-12 text-center text-text-muted">{readOnly ? 'No fields yet.' : <>No fields yet. Click &quot;+ Add Field&quot; to start.</>}</td></tr>
             )}
 
             {sorted.map((field) => {
@@ -377,10 +382,12 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
 
               return (
                 <tr key={field.id} className={`border-b border-border last:border-0 ${isEditing ? 'bg-primary-light/30' : 'hover:bg-bg/50'}`}>
-                  <td className={cellClass}>
-                    <input type="checkbox" checked={selected.has(field.id)} onChange={() => toggleSelect(field.id)}
-                      className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
-                  </td>
+                  {!readOnly && (
+                    <td className={cellClass}>
+                      <input type="checkbox" checked={selected.has(field.id)} onChange={() => toggleSelect(field.id)}
+                        aria-label={`Select ${field.fieldKey}`} className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
+                    </td>
+                  )}
                   <td className={cellClass}>
                     {isEditing ? (
                       <input value={data!.fieldKey} onChange={(e) => setEditForm({ ...editForm, fieldKey: toKey(e.target.value) })} className={inputClass} />
@@ -432,7 +439,7 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                       </td>
                     );
                   })}
-                  <td className={`${cellClass} text-right`}>
+                  {!readOnly && <td className={`${cellClass} text-right`}>
                     {isEditing ? (
                       <div className="flex gap-1 justify-end">
                         <button onClick={saveEdit} disabled={saving} className="text-xs text-success hover:text-success/80 font-medium">Save</button>
@@ -444,13 +451,13 @@ function FieldsTab({ template, languages, onUpdate }: { template: Template; lang
                         <button onClick={() => handleDelete(field.id)} className="text-xs text-danger hover:text-danger/80 font-medium">Del</button>
                       </div>
                     )}
-                  </td>
+                  </td>}
                 </tr>
               );
             })}
 
             {/* New row */}
-            {newRow && (
+            {newRow && !readOnly && (
               <tr className="bg-success-light/30 border-b border-border">
                 <td className={cellClass}></td>
                 <td className={cellClass}>
@@ -534,7 +541,7 @@ interface LayoutBlock {
   valueAlignment?: 'left' | 'center' | 'right';
 }
 
-function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
+function DesignerTab({ template, onUpdate, readOnly }: { template: Template; onUpdate: () => void; readOnly: boolean }) {
   const [blocks, setBlocks] = useState<LayoutBlock[]>((template.layoutJson as LayoutBlock[]) || []);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -599,9 +606,9 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
       {/* Main area */}
-      <div className="lg:col-span-3">
+      <div className={readOnly ? 'lg:col-span-4' : 'lg:col-span-3'}>
         {/* Toolbar */}
-        <div className="flex gap-2 mb-4 flex-wrap">
+        <div className={`flex gap-2 mb-4 flex-wrap ${readOnly ? 'hidden' : ''}`}>
           {([['header', 'Header'], ['text', 'Text'], ['field', 'Field'], ['field-row', 'Field Row'], ['divider', 'Divider'], ['footer', 'Footer'], ['date', 'Date']] as const).map(([type, label]) => (
             <button key={type} onClick={() => addBlock(type)}
               className="px-3 py-1.5 tone tone-primary rounded-lg text-xs font-medium hover:bg-primary/20">
@@ -618,13 +625,13 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
           {blocks.map((block, idx) => (
             <div
               key={block.id}
-              onClick={() => setSelectedIdx(idx)}
-              className={`relative group mb-2 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
-                selectedIdx === idx ? 'border-primary bg-primary-light/30' : 'border-dashed border-border hover:border-primary/40'
+              onClick={readOnly ? undefined : () => setSelectedIdx(idx)}
+              className={`relative group mb-2 p-3 rounded-lg border-2 transition-colors ${
+                readOnly ? 'border-transparent' : selectedIdx === idx ? 'cursor-pointer border-primary bg-primary-light/30' : 'cursor-pointer border-dashed border-border hover:border-primary/40'
               }`}
             >
               {/* Move/delete controls */}
-              <div className="absolute -left-8 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className={`absolute -left-8 top-1/2 -translate-y-1/2 flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ${readOnly ? 'hidden' : 'flex'}`}>
                 <button onClick={(e) => { e.stopPropagation(); moveBlock(idx, 'up'); }} className="text-text-muted hover:text-primary text-xs">▲</button>
                 <button onClick={(e) => { e.stopPropagation(); moveBlock(idx, 'down'); }} className="text-text-muted hover:text-primary text-xs">▼</button>
               </div>
@@ -708,16 +715,18 @@ function DesignerTab({ template, onUpdate }: { template: Template; onUpdate: () 
           ))}
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-            {saving ? 'Saving...' : 'Save Layout'}
-          </button>
-          {message && <span className="text-sm text-success">{message}</span>}
-        </div>
+        {!readOnly && (
+          <div className="mt-4 flex items-center gap-3">
+            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+              {saving ? 'Saving...' : 'Save Layout'}
+            </button>
+            {message && <span className="text-sm text-success">{message}</span>}
+          </div>
+        )}
       </div>
 
       {/* Properties panel */}
-      <div className="lg:col-span-1">
+      <div className={readOnly ? 'hidden' : 'lg:col-span-1'}>
         <div className="card p-5 sticky top-20">
           <h3 className="font-semibold text-text mb-4">Properties</h3>
           {!selected ? (
@@ -926,7 +935,7 @@ interface WordPreview {
   malformed: { text: string; reason: string }[];
 }
 
-function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate: () => void }) {
+function WordTemplateTab({ template, onUpdate, readOnly }: { template: Template; onUpdate: () => void; readOnly: boolean }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<WordPreview | null>(null);
   const [previewFor, setPreviewFor] = useState<string | null>(null); // previewKey the preview was loaded for
@@ -994,8 +1003,13 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
 
   return (
     <div>
+      {readOnly && (
+        <p className="text-sm text-text-secondary mb-4">
+          {template.wordFileName ? <>Word file: <span className="font-medium text-text">{template.wordFileName}</span></> : 'No Word file uploaded yet.'}
+        </p>
+      )}
       {/* Upload */}
-      <form onSubmit={handleUpload} className="card p-5 mb-6">
+      {!readOnly && <form onSubmit={handleUpload} className="card p-5 mb-6">
         <h3 className="font-semibold text-text mb-3">
           {template.wordFileName ? 'Replace Word File' : 'Upload Word Template'}
         </h3>
@@ -1020,7 +1034,7 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
           For a repeatable group, wrap its fields in <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{#group_key}'}</code> … <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{/group_key}'}</code> — the
           enclosed paragraphs or table row repeat once per entry.
         </p>
-      </form>
+      </form>}
 
       {/* Loading */}
       {loadingPreview && (
@@ -1090,10 +1104,12 @@ function WordTemplateTab({ template, onUpdate }: { template: Template; onUpdate:
                         </div>
                       ))}
                     </div>
-                    <button onClick={handleSyncPlaceholders} disabled={syncing}
-                      className="btn btn-primary btn-sm w-full">
-                      Create Fields for All ({preview.unlinked.length})
-                    </button>
+                    {!readOnly && (
+                      <button onClick={handleSyncPlaceholders} disabled={syncing}
+                        className="btn btn-primary btn-sm w-full">
+                        Create Fields for All ({preview.unlinked.length})
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1147,7 +1163,7 @@ function TemplateStatus({ template }: { template: Template }) {
   );
 }
 
-function SettingsTab({ template, languages, onUpdate }: { template: Template; languages: Language[]; onUpdate: () => void }) {
+function SettingsTab({ template, languages, onUpdate, readOnly }: { template: Template; languages: Language[]; onUpdate: () => void; readOnly: boolean }) {
   const [form, setForm] = useState({
     name: template.name,
     description: template.description || '',
@@ -1195,7 +1211,8 @@ function SettingsTab({ template, languages, onUpdate }: { template: Template; la
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3}
             className="input w-full resize-none" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        {/* Prices are left out of the response when the organization hides them from this user. */}
+        {template.pricePerPage != null && <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-text mb-1.5">Price per Page</label>
             <input type="number" step="0.01" min="0" value={form.pricePerPage} onChange={(e) => setForm({ ...form, pricePerPage: e.target.value })}
@@ -1207,7 +1224,7 @@ function SettingsTab({ template, languages, onUpdate }: { template: Template; la
               placeholder="Optional"
               className="input w-full" />
           </div>
-        </div>
+        </div>}
         {template.type !== 'simple' && (
           <div>
             <span className="block text-sm font-medium text-text mb-1.5">Document languages</span>
@@ -1229,12 +1246,14 @@ function SettingsTab({ template, languages, onUpdate }: { template: Template; la
           Template is active
         </label>
       </div>
-      <div className="mt-4 flex items-center gap-3">
-        <button type="submit" disabled={saving} className="btn btn-primary">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-        {message && <span className="text-sm text-success">{message}</span>}
-      </div>
+      {!readOnly && (
+        <div className="mt-4 flex items-center gap-3">
+          <button type="submit" disabled={saving} className="btn btn-primary">
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+          {message && <span className="text-sm text-success">{message}</span>}
+        </div>
+      )}
     </form>
   );
 }

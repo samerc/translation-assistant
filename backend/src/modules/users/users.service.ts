@@ -74,7 +74,22 @@ export class UsersService {
       },
       order: { firstName: 'ASC', lastName: 'ASC' },
     });
-    return users.map((u) => this.sanitize(u));
+    // Open jobs (quote / accepted / in progress) each person is assigned to.
+    const counts = await this.userRepository.manager
+      .createQueryBuilder()
+      .select('ju.user_id', 'userId')
+      .addSelect('COUNT(*)', 'n')
+      .from('job_users', 'ju')
+      .innerJoin('jobs', 'j', 'j.id = ju.job_id')
+      .where('j.tenant_id = :tenantId', { tenantId })
+      .andWhere("j.status IN ('quote', 'accepted', 'in_progress')")
+      .groupBy('ju.user_id')
+      .getRawMany<{ userId: string; n: string | number }>();
+    const open = new Map(counts.map((c) => [c.userId, Number(c.n)]));
+    return users.map((u) => ({
+      ...this.sanitize(u),
+      openJobCount: open.get(u.id) ?? 0,
+    }));
   }
 
   /** One user of the caller's tenant (admin view). */

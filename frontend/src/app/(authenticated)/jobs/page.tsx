@@ -33,7 +33,10 @@ interface Job {
   finalPrice: number | null;
   isFreeOfCharge: boolean;
   createdAt: string;
+  assignees?: { id: string; firstName: string; lastName: string; permissionLevel: string }[];
 }
+
+interface Colleague { id: string; firstName: string; lastName: string; isActive: boolean }
 
 interface JobsResponse { data: Job[]; total: number; page: number; limit: number; totalPages: number; }
 
@@ -50,7 +53,9 @@ const STATUSES = [
 
 export default function JobsPage() {
   const { baseCurrency } = useSettings();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isAdmin = user?.role?.name === 'Admin';
+  const pricesHidden = !!user?.tenant?.pricesHidden;
   const [jobs, setJobs] = useState<Job[]>([]);
   const today = todayLocal(useNow());
   const [total, setTotal] = useState(0);
@@ -64,6 +69,18 @@ export default function JobsPage() {
   const [loadError, setLoadError] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Admins: whose jobs (?assignee= a user id, "me" or "none" — linked from Settings › Users).
+  const assignee = isAdmin ? searchParams.get('assignee') ?? '' : '';
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  useEffect(() => {
+    if (isAdmin) api.get<Colleague[]>('/users').then(setColleagues).catch(() => setColleagues([]));
+  }, [isAdmin]);
+  const setAssignee = (value: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value) next.set('assignee', value); else next.delete('assignee');
+    setPage(1);
+    router.replace(`/jobs${next.size ? `?${next}` : ''}`);
+  };
 
   // Returns a cancel fn: the effect uses it so only the latest request's response is applied.
   const loadJobs = () => {
@@ -73,6 +90,7 @@ export default function JobsPage() {
     if (statusFilter) params.set('status', statusFilter);
     const clientId = searchParams.get('clientId');
     if (clientId) params.set('clientId', clientId);
+    if (assignee) params.set('assignee', assignee);
     params.set('sortBy', sortBy);
     params.set('sortOrder', sortOrder);
     params.set('page', String(page));
@@ -106,7 +124,7 @@ export default function JobsPage() {
     return formatCurrency(price, baseCurrency);
   };
 
-  const filtered = Boolean(search || statusFilter || searchParams.get('clientId'));
+  const filtered = Boolean(search || statusFilter || searchParams.get('clientId') || assignee);
 
   return (
     <div>
@@ -128,6 +146,16 @@ export default function JobsPage() {
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </Select>
+        {isAdmin && (
+          <Select aria-label="Assigned to" className="!w-auto" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
+            <option value="">Everyone&apos;s jobs</option>
+            <option value="me">My jobs</option>
+            <option value="none">Unassigned</option>
+            {colleagues.filter((c) => c.id !== user?.id && (c.isActive || c.id === assignee)).map((c) => (
+              <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+            ))}
+          </Select>
+        )}
         {searchParams.get('clientId') && (
           <Button size="sm" variant="ghost" icon={<XIcon />} onClick={() => router.push('/jobs')}>Clear client filter</Button>
         )}
@@ -142,9 +170,10 @@ export default function JobsPage() {
             <SortableTh field="title" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Job</SortableTh>
             <th className="hidden sm:table-cell">Client</th>
             <th className="hidden md:table-cell">Languages</th>
+            <th className="hidden xl:table-cell">Assigned</th>
             <SortableTh field="status" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Status</SortableTh>
             <th className="text-right hidden lg:table-cell">Items</th>
-            <SortableTh field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right hidden sm:table-cell">Total</SortableTh>
+            {!pricesHidden && <SortableTh field="calculatedTotal" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right hidden sm:table-cell">Total</SortableTh>}
             <SortableTh field="deadline" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="hidden sm:table-cell">Deadline</SortableTh>
             <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="hidden lg:table-cell">Created</SortableTh>
             <th aria-label="Open" />
@@ -153,7 +182,7 @@ export default function JobsPage() {
         <tbody>
           {jobs.length === 0 && !loadError && (
             <tr>
-              <td colSpan={9}>
+              <td colSpan={10}>
                 <EmptyState
                   icon={<BriefcaseIcon />}
                   title={filtered ? 'No jobs match your filters' : 'No jobs yet'}
@@ -181,6 +210,11 @@ export default function JobsPage() {
                 <td className="font-mono text-xs whitespace-nowrap hidden md:table-cell">
                   {job.sourceLanguage.code.toUpperCase()}{job.targetLanguage ? ` → ${job.targetLanguage.code.toUpperCase()}` : ''}
                 </td>
+                <td className="hidden xl:table-cell text-sm">
+                  {job.assignees?.length
+                    ? job.assignees.map((a) => (a.id === user?.id ? 'You' : `${a.firstName} ${a.lastName}`.trim())).join(', ')
+                    : <span className="text-text-muted">Unassigned</span>}
+                </td>
                 <td>
                   <Badge dot tone={badge.color}>{badge.label}</Badge>
                   {job.deadline && (
@@ -190,7 +224,7 @@ export default function JobsPage() {
                   )}
                 </td>
                 <td className="text-right tabular-nums hidden lg:table-cell">{job.lineItemCount || 0}</td>
-                <td className="text-right tabular-nums font-medium text-text whitespace-nowrap hidden sm:table-cell">{getPrice(job)}</td>
+                {!pricesHidden && <td className="text-right tabular-nums font-medium text-text whitespace-nowrap hidden sm:table-cell">{getPrice(job)}</td>}
                 <td className="tabular-nums whitespace-nowrap hidden sm:table-cell">
                   {isJobOverdue(job, today)
                     ? <span className="text-danger font-semibold" title="Past the deadline">{formatDate(job.deadline)} · Overdue</span>

@@ -16,6 +16,8 @@ export interface Actor {
   userId: string;
   tenantId: string;
   isAdmin: boolean;
+  /** The tenant role name (Admin / Translator / Viewer). */
+  role?: string;
 }
 
 export function actorOf(user: User): Actor {
@@ -29,6 +31,7 @@ export function actorOf(user: User): Actor {
     userId: user.id,
     tenantId: user.tenantId,
     isAdmin: user.role?.name === ROLE_ADMIN,
+    role: user.role?.name,
   };
 }
 

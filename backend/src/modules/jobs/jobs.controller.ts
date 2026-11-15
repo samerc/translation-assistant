@@ -14,6 +14,7 @@ import {
   Res,
   ForbiddenException,
 } from '@nestjs/common';
+import { HidePricesInterceptor } from '../../common/tenancy/hide-prices.interceptor.js';
 import type { Response } from 'express';
 import { createReadStream } from 'fs';
 import { pipeline } from 'stream';
@@ -41,17 +42,34 @@ import {
 import { contentDisposition } from '../../common/utils/content-disposition.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
+import { TenantsService } from '../tenants/tenants.service.js';
+
+/** Money fields a caller who can't see prices must not set either. */
+const JOB_PRICE_FIELDS = [
+  'finalPrice',
+  'paymentAmount',
+  'paymentCurrency',
+] as const;
+const LINE_PRICE_FIELDS = [
+  'pricePerPage',
+  'useDiscountedPrice',
+  'discountedPricePerPage',
+] as const;
 
 const jobFileStorage = tenantDiskStorage('jobs');
 
 @Controller('jobs')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard, JobAccessGuard)
+@UseInterceptors(HidePricesInterceptor)
 export class JobsController {
-  constructor(private readonly jobsService: JobsService) {}
+  constructor(
+    private readonly jobsService: JobsService,
+    private readonly tenantsService: TenantsService,
+  ) {}
 
   @Get()
   @RequirePermissions('jobs:read')
-  findAll(
+  async findAll(
     @CurrentActor() actor: Actor,
     @Query('search') search?: string,
     @Query('status') status?: string,
@@ -62,8 +80,16 @@ export class JobsController {
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('assignee') assignee?: string,
   ) {
+    // Sorting by a hidden price would still reveal it.
+    if (
+      sortBy === 'calculatedTotal' &&
+      (await this.tenantsService.hidesPrices(actor))
+    )
+      sortBy = undefined;
     return this.jobsService.findAll({
+      assignee: assignee || undefined,
       search,
       status,
       type,
@@ -79,19 +105,41 @@ export class JobsController {
 
   @Get(':id')
   @RequirePermissions('jobs:read')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.jobsService.findOne(id);
+  async findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    const job = await this.jobsService.findOne(id);
+    // What the caller may do with it (JobAccessGuard already let them read it).
+    const mine = job.assignedUsers?.find((a) => a.userId === actor.userId);
+    const myAccess: 'edit' | 'view' =
+      actor.isAdmin || mine?.permissionLevel === 'edit' ? 'edit' : 'view';
+    return { ...job, myAccess };
   }
 
   @Post()
   @RequirePermissions('jobs:create')
-  create(@Body() dto: CreateJobDto, @CurrentActor() actor: Actor) {
+  async create(@Body() dto: CreateJobDto, @CurrentActor() actor: Actor) {
+    if (await this.tenantsService.hidesPrices(actor)) {
+      delete dto.finalPrice;
+      await this.jobsService.applyListPrices(
+        actor.tenantId,
+        dto.lineItems ?? [],
+      );
+    }
     return this.jobsService.create(dto, actor);
   }
 
   @Patch(':id')
   @RequirePermissions('jobs:update')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateJobDto) {
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateJobDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    if (await this.tenantsService.hidesPrices(actor)) {
+      for (const f of JOB_PRICE_FIELDS) delete dto[f];
+    }
     return this.jobsService.update(id, dto);
   }
 
@@ -121,20 +169,28 @@ export class JobsController {
 
   @Post(':id/line-items')
   @RequirePermissions('jobs:update')
-  addLineItem(
+  async addLineItem(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateJobLineItemDto,
+    @CurrentActor() actor: Actor,
   ) {
+    if (await this.tenantsService.hidesPrices(actor)) {
+      await this.jobsService.applyListPrices(actor.tenantId, [dto]);
+    }
     return this.jobsService.addLineItem(id, dto);
   }
 
   @Patch(':id/line-items/:itemId')
   @RequirePermissions('jobs:update')
-  updateLineItem(
+  async updateLineItem(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('itemId', ParseUUIDPipe) itemId: string,
     @Body() dto: UpdateJobLineItemDto,
+    @CurrentActor() actor: Actor,
   ) {
+    if (await this.tenantsService.hidesPrices(actor)) {
+      for (const f of LINE_PRICE_FIELDS) delete dto[f];
+    }
     return this.jobsService.updateLineItem(id, itemId, dto);
   }
 

@@ -52,6 +52,10 @@ export class TenantSettings {
   @Column({ length: 10, default: 'DD/MM/YYYY' })
   dateFormat: string;
 
+  /** Whether Translators see prices (job totals, line-item and template prices). Admins and Viewers always do. */
+  @Column({ default: true })
+  translatorsSeePrices: boolean;
+
   @Column({ length: 10, default: 'USD' })
   baseCurrency: string;
 

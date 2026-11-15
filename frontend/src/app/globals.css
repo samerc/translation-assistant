@@ -36,7 +36,7 @@
   --color-border-strong: #D5D5E0;
   --color-text: #17171F;
   --color-text-secondary: #5B5B6E;
-  --color-text-muted: #8A8A9E;
+  --color-text-muted: #6B6B80; /* 5.2:1 on white, 4.8:1 on the page background (WCAG AA) */
 
   /* Text drawn on a tinted background: in light mode the hue is darkened a little,
      in dark mode lightened a lot, so it stays readable in both. */
@@ -65,7 +65,7 @@
   --color-border-strong: #33333F;
   --color-text: #EDEDF3;
   --color-text-secondary: #A3A3B5;
-  --color-text-muted: #75758A;
+  --color-text-muted: #8A8AA0; /* 5.3:1 on dark surfaces (WCAG AA) */
 
   --tone-ink: #fff;
   --tone-ink-amount: 50%;
