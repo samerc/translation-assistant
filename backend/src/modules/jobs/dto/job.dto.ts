@@ -116,6 +116,11 @@ export class CreateJobDto {
   @ValidateNested({ each: true })
   @Type(() => JobLineItemDto)
   lineItems?: JobLineItemDto[];
+
+  /** Admins: who works on the job (default: the creator). */
+  @IsOptional()
+  @IsUUID()
+  assignToUserId?: string;
 }
 
 export class UpdateJobDto {

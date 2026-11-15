@@ -18,6 +18,8 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { PlatformService } from './platform.service.js';
+import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
+import { User } from '../users/entities/user.entity.js';
 import { TenantDeletionService } from './tenant-deletion.service.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { UsersService } from '../users/users.service.js';
@@ -128,8 +130,12 @@ export class PlatformController {
   @Post('tenants/:id/delete')
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:delete')
-  approveDeletion(@Param('id', ParseUUIDPipe) id: string) {
-    return this.deletion.approve(id);
+  approveDeletion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ) {
+    // Replies to the "scheduled for deletion" email reach whoever approved it.
+    return this.deletion.approve(id, user.email);
   }
 
   @Post('tenants/:id/decline-deletion')
@@ -138,8 +144,9 @@ export class PlatformController {
   declineDeletion(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: DeclineDeletionDto,
+    @CurrentUser() user: User,
   ) {
-    return this.deletion.decline(id, dto.message);
+    return this.deletion.decline(id, dto.message, user.email);
   }
 
   @Post('tenants/:id/restore')

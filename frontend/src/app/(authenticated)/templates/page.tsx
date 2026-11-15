@@ -33,7 +33,8 @@ interface Template {
 type ViewMode = 'table' | 'cards';
 
 export default function TemplatesPage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const pricesHidden = !!user?.tenant?.pricesHidden;
   const { baseCurrency } = useSettings();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadError, setLoadError] = useState(false);
@@ -124,8 +125,8 @@ export default function TemplatesPage() {
               <SortableTh field="name" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Name</SortableTh>
               <th>Type</th>
               <th className="text-right">Fields</th>
-              <SortableTh field="pricePerPage" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right">Price / page</SortableTh>
-              <th className="text-right">Discounted</th>
+              {!pricesHidden && <SortableTh field="pricePerPage" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} className="text-right">Price / page</SortableTh>}
+              {!pricesHidden && <th className="text-right">Discounted</th>}
               <th>Status</th>
               <SortableTh field="createdAt" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort}>Created</SortableTh>
               <th aria-label="Open" />
@@ -141,10 +142,10 @@ export default function TemplatesPage() {
                 </td>
                 <td><TemplateTypeBadge type={t.type} /></td>
                 <td className="text-right tabular-nums">{t.type === 'simple' ? '—' : t.fields.length}</td>
-                <td className="text-right tabular-nums text-text font-medium whitespace-nowrap">{formatCurrency(t.pricePerPage, baseCurrency)}</td>
-                <td className="text-right tabular-nums whitespace-nowrap">
+                {!pricesHidden && <td className="text-right tabular-nums text-text font-medium whitespace-nowrap">{formatCurrency(t.pricePerPage, baseCurrency)}</td>}
+                {!pricesHidden && <td className="text-right tabular-nums whitespace-nowrap">
                   {t.discountedPricePerPage ? formatCurrency(t.discountedPricePerPage, baseCurrency) : '—'}
-                </td>
+                </td>}
                 <td><ActiveBadge active={t.isActive} /></td>
                 <td className="tabular-nums whitespace-nowrap">{formatDate(t.createdAt)}</td>
                 <RowChevron />
@@ -171,10 +172,10 @@ export default function TemplatesPage() {
               {t.description && <p className="text-sm text-text-secondary line-clamp-2">{t.description}</p>}
               <div className="mt-auto pt-3 border-t border-border flex justify-between text-xs text-text-muted w-full">
                 <span>{t.type === 'simple' ? 'Pricing only' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
-                <span className="tabular-nums">
+                {!pricesHidden && <span className="tabular-nums">
                   <span className="text-text font-semibold">{formatCurrency(t.pricePerPage, baseCurrency)}</span> / page
                   {t.discountedPricePerPage && <span className="text-success"> ({formatCurrency(t.discountedPricePerPage, baseCurrency)})</span>}
-                </span>
+                </span>}
               </div>
             </button>
           ))}

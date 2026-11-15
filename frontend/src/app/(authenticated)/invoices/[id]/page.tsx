@@ -12,6 +12,7 @@ import { CurrencySelect } from '@/components/ui/CurrencySelect';
 import { useNow } from '@/lib/use-now';
 import { RequirePermission } from '@/components/RequirePermission';
 import { NO_AUTOFILL } from '@/lib/no-autofill';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface InvoiceItem {
   id: string;
@@ -352,13 +353,11 @@ function InvoiceDetailPage() {
             <div className="space-y-3">
               <div>
                 <label htmlFor="edit-issue" className="block text-xs font-medium text-text-muted mb-1">Issue Date</label>
-                <input id="edit-issue" type="date" value={editForm.issueDate} onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })}
-                  className="input w-full" />
+                <DateInput id="edit-issue" value={editForm.issueDate} onChange={(issueDate) => setEditForm({ ...editForm, issueDate })} />
               </div>
               <div>
                 <label htmlFor="edit-due" className="block text-xs font-medium text-text-muted mb-1">Due Date</label>
-                <input id="edit-due" type="date" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
-                  className="input w-full" />
+                <DateInput id="edit-due" min={editForm.issueDate} value={editForm.dueDate} onChange={(dueDate) => setEditForm({ ...editForm, dueDate })} />
               </div>
               <div>
                 <label htmlFor="edit-tax" className="block text-xs font-medium text-text-muted mb-1">Tax Rate (%)</label>
@@ -498,10 +497,8 @@ function InvoiceDetailPage() {
                   className="input w-full" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Payment Date</label>
-                <input type="date" value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="input w-full" />
+                <label htmlFor="payment-date" className="block text-sm font-medium text-text-secondary mb-1">Payment Date</label>
+                <DateInput id="payment-date" value={paymentDate} onChange={setPaymentDate} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Method <span className="text-text-muted font-normal">(optional)</span></label>

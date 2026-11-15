@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Alert } from '@/components/ui/Alert';
+import { DateInput } from '@/components/ui/DateInput';
 import Link from 'next/link';
 
 interface Client { id: string; name: string; type: string; }
@@ -40,7 +41,17 @@ export default function NewJobPage() {
   const [freeformTypes, setFreeformTypes] = useState<FreeformJobType[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
+  const isAdmin = user?.role?.name === 'Admin';
+  // Translators of an organization that hides prices: the server prices the job from the templates.
+  const pricesHidden = !!user?.tenant?.pricesHidden;
+  const perPage = (price: number | undefined) => (pricesHidden || price == null ? '' : ` (${formatCurrency(Number(price), baseCurrency)}/p)`);
+  // Admins hand the job to whoever does it (themselves by default).
+  const [colleagues, setColleagues] = useState<{ id: string; firstName: string; lastName: string; isActive: boolean; role?: { name: string } }[]>([]);
+  const [assignTo, setAssignTo] = useState('');
+  useEffect(() => {
+    if (isAdmin) api.get<typeof colleagues>('/users').then(setColleagues).catch(() => setColleagues([]));
+  }, [isAdmin]);
   // Inline "new client" — create one without leaving the job form
   const [newClient, setNewClient] = useState<{ type: 'company' | 'person'; name: string } | null>(null);
   const [creatingClient, setCreatingClient] = useState(false);
@@ -223,6 +234,7 @@ export default function NewJobPage() {
       if (form.deadline) body.deadline = form.deadline;
       if (form.isFreeOfCharge && form.freeOfChargeReason) body.freeOfChargeReason = form.freeOfChargeReason;
       if (form.notes) body.notes = form.notes;
+      if (isAdmin && assignTo) body.assignToUserId = assignTo;
 
       const job = await api.post<{ id: string }>('/jobs', body);
       router.push(`/jobs/${job.id}`);
@@ -258,6 +270,16 @@ export default function NewJobPage() {
                 <option value="in_progress">In Progress</option>
               </Select>
             </Field>
+            {isAdmin && (
+              <Field label="Assign to" htmlFor="job-assignee" hint="Who works on it. You can add more people on the job page.">
+                <Select id="job-assignee" value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
+                  <option value="">Me</option>
+                  {colleagues.filter((c) => c.isActive && c.id !== user?.id).map((c) => (
+                    <option key={c.id} value={c.id}>{c.firstName} {c.lastName}{c.role?.name ? ` (${c.role.name})` : ''}</option>
+                  ))}
+                </Select>
+              </Field>
+            )}
           </div>
           <Field label="Title" htmlFor="job-title" required>
             <Input id="job-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required maxLength={255} />
@@ -342,7 +364,7 @@ export default function NewJobPage() {
             <Alert tone="warning">No languages are set up yet. An admin can add them in Settings &gt; Languages.</Alert>
           )}
           <Field label="Deadline" htmlFor="job-deadline">
-            <Input id="job-deadline" type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+            <DateInput id="job-deadline" value={form.deadline} onChange={(deadline) => setForm({ ...form, deadline })} />
           </Field>
         </div>
 
@@ -394,7 +416,7 @@ export default function NewJobPage() {
                       <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
                         className="input h-8 px-2 w-full">
                         <option value="">Select...</option>
-                        {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
+                        {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{perPage(t.pricePerPage)}</option>)}
                       </select>
                     ) : (
                       <select
@@ -404,12 +426,12 @@ export default function NewJobPage() {
                         <option value="">Custom (manual entry)</option>
                         {freeformTypes.length > 0 && (
                           <optgroup label="Freeform Types">
-                            {freeformTypes.map((t) => <option key={t.id} value={`ft:${t.id}`}>{t.name} ({formatCurrency(Number(t.pricePerPage), baseCurrency)}/p)</option>)}
+                            {freeformTypes.map((t) => <option key={t.id} value={`ft:${t.id}`}>{t.name}{perPage(t.pricePerPage)}</option>)}
                           </optgroup>
                         )}
                         {availableTemplates.length > 0 && (
                           <optgroup label="Simple Templates">
-                            {availableTemplates.map((t) => <option key={t.id} value={`tpl:${t.id}`}>{t.name} ({formatCurrency(t.pricePerPage, baseCurrency)}/p)</option>)}
+                            {availableTemplates.map((t) => <option key={t.id} value={`tpl:${t.id}`}>{t.name}{perPage(t.pricePerPage)}</option>)}
                           </optgroup>
                         )}
                       </select>
@@ -424,6 +446,11 @@ export default function NewJobPage() {
                       className="input h-8 px-2 w-full" />
                   </div>
 
+                  {pricesHidden ? (
+                    <div className="col-span-1 md:col-span-7 flex items-center justify-end pb-1">
+                      <button type="button" onClick={() => removeLineItem(li.key)} className="text-xs font-medium text-danger hover:underline">Remove</button>
+                    </div>
+                  ) : <>
                   {/* Price */}
                   <div className="col-span-2">
                     <label className="block text-xs font-medium text-text mb-1">Price/Page</label>
@@ -457,13 +484,14 @@ export default function NewJobPage() {
                     <span className="text-sm font-semibold text-text">{formatCurrency(getLineTotal(li), baseCurrency)}</span>
                     <button type="button" onClick={() => removeLineItem(li.key)} className="text-xs font-medium text-danger hover:underline">Remove</button>
                   </div>
+                  </>}
                 </div>
               </div>
             ))}
           </div>
 
           {/* Total */}
-          {lineItems.length > 0 && (
+          {lineItems.length > 0 && !pricesHidden && (
             <div className="flex justify-end mt-4 pt-4 border-t border-border">
               <div className="text-right">
                 <span className="text-sm text-text-secondary mr-4">Total:</span>

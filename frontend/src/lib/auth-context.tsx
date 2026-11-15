@@ -24,7 +24,8 @@ interface AuthUser {
   mustChangePassword?: boolean;
   role: UserRole;
   /** The organization the user works in; null for the platform admin. */
-  tenant: { id: string; name: string; dateFormat: string } | null;
+  /** pricesHidden: a Translator of an organization that hides prices (the API leaves them out). */
+  tenant: { id: string; name: string; dateFormat: string; pricesHidden?: boolean } | null;
   /** Manages organizations and platform settings; sees no organization's data. */
   isPlatformAdmin: boolean;
 }

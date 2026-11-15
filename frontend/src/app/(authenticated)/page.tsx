@@ -10,6 +10,7 @@ import { useNow } from '@/lib/use-now';
 import { JOB_STATUS_BADGE, OPEN_JOB_STATUSES, badgeClass, isJobOverdue } from '@/lib/status';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { BriefcaseIcon, ChartIcon, CheckIcon, ClockIcon, ReceiptIcon, XIcon } from '@/components/ui/icons';
 
 interface DashboardStats {
@@ -94,20 +95,34 @@ function SummaryCard({ href, title, value, icon, loading }: { href: string; titl
 // ── Upcoming deadlines (open jobs the user can see — assigned ones for translators) ──
 
 function UpcomingDeadlines() {
-  const [jobs, setJobs] = useState<UpcomingJob[] | null>(null);
+  const { user } = useAuth();
+  // Admins who also translate: their own jobs, or everyone's.
+  const isAdmin = user?.role?.name === 'Admin';
+  const [scope, setScope] = useState<'all' | 'me'>('all');
+  const [loaded, setLoaded] = useState<{ scope: string; jobs: UpcomingJob[] } | null>(null);
+  const jobs = loaded?.scope === scope ? loaded.jobs : null;
   const today = todayLocal(useNow());
 
   useEffect(() => {
-    api.get<{ data: UpcomingJob[] }>(`/jobs?status=${OPEN_JOB_STATUSES.join(',')}&hasDeadline=true&sortBy=deadline&sortOrder=ASC&limit=6`)
-      .then((res) => setJobs(res.data))
-      .catch(() => setJobs([]));
-  }, []);
+    let ignore = false;
+    const mine = scope === 'me' ? '&assignee=me' : '';
+    api.get<{ data: UpcomingJob[] }>(`/jobs?status=${OPEN_JOB_STATUSES.join(',')}&hasDeadline=true&sortBy=deadline&sortOrder=ASC&limit=6${mine}`)
+      .then((res) => { if (!ignore) setLoaded({ scope, jobs: res.data }); })
+      .catch(() => { if (!ignore) setLoaded({ scope, jobs: [] }); });
+    return () => { ignore = true; };
+  }, [scope]);
 
   return (
     <div className="card">
       <div className="flex items-center justify-between px-5 pt-4 pb-2">
         <h2 className="font-semibold text-text">Upcoming deadlines</h2>
-        <Link href="/jobs" className="text-sm font-medium text-primary-text hover:underline">All jobs</Link>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <SegmentedControl<'all' | 'me'> label="Whose jobs" value={scope} onChange={setScope}
+              options={[{ value: 'all', label: 'Everyone' }, { value: 'me', label: 'Mine' }]} />
+          )}
+          <Link href={scope === 'me' ? '/jobs?assignee=me' : '/jobs'} className="text-sm font-medium text-primary-text hover:underline">All jobs</Link>
+        </div>
       </div>
       {jobs === null ? (
         <div className="px-5 pb-5 space-y-2">

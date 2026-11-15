@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, Suspense, FormEvent, ChangeEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -33,6 +34,7 @@ interface AppSettings {
   maxUploadSizeMb: number;
   allowedFileTypes: string[] | null;
   googleTranslateKeySet?: boolean;
+  translatorsSeePrices: boolean;
 }
 
 interface Language {
@@ -165,6 +167,7 @@ function GeneralSettings() {
         baseCurrency: settings.baseCurrency,
         invoicePrefix: settings.invoicePrefix ?? '',
         dateFormat: settings.dateFormat,
+        translatorsSeePrices: settings.translatorsSeePrices,
       });
       setSettings(updated);
       // Dates, currency and invoice defaults across the app follow right away.
@@ -226,6 +229,19 @@ function GeneralSettings() {
               <option value="YYYY-MM-DD">YYYY-MM-DD (2026-11-15)</option>
             </Select>
           </Field>
+        </div>
+        <div className="card p-6">
+          <h3 className="font-semibold text-text mb-3">Team</h3>
+          <label className="flex items-start gap-3 text-sm text-text cursor-pointer">
+            <input type="checkbox" className="mt-0.5 w-4 h-4" checked={settings.translatorsSeePrices}
+              onChange={(e) => setSettings({ ...settings, translatorsSeePrices: e.target.checked })} />
+            <span>
+              <span className="font-medium">Translators see prices</span>
+              <span className="block text-text-secondary mt-0.5">
+                Job totals, line-item prices and template prices. When off, jobs a translator creates are priced from your templates and freeform types, and only admins change prices.
+              </span>
+            </span>
+          </label>
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit" variant="primary" disabled={saving}>
@@ -1042,6 +1058,8 @@ interface AdminUser {
   lastName: string;
   isActive: boolean;
   role?: { id: string; name: string };
+  /** Open jobs (quote / accepted / in progress) they are assigned to. */
+  openJobCount?: number;
 }
 interface RoleOption { id: string; name: string }
 interface PendingInvite {
@@ -1275,6 +1293,7 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
                 <th className="py-2 font-semibold">Name</th>
                 <th className="py-2 font-semibold">Email</th>
                 <th className="py-2 font-semibold">Role</th>
+                <th className="py-2 font-semibold">Open jobs</th>
                 <th className="py-2 font-semibold">Status</th>
                 <th className="py-2 font-semibold text-right">Actions</th>
               </tr>
@@ -1285,6 +1304,12 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
                   <td className="py-2 text-text">{u.firstName} {u.lastName}</td>
                   <td className="py-2 text-text-secondary">{u.email}</td>
                   <td className="py-2 text-text-secondary">{u.role?.name || '—'}</td>
+                  <td className="py-2">
+                    <Link href={`/jobs?assignee=${u.id === me?.id ? 'me' : u.id}`} className="text-primary-text hover:underline tabular-nums"
+                      title={`${u.firstName}'s jobs`}>
+                      {u.openJobCount ?? 0}
+                    </Link>
+                  </td>
                   <td className="py-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.isActive ? 'tone tone-success' : 'tone tone-neutral'}`}>
                       {u.isActive ? 'Active' : 'Inactive'}
@@ -1307,7 +1332,7 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
                 </tr>
               ))}
               {users.length === 0 && !loadError && (
-                <tr><td colSpan={5} className="py-6 text-center text-text-muted">No users.</td></tr>
+                <tr><td colSpan={6} className="py-6 text-center text-text-muted">No users.</td></tr>
               )}
             </tbody>
           </table>

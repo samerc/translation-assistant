@@ -4,7 +4,9 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  UseInterceptors,
 } from '@nestjs/common';
+import { HidePricesInterceptor } from '../../common/tenancy/hide-prices.interceptor.js';
 import { AuthGuard } from '@nestjs/passport';
 import { SearchService } from './search.service.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
@@ -13,6 +15,7 @@ import { actorOf } from '../../common/tenancy/actor.js';
 
 @Controller('search')
 @UseGuards(AuthGuard('jwt'))
+@UseInterceptors(HidePricesInterceptor)
 export class SearchController {
   constructor(private readonly searchService: SearchService) {}
 

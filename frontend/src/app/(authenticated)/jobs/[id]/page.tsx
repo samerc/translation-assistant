@@ -11,6 +11,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/Button';
+import { DateInput } from '@/components/ui/DateInput';
 
 interface JobFile { id: string; category: string; fileName: string; fileSize: number; mimeType: string; linkedFromJobId: string | null; uploadedAt: string; }
 interface JobUser { id: string; userId: string; permissionLevel: string; user: { id: string; firstName: string; lastName: string; email: string }; }
@@ -27,6 +28,8 @@ interface Job {
   isFreeOfCharge: boolean; freeOfChargeReason: string | null;
   paymentCurrency: string | null; paymentAmount: number | null; notes: string | null;
   lineItems: JobLineItem[]; assignedUsers: JobUser[]; files: JobFile[]; createdAt: string;
+  /** What the caller may do: 'view' = a view-only assignment. */
+  myAccess?: 'edit' | 'view';
 }
 
 const STATUSES = [
@@ -134,6 +137,8 @@ export default function JobDetailPage() {
   };
 
   const isLocked = ['delivered', 'invoiced', 'paid'].includes(job.status);
+  // View-only assignees (and roles without jobs:update) get no editing controls.
+  const readOnly = job.myAccess === 'view' || !hasPermission('jobs:update');
   const sourceFiles = job.files.filter((f) => f.category === 'source');
   const translatedFiles = job.files.filter((f) => f.category === 'translated');
 
@@ -152,9 +157,15 @@ export default function JobDetailPage() {
           <span className="text-sm font-medium">
             This job is locked ({STATUSES.find((s) => s.value === job.status)?.label}). Reopen to make changes.
           </span>
-          {hasPermission('jobs:update') && (
+          {!readOnly && (
             <Button size="sm" onClick={handleReopen}>Reopen Job</Button>
           )}
+        </div>
+      )}
+
+      {readOnly && !isLocked && (
+        <div className="mb-4 px-3.5 py-2.5 tone tone-info rounded-lg text-sm font-medium">
+          You have view-only access to this job.
         </div>
       )}
 
@@ -195,14 +206,15 @@ export default function JobDetailPage() {
               Create Invoice
             </Button>
           )}
-          <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
-            aria-label="Job status" disabled={!hasPermission('jobs:update')}
-            className="input w-auto min-w-[10rem]">
-            {STATUSES.map((s) => {
-              const allowed = s.value === job.status || (VALID_TRANSITIONS[job.status] || []).includes(s.value);
-              return <option key={s.value} value={s.value} disabled={!allowed}>{s.label}{!allowed ? ' (N/A)' : ''}</option>;
-            })}
-          </select>
+          {!readOnly && (
+            <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
+              aria-label="Job status" className="input w-auto min-w-[10rem]">
+              {STATUSES.map((s) => {
+                const allowed = s.value === job.status || (VALID_TRANSITIONS[job.status] || []).includes(s.value);
+                return <option key={s.value} value={s.value} disabled={!allowed}>{s.label}{!allowed ? ' (N/A)' : ''}</option>;
+              })}
+            </select>
+          )}
           {hasPermission('jobs:delete') && (
             <Button variant="danger" onClick={handleDelete}>Delete</Button>
           )}
@@ -219,10 +231,10 @@ export default function JobDetailPage() {
         ))}
       </div>
 
-      {activeTab === 'details' && <DetailsTab job={job} locked={isLocked} onUpdate={loadJob} />}
-      {activeTab === 'documents' && <DocumentsTab job={job} locked={isLocked} />}
-      {activeTab === 'source-files' && <FilesTab job={job} category="source" files={sourceFiles} locked={isLocked} onUpdate={loadJob} />}
-      {activeTab === 'translated-files' && <FilesTab job={job} category="translated" files={translatedFiles} locked={isLocked} onUpdate={loadJob} />}
+      {activeTab === 'details' && <DetailsTab job={job} locked={isLocked || readOnly} onUpdate={loadJob} />}
+      {activeTab === 'documents' && <DocumentsTab job={job} locked={isLocked || readOnly} />}
+      {activeTab === 'source-files' && <FilesTab job={job} category="source" files={sourceFiles} locked={isLocked || readOnly} onUpdate={loadJob} />}
+      {activeTab === 'translated-files' && <FilesTab job={job} category="translated" files={translatedFiles} locked={isLocked || readOnly} onUpdate={loadJob} />}
     </div>
   );
 }
@@ -231,6 +243,8 @@ export default function JobDetailPage() {
 
 function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUpdate: () => void }) {
   const { baseCurrency } = useSettings();
+  const { user } = useAuth();
+  const pricesHidden = !!user?.tenant?.pricesHidden;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     title: job.title, description: job.description || '', notes: job.notes || '',
@@ -282,8 +296,8 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
               <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required className="input w-full" /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Description</label>
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="input w-full resize-none" /></div>
-            <div><label className="block text-xs font-medium text-text mb-1">Deadline</label>
-              <input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} className="input w-full" /></div>
+            <div><label htmlFor="job-edit-deadline" className="block text-xs font-medium text-text mb-1">Deadline</label>
+              <DateInput id="job-edit-deadline" value={form.deadline?.slice(0, 10) ?? ''} onChange={(deadline) => setForm({ ...form, deadline })} /></div>
             <div><label className="block text-xs font-medium text-text mb-1">Notes</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="input w-full resize-none" /></div>
             {saveError && <div className="p-3 tone tone-danger rounded-lg text-sm">{saveError}</div>}
@@ -306,8 +320,19 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
 
       {/* Pricing / Line Items */}
       <div className="card p-6">
-        <h3 className="font-semibold text-text mb-4">Pricing</h3>
-        {job.isFreeOfCharge ? (
+        <h3 className="font-semibold text-text mb-4">{pricesHidden ? 'Items' : 'Pricing'}</h3>
+        {pricesHidden ? (
+          job.lineItems.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {job.lineItems.map((li) => (
+                <li key={li.id} className="flex justify-between py-2 text-sm">
+                  <span className="text-text">{li.description}</span>
+                  <span className="text-text-secondary">{li.pageCount} page{li.pageCount === 1 ? '' : 's'}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-sm text-text-muted">No line items.</p>
+        ) : job.isFreeOfCharge ? (
           <div className="space-y-2.5">
             <InfoRow label="Status" value="Free of Charge (Pro Bono)" />
             {job.freeOfChargeReason && <InfoRow label="Reason" value={job.freeOfChargeReason} />}
@@ -369,19 +394,20 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
 function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }) {
   const { user } = useAuth();
   const isAdmin = user?.role?.name === 'Admin';
-  const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string }[]>([]);
+  const [allUsers, setAllUsers] = useState<{ id: string; firstName: string; lastName: string; email: string; isActive: boolean; role?: { name: string } }[]>([]);
   const [pickUser, setPickUser] = useState('');
   const [pickLevel, setPickLevel] = useState<'view' | 'edit'>('edit');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isAdmin) api.get<{ id: string; firstName: string; lastName: string; email: string }[]>('/users').then(setAllUsers).catch(() => {});
+    if (isAdmin) api.get<typeof allUsers>('/users').then(setAllUsers).catch(() => {});
   }, [isAdmin]);
 
   const assigned = job.assignedUsers || [];
   const assignedIds = new Set(assigned.map((a) => a.userId));
-  const available = allUsers.filter((u) => !assignedIds.has(u.id));
+  // Anyone active in the organization, admins included (an admin can do the translation too).
+  const available = allUsers.filter((u) => !assignedIds.has(u.id) && u.isActive);
 
   const add = async () => {
     if (!pickUser) return;
@@ -417,7 +443,7 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
           {assigned.map((a) => (
             <li key={a.id} className="flex items-center justify-between py-2">
               <div>
-                <span className="text-sm text-text">{a.user.firstName} {a.user.lastName}</span>
+                <span className="text-sm text-text">{a.user.firstName} {a.user.lastName}{a.userId === user?.id ? ' (you)' : ''}</span>
                 <span className="text-xs text-text-muted ml-2">{a.user.email}</span>
                 <span className="text-xs px-1.5 py-0.5 rounded tone tone-neutral ml-2">{a.permissionLevel}</span>
               </div>
@@ -432,7 +458,11 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
           <select value={pickUser} onChange={(e) => setPickUser(e.target.value)} className="input flex-1" aria-label="Select user to assign">
             <option value="">Select a user…</option>
-            {available.map((u) => <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.email})</option>)}
+            {available.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.id === user?.id ? 'Me' : `${u.firstName} ${u.lastName}`}{u.role?.name ? ` — ${u.role.name}` : ''}
+              </option>
+            ))}
           </select>
           <select value={pickLevel} onChange={(e) => setPickLevel(e.target.value as 'view' | 'edit')} className="input w-auto" aria-label="Permission level">
             <option value="edit">Edit</option>
@@ -678,7 +708,7 @@ function FilesTab({ job, category, files, locked, onUpdate }: { job: Job; catego
     <div className="max-w-2xl">
       {locked ? (
         <div className="card p-4 mb-4 text-sm text-text-secondary">
-          This job is locked — reopen it to add or remove files.
+          {job.myAccess === 'view' ? 'You have view-only access to this job.' : 'This job is locked — reopen it to add or remove files.'}
           {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         </div>
       ) : (

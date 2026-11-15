@@ -46,6 +46,28 @@ export function formatDate(value: string | Date | null | undefined): string {
   return `${dd}/${mm}/${y}`;
 }
 
+/** The organization's date format, for placeholders ("DD/MM/YYYY"). */
+export function dateFormatPattern(): string {
+  return dateFormat;
+}
+
+/**
+ * A date typed in the organization's format ("15/11/2026", also "15-11-26",
+ * "15.11.2026") as `YYYY-MM-DD`; null when it isn't a real date.
+ */
+export function parseDateInput(text: string): string | null {
+  const parts = text.trim().split(/[^0-9]+/).filter(Boolean);
+  if (parts.length !== 3) return null;
+  const [d, m, yy] = dateFormat === 'MM/DD/YYYY' ? [parts[1], parts[0], parts[2]]
+    : dateFormat === 'YYYY-MM-DD' ? [parts[2], parts[1], parts[0]]
+      : [parts[0], parts[1], parts[2]];
+  const y = yy.length === 2 ? `20${yy}` : yy;
+  if (y.length !== 4 || d.length > 2 || m.length > 2) return null;
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (date.getFullYear() !== Number(y) || date.getMonth() !== Number(m) - 1 || date.getDate() !== Number(d)) return null;
+  return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
 /** Date and time ("15/11/2026, 11:43"), the date in the organization's format. */
 export function formatDateTime(value: string | Date | null | undefined): string {
   if (!value) return '—';

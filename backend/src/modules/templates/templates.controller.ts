@@ -14,6 +14,8 @@ import {
   BadRequestException,
   Res,
 } from '@nestjs/common';
+import { HidePricesInterceptor } from '../../common/tenancy/hide-prices.interceptor.js';
+import { TenantsService } from '../tenants/tenants.service.js';
 import type { Response } from 'express';
 import { buildExampleDocx } from './word-example.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
@@ -40,20 +42,30 @@ const templateStorage = tenantDiskStorage('templates');
 
 @Controller('templates')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@UseInterceptors(HidePricesInterceptor)
 export class TemplatesController {
-  constructor(private readonly templatesService: TemplatesService) {}
+  constructor(
+    private readonly templatesService: TemplatesService,
+    private readonly tenantsService: TenantsService,
+  ) {}
 
   // ── Templates ──
 
   @Get()
   @RequirePermissions('templates:read')
-  findAll(
+  async findAll(
     @CurrentActor() actor: Actor,
     @Query('search') search?: string,
     @Query('isActive') isActive?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'ASC' | 'DESC',
   ) {
+    // Sorting by a hidden price would still reveal it.
+    if (
+      sortBy === 'pricePerPage' &&
+      (await this.tenantsService.hidesPrices(actor))
+    )
+      sortBy = undefined;
     return this.templatesService.findAll({
       tenantId: actor.tenantId,
       search,

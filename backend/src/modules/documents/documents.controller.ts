@@ -11,7 +11,9 @@ import {
   UseGuards,
   NotFoundException,
   ParseUUIDPipe,
+  UseInterceptors,
 } from '@nestjs/common';
+import { HidePricesInterceptor } from '../../common/tenancy/hide-prices.interceptor.js';
 import type { Response } from 'express';
 import { existsSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
@@ -31,6 +33,7 @@ import { contentDisposition } from '../../common/utils/content-disposition.js';
 
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@UseInterceptors(HidePricesInterceptor)
 export class DocumentsController {
   constructor(
     private readonly documentsService: DocumentsService,
@@ -67,7 +70,10 @@ export class DocumentsController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentActor() actor: Actor,
   ) {
-    return this.documentsService.verifyDocumentAccess(id, actor);
+    const doc = await this.documentsService.verifyDocumentAccess(id, actor);
+    // What the caller may do with it, so the page offers only that.
+    const myAccess = await this.documentsService.accessLevel(doc.jobId, actor);
+    return { ...doc, myAccess };
   }
 
   @Post()

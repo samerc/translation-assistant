@@ -163,6 +163,7 @@ export class TenantDeletionService {
    */
   async approve(
     tenantId: string,
+    contact?: string,
   ): Promise<{ deleted: true } | { deleted: false; tenant: Tenant }> {
     const tenant = await this.tenantsService.findOne(tenantId);
     if (tenant.status === 'closing') {
@@ -190,19 +191,21 @@ export class TenantDeletionService {
     this.logger.log(
       `[TENANT_CLOSING] tenantId=${tenantId} deleteAfter=${tenant.deleteAfter.toISOString()}`,
     );
+    const { dateFormat } = await this.tenantsService.getSettings(tenantId);
     for (const email of admins) {
       this.send(
         this.mailService.sendDeletionScheduled(
           email,
           tenant.name,
           tenant.deleteAfter,
+          { dateFormat, contact },
         ),
       );
     }
     return { deleted: false, tenant };
   }
 
-  async decline(tenantId: string, message?: string) {
+  async decline(tenantId: string, message?: string, contact?: string) {
     const tenant = await this.tenantsService.findOne(tenantId);
     if (!tenant.deletionRequestedAt || tenant.status === 'closing') {
       throw new BadRequestException('There is no open deletion request');
@@ -221,6 +224,7 @@ export class TenantDeletionService {
           requester.email,
           tenant.name,
           message?.trim() || null,
+          contact,
         ),
       );
     }

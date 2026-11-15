@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -33,6 +34,10 @@ import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
 import { clientVisibleSql } from '../clients/client-access.js';
+import { FreeformJobType } from '../settings/entities/freeform-job-type.entity.js';
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class JobsService {
@@ -183,6 +188,8 @@ export class JobsService {
     sortOrder?: 'ASC' | 'DESC';
     page?: number;
     limit?: number;
+    /** Admins: a user id, 'me', or 'none' (nobody assigned). */
+    assignee?: string;
     actor: Actor;
   }) {
     const {
@@ -230,6 +237,23 @@ export class JobsService {
     if (clientId) {
       qb.andWhere('job.client_id = :clientId', { clientId });
     }
+    // Who works on it (admins; everyone else only sees their own jobs anyway).
+    if (query.actor.isAdmin && query.assignee) {
+      if (query.assignee === 'none') {
+        qb.andWhere(
+          'NOT EXISTS (SELECT 1 FROM job_users ju WHERE ju.job_id = job.id)',
+        );
+      } else {
+        const assigneeId =
+          query.assignee === 'me' ? query.actor.userId : query.assignee;
+        if (!UUID_RE.test(assigneeId))
+          throw new BadRequestException('Invalid assignee');
+        qb.andWhere(
+          'EXISTS (SELECT 1 FROM job_users ju WHERE ju.job_id = job.id AND ju.user_id = :assigneeId)',
+          { assigneeId },
+        );
+      }
+    }
     if (type) {
       qb.andWhere('job.type = :type', { type });
     }
@@ -256,7 +280,35 @@ export class JobsService {
       'jobId',
       'lineItemCount',
     );
+    await this.attachAssignees(data);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  /** `assignees` (names only) on each listed job — one query for the page. */
+  private async attachAssignees(jobs: Job[]): Promise<void> {
+    if (!jobs.length) return;
+    const rows = await this.jobUserRepository
+      .createQueryBuilder('ju')
+      .innerJoin('ju.user', 'u')
+      .select('ju.job_id', 'jobId')
+      .addSelect('u.id', 'id')
+      .addSelect('u.firstName', 'firstName')
+      .addSelect('u.lastName', 'lastName')
+      .addSelect('ju.permissionLevel', 'permissionLevel')
+      .where('ju.job_id IN (:...ids)', { ids: jobs.map((j) => j.id) })
+      .orderBy('u.firstName', 'ASC')
+      .getRawMany<{
+        jobId: string;
+        id: string;
+        firstName: string;
+        lastName: string;
+        permissionLevel: string;
+      }>();
+    for (const job of jobs) {
+      (job as Job & { assignees: unknown[] }).assignees = rows
+        .filter((r) => r.jobId === job.id)
+        .map(({ jobId: _j, ...u }) => u);
+    }
   }
 
   async findOne(id: string): Promise<Job> {
@@ -308,6 +360,16 @@ export class JobsService {
     ]);
 
     if (!client) throw new BadRequestException('Client not found');
+    // Admins may hand the job to a colleague (an active user of the organization).
+    let assignTo: User | null = null;
+    if (dto.assignToUserId && dto.assignToUserId !== userId) {
+      if (!actor.isAdmin)
+        throw new ForbiddenException('Only an admin can assign jobs to others');
+      assignTo = await this.userRepository.findOne({
+        where: { id: dto.assignToUserId, tenantId, isActive: true },
+      });
+      if (!assignTo) throw new BadRequestException('User not found');
+    }
     // A non-admin can only open jobs for clients they can already see —
     // otherwise any client id would grant access to that client.
     if (!actor.isAdmin) {
@@ -399,17 +461,24 @@ export class JobsService {
         }
       }
 
-      // Auto-assign creator
+      // Whoever does the work: the colleague an admin picked, else the creator.
       await manager.save(
         manager.create(JobUser, {
           jobId: saved.id,
-          userId,
+          userId: assignTo?.id ?? userId,
           permissionLevel: 'edit',
         }),
       );
 
       return saved.id;
     });
+
+    if (assignTo && assignTo.id !== userId) {
+      const job = await this.findOneBasic(savedId);
+      this.notificationsService
+        .notifyJobAssigned(savedId, job.jobNumber, job.title, assignTo.id)
+        .catch(() => {});
+    }
 
     // Recalculate total (outside transaction — reads committed data)
     await this.recalculateTotal(savedId);
@@ -473,6 +542,52 @@ export class JobsService {
   }
 
   // ── Line Items ──
+
+  /**
+   * For a caller who can't see prices: line items take the organization's
+   * list price — the template's, or a freeform type's with that name — never
+   * one the caller sent (0 when there is none; an admin prices it later).
+   */
+  async applyListPrices(
+    tenantId: string,
+    items: {
+      description: string;
+      templateId?: string;
+      pricePerPage: number;
+      useDiscountedPrice?: boolean;
+      discountedPricePerPage?: number;
+    }[],
+  ): Promise<void> {
+    if (!items.length) return;
+    const templateIds = [
+      ...new Set(items.map((i) => i.templateId).filter(Boolean) as string[]),
+    ];
+    const [templates, types] = await Promise.all([
+      this.findTenantTemplates(templateIds, tenantId),
+      this.dataSource
+        .getRepository(FreeformJobType)
+        .find({ where: { tenantId, isActive: true } }),
+    ]);
+    const wanted = (v: string) => v.trim().toLowerCase();
+    for (const item of items) {
+      const source =
+        (item.templateId && templates.find((t) => t.id === item.templateId)) ||
+        // The job form fills a freeform row with the type's description (or name).
+        types.find((t) =>
+          [t.name, t.description].some(
+            (v) => !!v && v.trim().toLowerCase() === wanted(item.description),
+          ),
+        );
+      item.pricePerPage = Number(source?.pricePerPage ?? 0);
+      const discounted = source?.discountedPricePerPage;
+      item.discountedPricePerPage =
+        discounted !== null && discounted !== undefined
+          ? Number(discounted)
+          : undefined;
+      item.useDiscountedPrice =
+        !!item.useDiscountedPrice && item.discountedPricePerPage !== undefined;
+    }
+  }
 
   async addLineItem(
     jobId: string,
@@ -633,6 +748,8 @@ export class JobsService {
       where: { id: userId, tenantId: job.tenantId },
     });
     if (!user) throw new BadRequestException('User not found');
+    if (!user.isActive)
+      throw new BadRequestException('That user is deactivated');
 
     const updateExisting = async (): Promise<JobUser | null> => {
       const existing = await this.jobUserRepository.findOne({

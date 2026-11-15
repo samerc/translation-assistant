@@ -35,6 +35,10 @@ import { User } from '../users/entities/user.entity.js';
 import { actorOf } from '../../common/tenancy/actor.js';
 import { TenantsService } from '../tenants/tenants.service.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
+import {
+  formatDateOnly,
+  formatMoney,
+} from '../../common/utils/display-format.js';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -222,6 +226,16 @@ export class InvoicesController {
         {
           name: settings.companyName,
           replyTo: user.email,
+        },
+        {
+          clientName: invoice.client?.name,
+          // What is still owed (the whole total until a payment comes in).
+          total: formatMoney(
+            Number(invoice.total) - Number(invoice.paidAmount ?? 0),
+            invoice.currency || settings.baseCurrency,
+          ),
+          dueDate: formatDateOnly(invoice.dueDate, settings.dateFormat),
+          paymentDetails: settings.bankDetails,
         },
       );
     } finally {
