@@ -135,7 +135,7 @@ const mailService = {
 // [notifications repo, TenantsService, SettingsService, Turnstile, DataSource]
 const AUTH_EXTRAS = [
   noopRepo,
-  { getSettings: async () => ({ dateFormat: 'DD/MM/YYYY' }) },
+  { getSettings: () => Promise.resolve({ dateFormat: 'DD/MM/YYYY' }) },
   {},
   {},
   {},
