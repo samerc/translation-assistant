@@ -30,6 +30,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 @Controller('documents')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -99,6 +100,7 @@ export class DocumentsController {
   }
 
   @Patch(':id/status')
+  @Audited('document.status_changed', { target: 'document', body: ['status'] })
   @RequirePermissions('documents:update')
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -147,6 +149,7 @@ export class DocumentsController {
   }
 
   @Delete(':id')
+  @Audited('document.deleted', { target: 'document' })
   @RequirePermissions('documents:delete')
   async remove(
     @Param('id', ParseUUIDPipe) id: string,

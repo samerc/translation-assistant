@@ -353,7 +353,6 @@ function TenantDetailView() {
         You can help with accounts (lockouts, leavers). The organization&apos;s clients, jobs, documents and invoices stay private to it.
       </p>
       <TableCard minWidth={720}>
-        <table className="data-table">
           <thead>
             <tr>
               <th className="text-left">Name</th>
@@ -395,7 +394,6 @@ function TenantDetailView() {
               </tr>
             ))}
           </tbody>
-        </table>
       </TableCard>
 
       {tenant.status === 'active' && (

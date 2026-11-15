@@ -56,7 +56,50 @@ async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   return new ApiError(res.status, message);
 }
 
-async function doRefresh(): Promise<boolean> {
+// The access token lives only in this tab's memory — never in localStorage, where
+// any injected script could read it. A reload gets a new one from the httpOnly
+// refresh cookie. localStorage only keeps a non-secret "signed in" hint so pages
+// don't try a refresh for visitors who were never logged in.
+let accessToken: string | null = null;
+const SESSION_HINT = 'ta-signed-in';
+
+function hint(on: boolean) {
+  try {
+    if (on) localStorage.setItem(SESSION_HINT, '1');
+    else localStorage.removeItem(SESSION_HINT);
+    localStorage.removeItem('accessToken'); // the old, readable copy
+  } catch {
+    /* storage blocked — the hint is only an optimisation */
+  }
+}
+
+/** Keep the token from a login/registration (null on logout). */
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+  hint(token !== null);
+}
+
+/** Whether this browser was signed in (an old stored token counts). */
+export function maybeSignedIn(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT) === '1' || localStorage.getItem('accessToken') !== null;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * 'ok' = new access token; 'denied' = the session is gone (401/403: log in
+ * again); 'error' = couldn't tell (offline, server restarting, rate-limited).
+ */
+export type RefreshResult = 'ok' | 'denied' | 'error';
+
+/** On page load: a new access token from the refresh cookie. */
+export function restoreSession(): Promise<RefreshResult> {
+  return refreshOnce(null);
+}
+
+async function refreshRequest(): Promise<RefreshResult> {
   try {
     // Refresh token is in httpOnly cookie — sent automatically with credentials: 'include'
     const res = await fetch(`${API_URL}/auth/refresh`, {
@@ -64,31 +107,41 @@ async function doRefresh(): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
     });
-
-    if (!res.ok) return false;
-
-    const data = await res.json();
-    localStorage.setItem('accessToken', data.accessToken);
+    if (res.status === 401 || res.status === 403) return 'denied';
+    if (!res.ok) return 'error';
+    const data = (await res.json()) as { accessToken: string };
+    setAccessToken(data.accessToken);
     // refreshToken is set as httpOnly cookie by the server — not in response body
-    return true;
+    return 'ok';
   } catch (err) {
     logger.error('Token refresh failed', err, 'api');
-    return false;
+    return 'error';
   }
+}
+
+/** A failure that may pass (network, 5xx, 429) is retried twice before giving up. */
+async function doRefresh(): Promise<RefreshResult> {
+  let result: RefreshResult = 'error';
+  for (const wait of [0, 1500, 4000]) {
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    result = await refreshRequest();
+    if (result !== 'error') break;
+  }
+  return result;
 }
 
 // Refresh tokens are one-time use: two refreshes with the same cookie make the
 // second fail and log the user out. So refresh at most once at a time — shared
 // by concurrent requests in this tab, and serialized across tabs with a Web Lock.
 // A caller whose token was already replaced (by another request or tab) just
-// retries with the new one.
-let refreshing: Promise<boolean> | null = null;
+// retries with the new one. (Each tab keeps its own access token; the lock makes
+// every refresh send the cookie the previous one set.)
+let refreshing: Promise<RefreshResult> | null = null;
 
-function refreshOnce(staleToken: string | null): Promise<boolean> {
+function refreshOnce(staleToken: string | null): Promise<RefreshResult> {
   if (!refreshing) {
-    const run = async () => {
-      const current = localStorage.getItem('accessToken');
-      if (current && current !== staleToken) return true;
+    const run = async (): Promise<RefreshResult> => {
+      if (accessToken && accessToken !== staleToken) return 'ok';
       return doRefresh();
     };
     const locked = typeof navigator !== 'undefined' && navigator.locks
@@ -111,16 +164,20 @@ async function authedFetch(endpoint: string, init: RequestInit): Promise<Respons
       headers: { ...(init.headers as Record<string, string>), ...(token && { Authorization: `Bearer ${token}` }) },
     });
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+  const token = accessToken;
   const res = await send(token);
   if (res.status !== 401 || NO_REFRESH.some((p) => endpoint.startsWith(p))) return res;
 
-  if (await refreshOnce(token)) {
-    const retry = await send(localStorage.getItem('accessToken'));
+  const refreshed = await refreshOnce(token);
+  if (refreshed === 'ok') {
+    const retry = await send(accessToken);
     if (retry.status !== 401) return retry;
   }
 
-  localStorage.removeItem('accessToken');
+  // Only a refused refresh ends the session here; after a passing failure the
+  // "signed in" hint stays, so the login page can still pick the session up.
+  if (refreshed !== 'error') setAccessToken(null);
+  else accessToken = null;
   window.location.href = '/login';
   throw new ApiError(401, 'Session expired');
 }

@@ -18,7 +18,7 @@ Each **organization (tenant)** has its own users, clients, jobs, documents, temp
 - **Sign-up** (`/signup`, public): `POST /auth/signup` creates a pending tenant + its Admin (email unverified) and emails a 24 h link (`EmailVerificationToken`); same answer for an already-registered email (that address gets an "you already have an account" mail). `POST /auth/verify-email` → platform admins get an in-app `tenant_signup` notification + email; approval → the admin is emailed. Turnstile bot check when `TURNSTILE_SECRET_KEY`/`TURNSTILE_SITE_KEY` are set (site key served by `GET /auth/signup-status`); throttled 5/h per IP; honeypot. Platform settings `signupsEnabled` switch. Unconfirmed sign-ups are deleted after 7 days (`SignupCleanupScheduler`, 03:30). Non-production returns the verification token (like password reset).
 - **Deletion** (`platform/tenant-deletion.service.ts`): the organization's Admin only *requests* it (`POST /organization/deletion-request`: typed org name + password + optional reason; withdraw with `DELETE`) → platform admins get a `tenant_deletion_request` notification + email. The platform admin approves (`POST /platform/tenants/:id/delete`, also without a request) or declines (`/decline-deletion`, emails the requester). Approve: **empty** (no clients/jobs/documents/invoices/templates — users don't count) → purged at once; otherwise status **`closing`** (login refused, sessions revoked, admins emailed) with `deleteAfter` = now + `AppSettings.deletionGraceDays` (default 30, 1–365, Settings → Email & Sign-ups); `/restore` → active, `/purge` → now. `TenantPurgeScheduler` (03:45) purges due ones. Purge deletes rows in FK-safe order (invoices → documents → jobs → templates → clients → tenant lists → invites → users + their tokens/sessions/notifications → settings → tenant), then `uploads/<tenantId>`. The platform admin sees only `dataCounts`, never records. Pending sign-ups are rejected, not deleted. **Billing (later)**: a request doesn't stop billing; approval (→ closing) cancels/doesn't renew; restore resumes.
 - **Invites carry an optional first/last name** (`InviteToken.firstName/lastName`; all three invite forms). `POST /auth/invite-details {token}` (public, 20/min) returns email, names, organization and role for a usable invite; `/register` shows the organization, locks the email (server still enforces the match) and pre-fills the editable names.
-- **Tests**: `node scripts/test-tenancy.mjs` (live, ~315 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill + pending invites list/resend/cancel, organization logo/identity/date format, deletion request/decline/approve/restore/purge, job assignment + `myAccess`, translator price hiding, marking Word fields on the page) — runs in CI against MariaDB (`tenancy` job).
+- **Tests**: `node scripts/test-tenancy.mjs` (live, ~330 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill + pending invites list/resend/cancel, organization logo/identity/date format, deletion request/decline/approve/restore/purge, job assignment + `myAccess`, translator price hiding, marking Word fields on the page, activity log) — runs in CI against MariaDB (`tenancy` job).
 
 ## Tech Stack
 - **Runtime:** Node ≥ 22.12 (backend `engines`). NestJS 12 packages are ESM-only; the backend compiles to CommonJS and loads them via native `require(esm)`. Jest needs `--experimental-vm-modules` for the same, so `npm test`/`test:e2e` invoke jest through `node` with that flag.
@@ -66,14 +66,14 @@ translation-assistant/
 - `docker compose down` — Stop all containers
 - `cd backend && npm test` — unit tests; `npm run test:e2e` — DB-free security e2e suite (both run in CI)
 - `bash scripts/test-integration.sh` — live integration suite (~172 checks; needs backend on :3005 + frontend on :3080 + a scratch DB; creates its own organization as the platform admin, then runs as that organization's admin)
-- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~315 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
+- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~330 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
 
 ## Dependencies
 - Dependabot (`.github/dependabot.yml`): weekly grouped minor/patch per app, majors as separate PRs. TypeScript 7 majors ignored (no JS API; ts-jest/typescript-eslint unsupported).
 - `multer` pinned to a patched version via `overrides` in `backend/package.json` (platform-express pins an older one) — drop when Nest catches up.
 
 ## Auth
-- JWT access tokens (15 min TTL, returned in body → localStorage) + refresh tokens (7 days)
+- JWT access tokens (15 min TTL, returned in body, kept **in memory only** — never localStorage; `setAccessToken()` in `lib/api.ts`) + refresh tokens (7 days). Every page load / new tab gets a new access token from the refresh cookie (`restoreSession()`); localStorage only holds a non-secret `ta-signed-in` hint so anonymous visitors don't refresh. A refused refresh (401/403) signs out; a passing failure (offline, 5xx, 429) is retried twice and keeps the hint
 - **Refresh token delivered as an httpOnly, SameSite=Strict cookie** (`refresh_token`, path `/api/auth`, `secure` in prod) — never exposed in the response body. Requires `cookie-parser` (wired in `main.ts`) and CORS `credentials: true`.
 - Refresh token rotation (SHA-256 hash in `Session`). **Reuse detection**: a session keeps `previousRefreshTokenHash`; presenting an already-rotated token revokes that session (thief and user both have to log in again)
 - A session's IP / user-agent changing on refresh is logged (`SESSION_FINGERPRINT_CHANGE`) and recorded, **not** revoked — Wi-Fi↔mobile, Cloudflare edge changes and browser updates are normal
@@ -127,7 +127,8 @@ translation-assistant/
 - **`GlobalExceptionFilter`** (`main.ts`): logs full technical details server-side, returns only sanitized messages to clients (no stack traces, SQL, or file paths); maps TypeORM `QueryFailedError`/`EntityNotFoundError` to safe 409/404/400
 - **Common-password blocklist**: registration/password-change reject the top ~550 breached passwords via `@IsNotCommonPassword` validator — also their stems with digits/symbols/leetspeak stripped (`Password1!`, `Welcome1!`, `P@ssw0rd2024`)
 - Password reset and invite tokens are single-use, claimed with a conditional `UPDATE … WHERE used = false` (safe under concurrent requests); reset revokes all sessions
-- Rate limiting: login (15/min), register (10/min), refresh (10/min), forgot-password (3/min), verify-reset (10/min), reset-password (5/min), change-password (5/min), invite (5/hr). Global fallback 300/min + 120 writes/min per identity.
+- Rate limiting: login (15/min), register (10/min), refresh (30/min **per user** — `RefreshThrottleGuard`, after the token is verified; 300/min per IP, and exempt from the per-IP write throttle, since offices share one IP), forgot-password (3/min), verify-reset (10/min), reset-password (5/min), change-password (5/min), invite (5/hr). Global fallback 300/min + 120 writes/min per identity.
+- **Activity (audit) log** (`modules/audit/`): routes marked `@Audited('area.action', { target, body, bodyKeys, refs, responseId })` are recorded by the global `AuditInterceptor` **after they succeed** (failed/404 requests never). The target's label is read before the handler (deletes keep their name); `body` records listed values (never secrets), `bodyKeys` only the field names (settings). `AuditLog` has no FKs (actor name/target label are snapshots); `tenantId` NULL = platform-wide; platform actions on an organization carry its id + `byPlatform`. `GET /audit-log` (+ `/actors`) for the organization's Admin, `GET /platform/audit-log` for platform admins; kept 730 days (`AuditService.removeOld`, 04:15); purged with the tenant. Mark new sensitive routes with `@Audited`
 - Centralized frontend logger (ready for Sentry/external service)
 - Frontend: `ErrorBoundary` component wraps the app (`layout.tsx`) — graceful fallback UI on render errors
 - Frontend: sidebar items hidden based on user permissions (no Invoices/Reports for Translator role); pages wrapped in `RequirePermission` (`components/RequirePermission.tsx`) show a no-access state instead of failing requests (invoices, reports)
@@ -205,14 +206,14 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - CSS component classes behind them live in `globals.css` `@layer components` (`.btn*`, `.input`, `.card`, `.data-table`, `.badge`, `.tone-*`, `.segmented`). Status colours: `lib/status.ts` maps → tone classes.
 - Clickable table rows: `<tr data-href onClick=…>` + `<RowChevron />` as the last cell.
 - Overdue = open job (`OPEN_JOB_STATUSES`) past its deadline: `isJobOverdue(job, todayLocal(useNow()))` from `lib/status.ts`. Keys → labels: `humanize()` (`lib/format.ts`).
-- Fully on React kit components: app shell (Sidebar/Topbar), dashboard, Clients/Jobs/Invoices/Templates lists, Settings > Appearance. All other pages use the kit's CSS classes directly (`className="btn btn-primary"`, `input`, `card`, `data-table`, `tone tone-*`) — swap to the React components when you touch them; never reintroduce hand-written button/input class strings.
+- Fully on React kit components: app shell (Sidebar/Topbar), dashboard, Clients/Jobs/Invoices/Templates lists, Settings > Appearance. Buttons (`<Button>`) and badges (`<Badge>`) are on the kit everywhere except the designer's toolbar chips. Other inputs use the kit's CSS classes directly (`className="btn btn-primary"`, `input`, `card`, `data-table`, `tone tone-*`) — swap to the React components when you touch them; never reintroduce hand-written button/input class strings.
 
 ## Database Entities
 
 ### Auth & Users
 - **Tenant** — name, status (pending/active/suspended/closing), source (platform/signup), plan (reserved), approvedAt, deletionRequestedAt/ByUserId/Reason, deleteAfter
 - **TenantSettings** — tenantId (1:1), companyName, companyAddress, companyLogo (inline PNG/JPEG data URL, ≤1 MB, `PATCH/DELETE /settings/logo`), companyTaxId, bankDetails (printed as "Payment details" on invoices), invoiceFooter (pre-fills new invoices' notes), dateFormat (`DD/MM/YYYY` default | `MM/DD/YYYY` | `YYYY-MM-DD`), translatorsSeePrices (default true), baseCurrency, invoicePrefix, maxUploadSizeMb, allowedFileTypes (JSON), googleTranslateApiKey. The single business identity of the organization: invoice PDF/Word exports and invoice emails use these (there is no per-user "My Business" any more)
-- **User** — email (unique platform-wide), password (bcrypt), firstName, lastName, avatar, isActive, emailVerified, colorPalette, darkMode, mustChangePassword, roleId, tenantId (NULL = platform admin), refreshToken
+- **User** — email (unique platform-wide), password (bcrypt), firstName, lastName, avatar, isActive, emailVerified, colorPalette, darkMode, mustChangePassword, emailReminders (daily reminder email, default on), roleId, tenantId (NULL = platform admin), refreshToken
 - **EmailVerificationToken** — token, userId, expiresAt, used (self sign-up, 24 h)
 - **Role** — name, description. M2M with Permission via `role_permissions`
 - **Permission** — resource, action (e.g., `clients:create`)
@@ -273,7 +274,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 ### Notifications
 - **Notification** — userId, type (job_status_change/deadline_approaching/invoice_overdue/job_assigned), title, message, link, isRead
   - Auto-created on: job status changes, user assignment, deadline within 3 days, invoice overdue
-  - Daily cron at 8 AM checks deadlines and overdue invoices (@nestjs/schedule)
+  - Daily cron at 8 AM checks deadlines and overdue invoices (@nestjs/schedule), then emails each person their new reminders in one message (`emailReminders()` → `MailService.sendReminders`) — active users of active organizations with `User.emailReminders` on (default; switch on the Notifications page)
 
 ## API Endpoints
 
@@ -309,6 +310,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET /` + `PATCH /` — organization settings (PATCH: Admin)
 - `GET /languages`, `GET /labels`, `GET /labels/:category` — global + the organization's own (read)
 - `PATCH /logo` (multipart `logo`, magic-byte checked) / `DELETE /logo` — organization logo (Admin)
+- `GET /getting-started` — the dashboard checklist in one request (Admin)
 - CRUD `/freeform-job-types` (writes: Admin)
 
 ### Platform (`/api/platform`) — platform admin only
@@ -329,7 +331,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET /:id/passports/:copyId/file` — Serve passport file (token via query param)
 
 ### Templates (`/api/templates`)
-- Full CRUD with search, isActive filter, sort
+- Full CRUD with search, isActive filter, sort. The list returns summaries (languages + `fieldCount`, no fields/labels/layout) — `GET /:id` has everything
 - `POST/PATCH/DELETE /:id/fields/:fieldId` — Template fields
 - `PATCH /:id/fields/reorder` — Reorder fields
 - `POST /:id/upload-word` — Upload Word template file
@@ -404,19 +406,20 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/` — Dashboard: summary cards (reports:read), Upcoming deadlines (open jobs, overdue in red; admins toggle Everyone / Mine), admin Getting started checklist. The platform admin is redirected to `/platform`
 - `/clients` — Client list with search, type filter, sort, pagination
 - `/clients/:id` — Client detail (Overview with info/emails/phones/addresses cards, Contacts tab, Passport Copies tab, Jobs tab)
-- `/templates` — Template list (table + card view toggle, search, status filter, sort)
+- `/templates` — Template list (table + card view toggle, search, status filter, sort; banner listing word/designer templates without source/target languages, linking to `/templates/:id?tab=settings`)
 - `/templates/new`, `/templates/:id/setup` — Setup wizard (see Templates entity)
 - `/templates/:id` — Template detail (status line + Setup wizard button, Fields tab with inline table editor limited to the document languages, Layout Designer tab, Word Template tab, Settings tab with document languages)
 - `/jobs` — Jobs list with search, status filter, Assigned column, admin "Assigned to" filter (`?assignee=`: everyone / mine / unassigned / a colleague), sort, pagination
-- `/jobs/new` — Create job form (type, client, deadline, line items with template selection — options show the template's language pair — pricing, then Languages, set by the templates when they define them)
+- `/jobs/new` — Create job form (starts with one template row; title optional — left empty it becomes "<documents> — <client>"; description behind "+ Add a description"; `?clientId=` pre-selects the client; type, client, deadline, line items with template selection — options show the template's language pair — pricing, then Languages, set by the templates when they define them)
 - `/jobs/:id` — Job detail (Details tab, Documents tab, Source Files, Translated Files, linked invoice display, "Create Invoice" button on delivered jobs)
-- `/documents/:id` — Document fill page (template fields, GT popup, save/complete/export)
+- `/documents/:id` — Document fill page (template fields, GT popup, save/complete/export; **autosaves** 2.5 s after the last change — saves are serialized, and a save that finished while typing continued doesn't clear the unsaved flag)
 - `/invoices` — Invoice list with search, status/client filters, sort, pagination
 - `/invoices/new` — Create invoice form (client, dates, tax rate, line items with job linking). Supports `?jobId=` query param for pre-fill from job detail page
 - `/invoices/:id` — Invoice detail (status workflow, edit mode for drafts, Record Payment modal for partial/full payments, payments list with delete, balance due, line items with job links, PDF/Word export buttons)
 - `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
 - `/team` — Team (organization Admin only; sidebar group "Organization", `adminOnly` nav item): invite (optional names, role), pending invites (copy link / resend / cancel), members (role, open jobs → their job list, (de)activate, reset password, delete), and what each role may do. Was Settings › Users / Roles
-- `/notifications` — Full notifications list with read/unread filter
+- `/notifications` — Full notifications list with read/unread filter + "Email me reminders" switch
+- `/activity` — the organization's activity log (Admin; sidebar "Organization"): who did what, filter by area/person/search. `/platform/activity` — what platform admins did
 - `/reports` — Reports page (Revenue: range presets — last 6/12 months, this/last year — with total + best month, monthly/weekly; Revenue line chart, By Client bar chart, Job Status donut chart via recharts — charts live in `reports/charts.tsx`, loaded with `next/dynamic` so recharts stays off other pages)
 - `/settings` — Settings (`?tab=general|uploads|…` opens a tab). Organization admin: General (identity + logo, currency, invoice prefix, date format, Team: translators see prices, Google Translate, delete organization), File Uploads, Appearance, Security, Freeform Types (`?tab=users|roles` → redirects to `/team`). Platform admin: Email & Sign-ups, Languages, Labels (global), Appearance, Security
 

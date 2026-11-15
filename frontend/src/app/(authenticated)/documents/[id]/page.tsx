@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Badge } from '@/components/ui/Badge';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { useUnsavedChangesGuard, confirmLeave } from '@/lib/unsaved-changes';
@@ -28,6 +29,24 @@ interface Job { id: string; title: string; jobNumber: string; status: string; so
 
 const LOCKED_JOB_STATUSES = ['delivered', 'invoiced', 'paid'];
 
+/** Changes are saved this long after the last keystroke. */
+const AUTOSAVE_MS = 2500;
+
+/** "fieldId_page_entry" → value map, as the save-values body. */
+function toFieldValues(values: Record<string, string>) {
+  return Object.entries(values)
+    .filter(([, v]) => v.trim())
+    .map(([key, value]) => {
+      const [fieldId, page, entry] = key.split('_');
+      return {
+        templateFieldId: fieldId,
+        pageNumber: parseInt(page) || 1,
+        entryIndex: entry ? parseInt(entry) : undefined,
+        value,
+      };
+    });
+}
+
 export default function DocumentFillPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -47,6 +66,48 @@ export default function DocumentFillPage() {
 
   // Warn on unsaved changes (browser close, sidebar links, search, notifications)
   useUnsavedChangesGuard(dirty);
+
+  // Saving: by hand (Save) and automatically a moment after the last change.
+  // `edits` counts changes, so a save that finished while the user kept typing
+  // doesn't mark the newer text as saved; saves run one after another.
+  const edits = useRef(0);
+  const lastSave = useRef<Promise<unknown>>(Promise.resolve());
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [autoFailed, setAutoFailed] = useState(false);
+  const canEdit = !!doc && !!job && !LOCKED_JOB_STATUSES.includes(job.status) && doc.myAccess !== 'view';
+
+  const saveValues = useCallback(async (auto: boolean): Promise<boolean> => {
+    if (!doc) return false;
+    const seen = edits.current;
+    setSaving(true);
+    const run = lastSave.current.catch(() => undefined).then(() =>
+      api.post(`/documents/${doc.id}/save-values`, { values: toFieldValues(values) }));
+    lastSave.current = run;
+    try {
+      await run;
+      if (edits.current === seen) setDirty(false);
+      setSavedAt(new Date());
+      setAutoFailed(false);
+      if (!auto) {
+        setMessage({ text: 'Saved', tone: 'success' });
+        setTimeout(() => setMessage(null), 3000);
+      }
+      return true;
+    } catch (err) {
+      logger.error('Failed to save document', err, 'documents');
+      if (auto) setAutoFailed(true);
+      else setMessage({ text: err instanceof ApiError ? `Save failed: ${err.message}` : 'Save failed', tone: 'danger' });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [doc, values]);
+
+  useEffect(() => {
+    if (!dirty || !canEdit) return;
+    const timer = setTimeout(() => { void saveValues(true); }, AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [dirty, canEdit, saveValues]);
 
   useEffect(() => {
     api.get<{ configured: boolean }>('/translate/status')
@@ -128,6 +189,7 @@ export default function DocumentFillPage() {
   const setValue = (fieldId: string, page: number, value: string, entry?: number) => {
     const key = getValueKey(fieldId, page, entry);
     setValues((prev) => ({ ...prev, [key]: value }));
+    edits.current += 1;
     setDirty(true);
   };
 
@@ -143,33 +205,7 @@ export default function DocumentFillPage() {
   };
 
   // Resolves false (with the error shown) if the save failed.
-  const handleSave = async (): Promise<boolean> => {
-    setSaving(true);
-    const fieldValues = Object.entries(values)
-      .filter(([, v]) => v.trim())
-      .map(([key, value]) => {
-        const [fieldId, page, entry] = key.split('_');
-        return {
-          templateFieldId: fieldId,
-          pageNumber: parseInt(page) || 1,
-          entryIndex: entry ? parseInt(entry) : undefined,
-          value,
-        };
-      });
-
-    try {
-      await api.post(`/documents/${doc.id}/save-values`, { values: fieldValues });
-      setDirty(false);
-      flash('Saved');
-      return true;
-    } catch (err) {
-      logger.error('Failed to save document', err, 'documents');
-      flash(err instanceof ApiError ? `Save failed: ${err.message}` : 'Save failed', 'danger');
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  };
+  const handleSave = () => saveValues(false);
 
   const handleMarkComplete = async () => {
     if (!(await handleSave())) return;
@@ -281,14 +317,20 @@ export default function DocumentFillPage() {
           <h1 className="text-2xl font-bold tracking-tight text-text">{doc.template.name}</h1>
           <p className="text-sm text-text-secondary mt-1">
             {sourceLang.name}{targetLang ? ` → ${targetLang.name}` : ''}
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
-              doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'
-            }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
+            <Badge className="ml-2" tone={doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'}>
+              {doc.status === 'completed' ? 'Completed' : 'Draft'}
+            </Badge>
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {!locked && (
             <>
+              <span className={`self-center text-xs ${autoFailed ? 'text-danger' : 'text-text-muted'}`} aria-live="polite">
+                {saving ? 'Saving…'
+                  : autoFailed ? 'Not saved — check your connection, or click Save'
+                  : dirty ? 'Unsaved changes'
+                  : savedAt ? `Saved automatically at ${savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Changes save automatically'}
+              </span>
               <Button onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving...' : 'Save'}
               </Button>
@@ -457,10 +499,9 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
         </div>
 
         <div className="text-center mb-4">
-          <button onClick={handleTranslate} disabled={loading || !sourceText.trim()}
-            className="btn btn-primary">
+          <Button variant="primary" onClick={handleTranslate} disabled={loading || !sourceText.trim()}>
             {loading ? 'Translating...' : 'Translate ↓'}
-          </button>
+          </Button>
         </div>
         {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 

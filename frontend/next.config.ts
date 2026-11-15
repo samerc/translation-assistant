@@ -24,7 +24,8 @@ const csp = [
   "frame-src https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
-  "font-src 'self' data:",
+  // blob: fonts embedded in a Word file, shown by the template editor (docx-preview).
+  "font-src 'self' data: blob:",
   `connect-src 'self'${apiOrigin ? " " + apiOrigin : ""}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",

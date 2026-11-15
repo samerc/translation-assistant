@@ -17,6 +17,7 @@ import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { TenantDeletionService } from './tenant-deletion.service.js';
 import { RequestDeletionDto } from './dto/platform.dto.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 /**
  * The caller's own organization (its Admin): asking the platform admin to
@@ -35,6 +36,7 @@ export class OrganizationController {
   }
 
   @Post('deletion-request')
+  @Audited('organization.deletion_requested', { body: ['reason'] })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('settings:update')
   @AdminOnly()
@@ -44,6 +46,7 @@ export class OrganizationController {
   }
 
   @Delete('deletion-request')
+  @Audited('organization.deletion_withdrawn')
   @RequirePermissions('settings:update')
   @AdminOnly()
   withdraw(@CurrentActor() actor: Actor) {

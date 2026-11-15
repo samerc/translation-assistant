@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -142,9 +143,9 @@ function UpcomingDeadlines() {
                     <div className="text-sm font-medium text-text truncate">{job.title}</div>
                     <div className="text-xs text-text-muted truncate">{job.jobNumber}{job.client ? ` · ${job.client.name}` : ''}</div>
                   </div>
-                  <span className={`hidden sm:inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass(JOB_STATUS_BADGE, job.status)}`}>
+                  <Badge className="hidden sm:inline-flex" tone={badgeClass(JOB_STATUS_BADGE, job.status)}>
                     {STATUS_LABEL[job.status] ?? job.status}
-                  </span>
+                  </Badge>
                   <span className={`text-xs font-semibold tabular-nums whitespace-nowrap ${overdue ? 'text-danger' : dueToday ? 'text-warning' : 'text-text-secondary'}`}>
                     {overdue ? 'Overdue · ' : dueToday ? 'Today · ' : ''}{formatDate(job.deadline)}
                   </span>
@@ -172,24 +173,18 @@ function GettingStarted() {
 
   useEffect(() => {
     if (dismissed) return;
-    const safe = <T,>(p: Promise<T>, fallback: T) => p.catch(() => fallback);
-    Promise.all([
-      safe(api.get<{ companyName: string; companyAddress: string | null }>('/settings'), { companyName: '', companyAddress: null }),
-      safe(api.get<unknown[]>('/templates'), []),
-      safe(api.get<{ total: number }>('/clients?limit=1'), { total: 0 }),
-      safe(api.get<unknown[]>('/users'), []),
-      safe(api.get<{ configured: boolean }>('/translate/status'), { configured: false }),
-      safe(api.get<unknown[]>('/auth/invites'), []),
-    ]).then(([settings, templates, clients, users, gt, invites]) => {
-      setSteps([
-        // The name comes from the organization; the address is what the admin adds.
-        { done: Boolean(settings.companyName?.trim() && settings.companyAddress?.trim()), title: 'Add your company details', hint: 'Address, logo and payment details appear on invoices.', href: '/settings?tab=general' },
-        { done: templates.length > 0, title: 'Create a document template', hint: 'Birth certificates, diplomas, contracts…', href: '/templates' },
-        { done: clients.total > 0, title: 'Add your first client', hint: 'A company or a person you translate for.', href: '/clients' },
-        { done: users.length > 1 || invites.length > 0, title: 'Invite a translator', hint: 'Team › Invite.', href: '/team' },
-        { done: gt.configured, title: 'Connect Google Translate (optional)', hint: 'Turns on the GT helper in documents.', href: '/settings?tab=general' },
-      ]);
-    });
+    api.get<{ companyDetails: boolean; template: boolean; client: boolean; team: boolean; googleTranslate: boolean }>('/settings/getting-started')
+      .then((d) => {
+        setSteps([
+          // The name comes from the organization; the address is what the admin adds.
+          { done: d.companyDetails, title: 'Add your company details', hint: 'Address, logo and payment details appear on invoices.', href: '/settings?tab=general' },
+          { done: d.template, title: 'Create a document template', hint: 'Birth certificates, diplomas, contracts…', href: '/templates' },
+          { done: d.client, title: 'Add your first client', hint: 'A company or a person you translate for.', href: '/clients' },
+          { done: d.team, title: 'Invite a translator', hint: 'Team › Invite.', href: '/team' },
+          { done: d.googleTranslate, title: 'Connect Google Translate (optional)', hint: 'Turns on the GT helper in documents.', href: '/settings?tab=general' },
+        ]);
+      })
+      .catch(() => setSteps(null)); // not an admin, or offline: no checklist
   }, [dismissed]);
 
   if (dismissed || !steps || steps.every((s) => s.done)) return null;

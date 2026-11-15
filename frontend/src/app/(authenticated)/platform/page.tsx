@@ -234,7 +234,6 @@ function Organizations() {
       {loadError && <Alert className="mb-4">Couldn&apos;t load organizations. Try again in a moment.</Alert>}
 
       <TableCard minWidth={760}>
-        <table className="data-table">
           <thead>
             <tr>
               <th className="text-left">Organization</th>
@@ -287,8 +286,9 @@ function Organizations() {
                 </td>
                 <td className="text-right tabular-nums">{t.userCount ?? 0}</td>
                 <td className="text-text-secondary">{formatDate(t.createdAt)}</td>
-                <td className="text-right whitespace-nowrap">
-                  {t.status === 'pending' ? (
+                {/* RowChevron is a cell of its own. */}
+                {t.status === 'pending' ? (
+                  <td className="text-right whitespace-nowrap">
                     <span className="inline-flex gap-2">
                       <Button size="sm" variant="primary" disabled={busyId === t.id} onClick={(e) => act(e, t, 'approve')}>
                         Approve
@@ -297,14 +297,13 @@ function Organizations() {
                         Reject
                       </Button>
                     </span>
-                  ) : (
-                    <RowChevron />
-                  )}
-                </td>
+                  </td>
+                ) : (
+                  <RowChevron />
+                )}
               </tr>
             ))}
           </tbody>
-        </table>
       </TableCard>
     </div>
   );

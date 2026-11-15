@@ -43,6 +43,7 @@ import { contentDisposition } from '../../common/utils/content-disposition.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
 import { TenantsService } from '../tenants/tenants.service.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 /** Money fields a caller who can't see prices must not set either. */
 const JOB_PRICE_FIELDS = [
@@ -118,6 +119,7 @@ export class JobsController {
   }
 
   @Post()
+  @Audited('job.created', { target: 'job' })
   @RequirePermissions('jobs:create')
   async create(@Body() dto: CreateJobDto, @CurrentActor() actor: Actor) {
     if (await this.tenantsService.hidesPrices(actor)) {
@@ -131,6 +133,7 @@ export class JobsController {
   }
 
   @Patch(':id')
+  @Audited('job.updated', { target: 'job', bodyKeys: true })
   @RequirePermissions('jobs:update')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -144,12 +147,14 @@ export class JobsController {
   }
 
   @Delete(':id')
+  @Audited('job.deleted', { target: 'job' })
   @RequirePermissions('jobs:delete')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.remove(id);
   }
 
   @Patch(':id/status')
+  @Audited('job.status_changed', { target: 'job', body: ['status'] })
   @RequirePermissions('jobs:update')
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -160,6 +165,7 @@ export class JobsController {
   }
 
   @Post(':id/reopen')
+  @Audited('job.reopened', { target: 'job' })
   @RequirePermissions('jobs:update')
   reopenJob(@Param('id', ParseUUIDPipe) id: string) {
     return this.jobsService.reopenJob(id);
@@ -206,6 +212,11 @@ export class JobsController {
   // ── Users ──
 
   @Post(':id/users')
+  @Audited('job.user_assigned', {
+    target: 'job',
+    body: ['permissionLevel'],
+    refs: [{ key: 'user', type: 'user', from: 'body', name: 'userId' }],
+  })
   @RequirePermissions('jobs:update')
   assignUser(
     @Param('id', ParseUUIDPipe) id: string,
@@ -215,6 +226,10 @@ export class JobsController {
   }
 
   @Delete(':id/users/:userId')
+  @Audited('job.user_removed', {
+    target: 'job',
+    refs: [{ key: 'user', type: 'user', from: 'param', name: 'userId' }],
+  })
   @RequirePermissions('jobs:update')
   removeUser(
     @Param('id', ParseUUIDPipe) id: string,

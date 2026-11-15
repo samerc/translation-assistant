@@ -1075,6 +1075,7 @@ export class AuthService {
       isActive: user.isActive,
       colorPalette: user.colorPalette,
       darkMode: user.darkMode,
+      emailReminders: user.emailReminders,
       mustChangePassword: user.mustChangePassword,
       // The organization the user works in; null for the platform admin.
       tenant: user.tenant

@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/Button';
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -85,12 +86,12 @@ export default function ClientDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => router.push(`/jobs/new?clientId=${client.id}`)} className="btn btn-primary">
+          <Button variant="primary" onClick={() => router.push(`/jobs/new?clientId=${client.id}`)}>
             + New Job
-          </button>
-          <button onClick={handleDelete} className="btn btn-danger">
+          </Button>
+          <Button variant="danger" onClick={handleDelete}>
             Delete
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -167,10 +168,10 @@ function OverviewTab({ client, onUpdate }: { client: Client; onUpdate: () => voi
                 className="input w-full resize-none" />
             </div>
             <div className="flex gap-2">
-              <button type="submit" disabled={saving} className="btn btn-primary">
+              <Button variant="primary" type="submit" disabled={saving}>
                 {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button type="button" onClick={() => setEditing(false)} className="btn btn-secondary">Cancel</button>
+              </Button>
+              <Button onClick={() => setEditing(false)}>Cancel</Button>
             </div>
           </form>
         ) : (
@@ -386,12 +387,12 @@ function MultiValueCard({ title, items, placeholder, inputType = 'text', labelOp
             />
           </div>
           <div className="flex gap-2 mt-2">
-            <button type="submit" disabled={saving} className="btn btn-primary btn-sm">
+            <Button variant="primary" size="sm" type="submit" disabled={saving}>
               {saving ? 'Saving...' : editingId !== null ? 'Update' : 'Add'}
-            </button>
-            <button type="button" onClick={cancelForm} className="btn btn-secondary btn-sm">
+            </Button>
+            <Button size="sm" onClick={cancelForm}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -455,8 +456,7 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
   return (
     <div className="max-w-3xl">
       <div className="flex justify-end mb-4">
-        <button onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' }); }}
-          className="btn btn-primary">+ Add Contact</button>
+        <Button variant="primary" onClick={() => { setShowForm(true); setEditingId(null); setForm({ firstName: '', lastName: '', email: '', phone: '', role: '', notes: '' }); }}>+ Add Contact</Button>
       </div>
 
       {showForm && (
@@ -469,8 +469,8 @@ function ContactsTab({ clientId, contacts, onUpdate }: { clientId: string; conta
             <Field label="Role/Title" value={form.role} onChange={(v) => setForm({ ...form, role: v })} />
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Saving...' : editingId ? 'Update' : 'Add Contact'}</button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="btn btn-secondary">Cancel</button>
+            <Button variant="primary" type="submit" disabled={saving}>{saving ? 'Saving...' : editingId ? 'Update' : 'Add Contact'}</Button>
+            <Button onClick={() => { setShowForm(false); setEditingId(null); }}>Cancel</Button>
           </div>
         </form>
       )}
@@ -565,9 +565,9 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
             <input type="file" accept="image/*,.pdf" required
               className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
-          <button type="submit" disabled={uploading} className="btn btn-primary">
+          <Button variant="primary" type="submit" disabled={uploading}>
             {uploading ? 'Uploading...' : 'Upload'}
-          </button>
+          </Button>
         </div>
         {error && (
           <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">
@@ -625,8 +625,7 @@ function JobsTab({ clientId }: { clientId: string }) {
   return (
     <div className="max-w-3xl">
       <div className="flex justify-end mb-4">
-        <button onClick={() => router.push(`/jobs/new?clientId=${clientId}`)}
-          className="btn btn-primary">+ New Job</button>
+        <Button variant="primary" onClick={() => router.push(`/jobs/new?clientId=${clientId}`)}>+ New Job</Button>
       </div>
       {jobs.length === 0 ? (
         <div className="card p-8 text-center text-text-muted">No jobs for this client yet.</div>

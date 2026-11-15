@@ -1,7 +1,8 @@
 'use client';
 
+import { Button } from '@/components/ui/Button';
 import { useState, useEffect, FormEvent } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import DOMPurify from 'dompurify';
 import { api, ApiError } from '@/lib/api';
@@ -42,7 +43,11 @@ export default function TemplateDetailPage() {
   const router = useRouter();
   const [template, setTemplate] = useState<Template | null>(null);
   const [languages, setLanguages] = useState<Language[]>([]);
-  const [activeTab, setActiveTab] = useState<Tab>('fields');
+  // ?tab=settings etc. opens that tab (links from the templates list).
+  const requestedTab = useSearchParams().get('tab');
+  const [activeTab, setActiveTab] = useState<Tab>(
+    requestedTab === 'designer' || requestedTab === 'word' || requestedTab === 'settings' ? requestedTab : 'fields',
+  );
   const { hasPermission } = useAuth();
   // Templates are shared by every user's documents — only roles with
   // templates:update may change them; everyone else gets a read-only view.
@@ -96,7 +101,7 @@ export default function TemplateDetailPage() {
         </div>
         <div className="flex gap-2">
           {canEdit && <Link href={`/templates/${template.id}/setup`} className="btn btn-primary">Setup wizard</Link>}
-          {canDelete && <button onClick={handleDelete} className="btn btn-danger">Delete</button>}
+          {canDelete && <Button variant="danger" onClick={handleDelete}>Delete</Button>}
         </div>
       </div>
 
@@ -320,9 +325,9 @@ function FieldsTab({ template, languages, onUpdate, readOnly }: { template: Temp
           )}
         </div>
         {!readOnly && (
-          <button onClick={startNewRow} className="btn btn-primary">
+          <Button variant="primary" onClick={startNewRow}>
             + Add Field
-          </button>
+          </Button>
         )}
       </div>
 
@@ -340,12 +345,12 @@ function FieldsTab({ template, languages, onUpdate, readOnly }: { template: Temp
           <datalist id="bulk-group-options">
             {existingGroups.map((g) => <option key={g} value={g} />)}
           </datalist>
-          <button onClick={handleBulkGroup} disabled={saving} className="btn btn-primary btn-sm">
+          <Button variant="primary" size="sm" onClick={handleBulkGroup} disabled={saving}>
             Apply
-          </button>
-          <button onClick={() => setShowBulkGroup(false)} className="btn btn-secondary btn-sm">
+          </Button>
+          <Button size="sm" onClick={() => setShowBulkGroup(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       )}
 
@@ -718,9 +723,9 @@ function DesignerTab({ template, onUpdate, readOnly }: { template: Template; onU
 
         {!readOnly && (
           <div className="mt-4 flex items-center gap-3">
-            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+            <Button variant="primary" onClick={handleSave} disabled={saving}>
               {saving ? 'Saving...' : 'Save Layout'}
-            </button>
+            </Button>
             {message && <span className="text-sm text-success">{message}</span>}
           </div>
         )}
@@ -1030,9 +1035,9 @@ function WordTemplateTab({ template, onUpdate, readOnly }: { template: Template;
             <input type="file" accept=".docx" required
               className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
-          <button type="submit" disabled={uploading} className="btn btn-primary">
+          <Button variant="primary" type="submit" disabled={uploading}>
             {uploading ? 'Uploading...' : 'Upload'}
-          </button>
+          </Button>
         </div>
         {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
         <p className="text-xs text-text-muted mt-3">
@@ -1112,10 +1117,9 @@ function WordTemplateTab({ template, onUpdate, readOnly }: { template: Template;
                       ))}
                     </div>
                     {!readOnly && (
-                      <button onClick={handleSyncPlaceholders} disabled={syncing}
-                        className="btn btn-primary btn-sm w-full">
+                      <Button variant="primary" size="sm" className="w-full" onClick={handleSyncPlaceholders} disabled={syncing}>
                         Create Fields for All ({preview.unlinked.length})
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -1262,9 +1266,9 @@ function SettingsTab({ template, languages, onUpdate, readOnly }: { template: Te
       </div>
       {!readOnly && (
         <div className="mt-4 flex items-center gap-3">
-          <button type="submit" disabled={saving} className="btn btn-primary">
+          <Button variant="primary" type="submit" disabled={saving}>
             {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          </Button>
           {message && <span className="text-sm text-success">{message}</span>}
         </div>
       )}

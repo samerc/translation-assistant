@@ -311,9 +311,9 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
                     </Link>
                   </td>
                   <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.isActive ? 'tone tone-success' : 'tone tone-neutral'}`}>
+                    <Badge tone={u.isActive ? 'tone tone-success' : 'tone tone-neutral'}>
                       {u.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="py-2 text-right whitespace-nowrap">
                     {u.id === me?.id ? (

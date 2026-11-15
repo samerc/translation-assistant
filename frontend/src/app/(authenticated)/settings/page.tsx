@@ -332,7 +332,7 @@ function DeleteOrganizationCard() {
             {request.requestedAt ? ` on ${formatDate(request.requestedAt)}` : ''}. It is waiting for approval;
             nothing has been deleted yet. You&apos;ll get an email when it is handled.
           </div>
-          <button type="button" onClick={withdraw} disabled={busy} className="btn btn-secondary mt-4">Withdraw request</button>
+          <Button className="mt-4" onClick={withdraw} disabled={busy}>Withdraw request</Button>
         </>
       ) : !open ? (
         <>
@@ -341,7 +341,7 @@ function DeleteOrganizationCard() {
             invoices, templates, files and every user account. Once approved, nobody can sign in, and the data is permanently
             deleted after a grace period. Download anything you must keep (for example invoices) first.
           </p>
-          <button type="button" onClick={() => setOpen(true)} className="btn btn-danger">Request deletion…</button>
+          <Button variant="danger" onClick={() => setOpen(true)}>Request deletion…</Button>
         </>
       ) : (
         <form onSubmit={submit} className="space-y-4 mt-3">
@@ -361,10 +361,10 @@ function DeleteOrganizationCard() {
             <input id="del-password" type="password" autoComplete="current-password" className="input" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </div>
           <div className="flex gap-2">
-            <button type="submit" disabled={busy || form.confirmName.trim() !== orgName.trim()} className="btn btn-danger">
+            <Button variant="danger" type="submit" disabled={busy || form.confirmName.trim() !== orgName.trim()}>
               {busy ? 'Sending…' : 'Send deletion request'}
-            </button>
-            <button type="button" onClick={() => { setOpen(false); setError(''); }} className="btn btn-secondary">Cancel</button>
+            </Button>
+            <Button onClick={() => { setOpen(false); setError(''); }}>Cancel</Button>
           </div>
         </form>
       )}
@@ -435,12 +435,11 @@ function LanguagesSettings() {
         <p className="text-sm text-text-secondary">
           The languages every organization can use for templates and translation jobs.
         </p>
-        <button
+        <Button variant="primary"
           onClick={() => { setShowForm(true); setEditingId(null); setForm({ code: '', name: '', direction: 'ltr' }); }}
-          className="btn btn-primary"
         >
           + Add Language
-        </button>
+        </Button>
       </div>
 
       {/* Add/Edit form */}
@@ -484,12 +483,12 @@ function LanguagesSettings() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <button type="submit" className="btn btn-primary">
+            <Button variant="primary" type="submit">
               {editingId ? 'Update' : 'Add Language'}
-            </button>
-            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="btn btn-secondary">
+            </Button>
+            <Button onClick={() => { setShowForm(false); setEditingId(null); }}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -667,18 +666,16 @@ function LabelsSettings() {
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(cat.id); } }}
                     className="input flex-1"
                   />
-                  <button
+                  <Button variant="primary" size="sm"
                     onClick={() => handleAdd(cat.id)}
-                    className="btn btn-primary btn-sm"
                   >
                     Add
-                  </button>
-                  <button
+                  </Button>
+                  <Button size="sm"
                     onClick={() => setAdding(null)}
-                    className="btn btn-secondary btn-sm"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -772,13 +769,12 @@ function UploadSettings() {
             onChange={(e) => setSettings({ ...settings, maxUploadSizeMb: parseInt(e.target.value) || 5 })}
             className="input w-32"
           />
-          <button
+          <Button variant="primary"
             onClick={handleSaveSize}
             disabled={saving}
-            className="btn btn-primary"
           >
             Save
-          </button>
+          </Button>
           {message && <span className="text-sm text-success">{message}</span>}
         </div>
       </div>
@@ -847,12 +843,11 @@ function FileTypePills({ title, description, items, inputValue, onInputChange, o
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd(); } }}
           className="input flex-1"
         />
-        <button
+        <Button variant="primary" size="sm"
           onClick={onAdd}
-          className="btn btn-primary btn-sm"
         >
           Add
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -1004,13 +999,12 @@ function SecuritySettings() {
         <p className="text-sm text-text-secondary mb-4">
           This will invalidate all active sessions across all devices. You will need to log in again.
         </p>
-        <button
+        <Button variant="danger"
           onClick={handleLogoutEverywhere}
           disabled={revoking}
-          className="btn btn-danger"
         >
           {revoking ? 'Logging out...' : 'Log Out All Devices'}
-        </button>
+        </Button>
       </div>
 
       {/* Active sessions */}
@@ -1180,7 +1174,7 @@ function EmailSettings() {
             <label htmlFor="graceDays" className="block text-sm font-medium text-text mb-1.5">Grace period (days)</label>
             <input id="graceDays" type="number" min={1} max={365} required className="input w-32" value={graceDays} onChange={(e) => setGraceDays(e.target.value)} />
           </div>
-          <button type="submit" disabled={graceBusy} className="btn btn-primary">{graceBusy ? 'Saving…' : 'Save'}</button>
+          <Button variant="primary" type="submit" disabled={graceBusy}>{graceBusy ? 'Saving…' : 'Save'}</Button>
         </form>
       </div>
 
@@ -1223,9 +1217,9 @@ function EmailSettings() {
             <label htmlFor="appBaseUrl" className="block text-sm font-medium text-text mb-1.5">App base URL (for links in emails)</label>
             <input id="appBaseUrl" value={form.appBaseUrl} onChange={(e) => setForm({ ...form, appBaseUrl: e.target.value })} placeholder="https://translate.fancyshark.com" className={inputClass} />
           </div>
-          <button type="submit" disabled={saving} className="btn btn-primary">
+          <Button variant="primary" type="submit" disabled={saving}>
             {saving ? 'Saving...' : 'Save email settings'}
-          </button>
+          </Button>
         </form>
       </div>
 
@@ -1237,9 +1231,9 @@ function EmailSettings() {
             <label htmlFor="testEmail" className="block text-sm font-medium text-text mb-1.5">Recipient</label>
             <input id="testEmail" type="email" {...NO_AUTOFILL} value={testEmail} onChange={(e) => setTestEmail(e.target.value)} className={inputClass} />
           </div>
-          <button onClick={sendTest} disabled={testing || !testEmail} className="btn btn-primary">
+          <Button variant="primary" onClick={sendTest} disabled={testing || !testEmail}>
             {testing ? 'Sending...' : 'Send test'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1385,12 +1379,11 @@ function FreeformTypesSettings() {
         <p className="text-sm text-text-secondary">
           Reusable job types with a default price. Selecting one on a freeform job pre-fills a line item (still editable).
         </p>
-        <button
+        <Button variant="primary" className="flex-shrink-0"
           onClick={() => { reset(); setShowForm(true); }}
-          className="btn btn-primary flex-shrink-0"
         >
           + Add Type
-        </button>
+        </Button>
       </div>
 
       {error && <div className="p-3 tone tone-danger rounded-lg text-sm mb-4">{error}</div>}
@@ -1420,12 +1413,12 @@ function FreeformTypesSettings() {
               className="input w-full" />
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary">
+            <Button variant="primary" type="submit">
               {editingId ? 'Update' : 'Add Type'}
-            </button>
-            <button type="button" onClick={reset} className="btn btn-secondary">
+            </Button>
+            <Button onClick={reset}>
               Cancel
-            </button>
+            </Button>
           </div>
         </form>
       )}

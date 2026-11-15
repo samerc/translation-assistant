@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useAuth } from '@/lib/auth-context';
 import {
-  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UserPlusIcon, UsersIcon, XIcon,
+  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, ClockIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UserPlusIcon, UsersIcon, XIcon,
 } from '@/components/ui/icons';
 
 interface NavItem {
@@ -43,6 +43,7 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     label: 'Organization',
     items: [
       { label: 'Team', href: '/team', icon: UserPlusIcon, adminOnly: true },
+      { label: 'Activity', href: '/activity', icon: ClockIcon, adminOnly: true },
     ],
   },
 ];
@@ -50,7 +51,10 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
 // The platform admin manages organizations, not an organization's work.
 const platformGroups: { label?: string; items: NavItem[] }[] = [
   {
-    items: [{ label: 'Organizations', href: '/platform', icon: BuildingIcon }],
+    items: [
+      { label: 'Organizations', href: '/platform', icon: BuildingIcon },
+      { label: 'Activity', href: '/platform/activity', icon: ClockIcon },
+    ],
   },
 ];
 
@@ -65,7 +69,10 @@ export default function Sidebar() {
   const { user, hasPermission } = useAuth();
   const groups = user?.isPlatformAdmin ? platformGroups : navGroups;
 
-  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/'));
+  const matches = (href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/'));
+  // The most specific item wins (/platform/activity is Activity, not Organizations).
+  const hrefs = [...groups.flatMap((g) => g.items), ...bottomItems].map((i) => i.href);
+  const isActive = (href: string) => matches(href) && !hrefs.some((h) => h.length > href.length && h.startsWith(href) && matches(h));
 
   const renderItem = (item: NavItem) => {
     const active = isActive(item.href);

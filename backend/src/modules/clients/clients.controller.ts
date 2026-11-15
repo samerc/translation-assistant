@@ -39,6 +39,7 @@ import { Public } from '../../common/decorators/public.decorator.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 const uploadStorage = tenantDiskStorage('passports');
 
@@ -85,6 +86,7 @@ export class ClientsController {
   }
 
   @Post()
+  @Audited('client.created', { target: 'client' })
   @RequirePermissions('clients:create')
   create(@Body() dto: CreateClientDto, @CurrentActor() actor: Actor) {
     return this.clientsService.create(dto, actor);
@@ -102,6 +104,7 @@ export class ClientsController {
   }
 
   @Delete(':id')
+  @Audited('client.deleted', { target: 'client' })
   @RequirePermissions('clients:delete')
   async remove(
     @Param('id', ParseUUIDPipe) id: string,

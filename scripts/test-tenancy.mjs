@@ -798,6 +798,43 @@ console.log('== job assignment + translator price visibility ==');
   check('turned back on: translators see prices again', (await req(a.T, 'GET', `/jobs/${handed.data.id}`)).data.calculatedTotal !== undefined);
 }
 
+console.log('== activity (audit) log ==');
+{
+  const log = async (token, qs = '') => req(token, 'GET', `/audit-log${qs}`);
+  const all = await log(a.A, '?limit=100');
+  const entries = all.data?.data ?? [];
+  const find = (action, pred = () => true) => entries.find((e) => e.action === action && pred(e));
+  check('admin reads the organization log', ok(all) && entries.length > 0, show(all));
+  check('client created: by name', !!find('client.created', (e) => e.targetLabel === `Client A ${RUN}` && e.actorName === 'Admin A'));
+  check('user created: with role, never the password', !!find('user.created', (e) => e.details?.role === 'Translator') && !all.text.includes(PW));
+  check('invoice payment recorded with amount', !!find('invoice.payment_recorded', (e) => e.targetLabel === 'INV-0001' && Number(e.details?.paidAmount) === 4));
+  check('status change keeps the new status', !!find('invoice.status_changed', (e) => e.details?.status === 'sent'));
+  check("no entry from the other organization", !all.text.includes(`Client B ${RUN}`) && !all.text.includes('Admin B'));
+  check('translator: 403', (await log(a.T)).status === 403);
+  check('platform admin: 403 on an organization log', (await log(P)).status === 403);
+  // A deleted record keeps its name in the log.
+  const gone = await req(a.A, 'POST', '/clients', { type: 'person', name: `Short-lived ${RUN}` });
+  await req(a.A, 'DELETE', `/clients/${gone.data?.id}`);
+  const del = await log(a.A, '?action=client.deleted');
+  check('deleted client: still named', ok(del) && del.data.data.some((e) => e.targetLabel === `Short-lived ${RUN}`), show(del));
+  const failed = await req(a.A, 'DELETE', `/clients/${b.ids.client}`);
+  const after = await log(a.A, '?action=client.deleted');
+  check('failed request (other tenant id → 404) not logged', failed.status === 404 && after.data.total === del.data.total);
+  check('search filter', (await log(a.A, `?search=${encodeURIComponent(`Short-lived ${RUN}`)}`)).data.total === 2);
+  check('who filter', (await log(a.A, `?actorUserId=${a.ids.admin}&limit=1`)).data.data[0]?.actorUserId === a.ids.admin);
+  check('people list for the filter', ((await req(a.A, 'GET', '/audit-log/actors')).data ?? []).some((x) => x.id === a.ids.admin));
+  // Platform actions on an organization show in its log.
+  const t = (await req(P, 'GET', `/platform/tenants/${a.ids.tenant}`)).data;
+  await req(P, 'PATCH', `/platform/tenants/${a.ids.tenant}`, { name: t.name });
+  const plat = await log(a.A, '?action=tenant');
+  check('platform action visible to the organization', ok(plat) && plat.data.data.some((e) => e.action === 'tenant.updated' && e.byPlatform));
+  check("…but not to another organization", !(await log(b.A, '?action=tenant')).data.data.some((e) => e.targetId === a.ids.tenant && e.action === 'tenant.updated'));
+  const platformLog = await req(P, 'GET', '/platform/audit-log?action=tenant.created');
+  check('platform log: what platform admins did', ok(platformLog) && platformLog.data.data.some((e) => e.targetId === a.ids.tenant));
+  check('platform log: tenant admin 403', (await req(a.A, 'GET', '/platform/audit-log')).status === 403);
+  check('bad filter → 400', (await log(a.A, '?action=%27or%201')).status === 400);
+}
+
 console.log(`\nTENANCY: ${pass} pass, ${fail} fail`);
 if (fail) {
   console.log('\nFailures:\n' + failures.map((f) => ' - ' + f).join('\n'));

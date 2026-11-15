@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useDebounce } from '@/lib/use-debounce';
@@ -26,8 +27,12 @@ interface Template {
   pricePerPage: number;
   discountedPricePerPage: number | null;
   isActive: boolean;
-  fields: { id: string }[];
+  /** Number of fields (the list doesn't send the fields themselves). */
+  fieldCount: number;
   createdAt: string;
+  /** Translated from / into (none = any language). */
+  sourceLanguages?: { id: string }[];
+  languages?: { id: string }[];
 }
 
 type ViewMode = 'table' | 'cards';
@@ -92,6 +97,30 @@ export default function TemplatesPage() {
 
       {loadError && <Alert className="mb-4">Couldn&apos;t load templates. Please refresh or try again.</Alert>}
 
+      {/* Templates from before source languages existed: jobs can't take their languages from them. */}
+      {hasPermission('templates:update') && (() => {
+        const missing = templates.filter((t) => t.type !== 'simple' && (!t.sourceLanguages?.length || !t.languages?.length));
+        if (missing.length === 0) return null;
+        return (
+          <Alert tone="warning" className="mb-4">
+            <p className="font-medium">
+              {missing.length === 1 ? '1 template doesn’t say' : `${missing.length} templates don’t say`} which language
+              {missing.length === 1 ? ' it translates' : 's they translate'} from and into.
+            </p>
+            <p className="mt-0.5">
+              Set them, and new jobs pick up their languages by themselves:{' '}
+              {missing.slice(0, 5).map((t, i) => (
+                <span key={t.id}>
+                  {i > 0 && ', '}
+                  <Link href={`/templates/${t.id}?tab=settings`} className="font-semibold underline">{t.name}</Link>
+                </span>
+              ))}
+              {missing.length > 5 && ` and ${missing.length - 5} more`}.
+            </p>
+          </Alert>
+        );
+      })()}
+
       {/* Filters + view toggle */}
       <div className="flex gap-3 mb-4 items-center flex-wrap">
         <SearchInput placeholder="Search templates…" aria-label="Search templates" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -141,7 +170,7 @@ export default function TemplatesPage() {
                   {t.description && <div className="text-xs text-text-muted truncate">{t.description}</div>}
                 </td>
                 <td><TemplateTypeBadge type={t.type} /></td>
-                <td className="text-right tabular-nums">{t.type === 'simple' ? '—' : t.fields.length}</td>
+                <td className="text-right tabular-nums">{t.type === 'simple' ? '—' : t.fieldCount}</td>
                 {!pricesHidden && <td className="text-right tabular-nums text-text font-medium whitespace-nowrap">{formatCurrency(t.pricePerPage, baseCurrency)}</td>}
                 {!pricesHidden && <td className="text-right tabular-nums whitespace-nowrap">
                   {t.discountedPricePerPage ? formatCurrency(t.discountedPricePerPage, baseCurrency) : '—'}
@@ -171,7 +200,7 @@ export default function TemplatesPage() {
               </div>
               {t.description && <p className="text-sm text-text-secondary line-clamp-2">{t.description}</p>}
               <div className="mt-auto pt-3 border-t border-border flex justify-between text-xs text-text-muted w-full">
-                <span>{t.type === 'simple' ? 'Pricing only' : `${t.fields.length} field${t.fields.length !== 1 ? 's' : ''}`}</span>
+                <span>{t.type === 'simple' ? 'Pricing only' : `${t.fieldCount} field${t.fieldCount !== 1 ? 's' : ''}`}</span>
                 {!pricesHidden && <span className="tabular-nums">
                   <span className="text-text font-semibold">{formatCurrency(t.pricePerPage, baseCurrency)}</span> / page
                   {t.discountedPricePerPage && <span className="text-success"> ({formatCurrency(t.discountedPricePerPage, baseCurrency)})</span>}
