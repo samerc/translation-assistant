@@ -43,6 +43,10 @@ const VERBS: Record<string, string> = {
   'user.password_changed': 'changed their password',
   'user.deleted': 'deleted the user',
   'session.logout_everywhere': 'signed out on all devices',
+  'role.created': 'created the role',
+  'role.updated': 'changed the role',
+  'role.reset': 'reset to the default the role',
+  'role.deleted': 'deleted the role',
   'invite.created': 'invited',
   'invite.resent': 'resent the invitation to',
   'invite.cancelled': 'cancelled the invitation to',
@@ -106,6 +110,7 @@ const AREAS: { value: string; label: string; platform?: boolean }[] = [
   { value: 'document', label: 'Documents' },
   { value: 'user', label: 'Team members' },
   { value: 'invite', label: 'Invitations' },
+  { value: 'role', label: 'Roles' },
   { value: 'settings', label: 'Settings' },
   { value: 'organization', label: 'Organization' },
   { value: 'tenant', label: 'Organizations', platform: true },
@@ -133,6 +138,8 @@ function detailText(e: AuditEntry): string[] {
   if (typeof d.user === 'string') out.push(`user: ${d.user}`);
   if (typeof d.permissionLevel === 'string') out.push(`can ${d.permissionLevel}`);
   if (typeof d.role === 'string') out.push(`role: ${d.role}`);
+  if (d.jobScope === 'all' || d.jobScope === 'assigned') out.push(d.jobScope === 'all' ? 'sees all jobs' : 'sees assigned jobs');
+  if (typeof d.seesPrices === 'boolean') out.push(d.seesPrices ? 'sees prices' : 'prices hidden');
   if (typeof d.email === 'string') out.push(String(d.email));
   if (d.paidAmount !== undefined) out.push(`amount ${String(d.paidAmount)}`);
   if (typeof d.paidAt === 'string') out.push(`paid ${d.paidAt}`);
@@ -188,7 +195,7 @@ export function ActivityLog({ endpoint, platform = false }: { endpoint: string; 
         <SearchInput placeholder="Search names, numbers…" value={search} aria-label="Search the activity"
           onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         <Select aria-label="What" className="w-auto" value={area} onChange={(e) => { setArea(e.target.value); setPage(1); }}>
-          {AREAS.filter((a) => !a.value || !!a.platform === platform || (platform && a.value === 'user')).map((a) => (
+          {AREAS.filter((a) => !a.value || !!a.platform === platform || (platform && (a.value === 'user' || a.value === 'role'))).map((a) => (
             <option key={a.value} value={a.value}>{a.label}</option>
           ))}
         </Select>

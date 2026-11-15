@@ -40,7 +40,7 @@ import {
   UPLOAD_HARD_LIMIT_BYTES,
 } from '../../common/pipes/file-validation.pipe.js';
 import { contentDisposition } from '../../common/utils/content-disposition.js';
-import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import { CurrentActor, type Actor, can } from '../../common/tenancy/actor.js';
 import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
 import { TenantsService } from '../tenants/tenants.service.js';
 import { Audited } from '../audit/audited.decorator.js';
@@ -113,8 +113,12 @@ export class JobsController {
     const job = await this.jobsService.findOne(id);
     // What the caller may do with it (JobAccessGuard already let them read it).
     const mine = job.assignedUsers?.find((a) => a.userId === actor.userId);
+    // Edit needs the role's jobs:update, and all jobs or an edit assignment.
     const myAccess: 'edit' | 'view' =
-      actor.isAdmin || mine?.permissionLevel === 'edit' ? 'edit' : 'view';
+      can(actor, 'jobs:update') &&
+      (actor.seesAll || mine?.permissionLevel === 'edit')
+        ? 'edit'
+        : 'view';
     return { ...job, myAccess };
   }
 
@@ -269,7 +273,7 @@ export class JobsController {
   ) {
     // JobAccessGuard checks the target job (:id). The source job must be in the
     // same tenant (service) and, for non-admins, assigned to the caller.
-    if (!actor.isAdmin) {
+    if (!actor.seesAll) {
       const assignment = await this.jobsService.checkUserAssignment(
         dto.sourceJobId,
         actor.userId,

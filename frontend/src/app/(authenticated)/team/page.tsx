@@ -1,5 +1,6 @@
 'use client';
 
+import { RolesEditor } from '@/components/RolesEditor';
 import Link from 'next/link';
 import { useState, useEffect, FormEvent } from 'react';
 import { api, ApiError } from '@/lib/api';
@@ -24,6 +25,8 @@ const TEAM_SCROLL_KEY = 'teamScrollY';
 
 export default function TeamPage() {
   const { user } = useAuth();
+  // A role created/changed below: the members list and invite form reload theirs.
+  const [rolesVersion, setRolesVersion] = useState(0);
   if (!user) return null;
   if (user.isPlatformAdmin || user.role?.name !== 'Admin') {
     return (
@@ -43,10 +46,10 @@ export default function TeamPage() {
         title="Team"
         description="Everyone in your organization. Invite translators (or yourself as one), change roles, and see who has open jobs."
       />
-      <Members />
-      <section className="mt-10">
+      <Members rolesVersion={rolesVersion} />
+      <section className="mt-10" id="roles">
         <h2 className="text-lg font-semibold text-text mb-3">Roles</h2>
-        <Roles />
+        <RolesEditor endpoint="/roles" onChanged={() => setRolesVersion((v) => v + 1)} />
       </section>
     </div>
   );
@@ -87,7 +90,7 @@ async function copyText(text: string, what = 'Link') {
   }
 }
 
-function Members() {
+function Members({ rolesVersion }: { rolesVersion: number }) {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -115,7 +118,7 @@ function Members() {
     api.get<RoleOption[]>('/roles').then(setRoles).catch(() => {});
     api.get<PendingInvite[]>('/auth/invites').then(setInvites).catch(() => {});
   };
-  useEffect(load, []);
+  useEffect(load, [rolesVersion]);
 
   const invite = async (e: FormEvent) => {
     e.preventDefault();
@@ -348,54 +351,6 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Roles & Permissions (admin) ──
-
-interface Permission { id: string; resource: string; action: string; description?: string }
-interface Role { id: string; name: string; description?: string; permissions: Permission[] }
-
-function Roles() {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api.get<Role[]>('/roles').then(setRoles).catch(() => setError('Couldn’t load roles.'));
-  }, []);
-
-  // Admin first, then the more limited roles.
-  const order = ['Admin', 'Translator', 'Viewer'];
-  const sorted = [...roles].sort((x, y) => order.indexOf(x.name) - order.indexOf(y.name));
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-text-secondary">
-        Every organization has the same three roles. Choose one when you invite someone, or change it in the list above.
-      </p>
-      {error && <div className="p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
-      <div className="space-y-3">
-        {sorted.map((r) => {
-          const byResource = r.permissions.reduce<Record<string, string[]>>((acc, p) => {
-            (acc[p.resource] = acc[p.resource] || []).push(p.action);
-            return acc;
-          }, {});
-          return (
-            <div key={r.id} className="card p-4">
-              <div className="font-medium text-text">{r.name}</div>
-              {r.description && <div className="text-sm text-text-secondary mt-0.5">{r.description}</div>}
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {Object.keys(byResource).sort().map((res) => (
-                  <span key={res} className="badge tone tone-neutral capitalize" title={byResource[res].join(', ')}>
-                    {res}: {['create', 'read', 'update', 'delete'].filter((a) => byResource[res].includes(a)).join(', ')}
-                  </span>
-                ))}
-              </div>
-            </div>
-          );
-        })}
       </div>
     </div>
   );

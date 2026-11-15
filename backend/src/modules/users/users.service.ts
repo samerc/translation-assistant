@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, IsNull, Repository } from 'typeorm';
+import { Not, IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { User } from './entities/user.entity.js';
@@ -12,7 +12,7 @@ import { Role } from '../roles/entities/role.entity.js';
 import { Session } from '../auth/entities/session.entity.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto, ChangePasswordDto } from './dto/update-user.dto.js';
-import { TENANT_ROLES } from '../../common/tenancy/roles.js';
+import { RolesService } from '../roles/roles.service.js';
 
 /**
  * Who may be managed: a tenant admin manages the users of their own tenant;
@@ -30,6 +30,7 @@ export class UsersService {
     private readonly roleRepository: Repository<Role>,
     @InjectRepository(Session)
     private readonly sessionRepository: Repository<Session>,
+    private readonly rolesService: RolesService,
   ) {}
 
   /** Revoke all active sessions for a user and clear the legacy refresh token. */
@@ -56,12 +57,12 @@ export class UsersService {
     return user;
   }
 
-  /** Only Admin / Translator / Viewer can be given inside a tenant. */
-  private async assertTenantRole(roleId: string): Promise<void> {
-    const role = await this.roleRepository.findOne({
-      where: { id: roleId, name: In(TENANT_ROLES) },
-    });
-    if (!role) throw new BadRequestException('Role not found');
+  /** Only the organization's roles can be given (never Platform Admin or another organization's). */
+  private async assertTenantRole(
+    roleId: string,
+    tenantId: string,
+  ): Promise<void> {
+    await this.rolesService.assertAssignable(roleId, tenantId);
   }
 
   async findAll(tenantId: string): Promise<Partial<User>[]> {
@@ -117,7 +118,7 @@ export class UsersService {
       where: { email: dto.email },
     });
     if (existing) throw new BadRequestException('Email already in use');
-    await this.assertTenantRole(dto.roleId);
+    await this.assertTenantRole(dto.roleId, tenantId);
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
     const user = this.userRepository.create({
@@ -137,7 +138,11 @@ export class UsersService {
     scope: UserScope,
   ): Promise<Partial<User>> {
     await this.findScoped(id, scope);
-    if (dto.roleId) await this.assertTenantRole(dto.roleId);
+    if (dto.roleId) {
+      if (scope === 'platform')
+        throw new BadRequestException('Roles are given by the organization');
+      await this.assertTenantRole(dto.roleId, scope.tenantId);
+    }
     return this.applyUpdate(id, dto);
   }
 

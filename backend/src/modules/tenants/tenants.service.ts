@@ -4,7 +4,6 @@ import { EntityManager, Repository } from 'typeorm';
 import { Tenant, TenantStatus } from './entities/tenant.entity.js';
 import { TenantSettings } from './entities/tenant-settings.entity.js';
 import type { Actor } from '../../common/tenancy/actor.js';
-import { ROLE_TRANSLATOR } from '../../common/tenancy/roles.js';
 
 @Injectable()
 export class TenantsService {
@@ -48,14 +47,12 @@ export class TenantsService {
   }
 
   /**
-   * Whether prices are kept from this caller: Translators, when their
-   * organization turned "Translators see prices" off. Admins and Viewers
-   * (who read invoices and reports anyway) always see them.
+   * Whether prices are kept from this caller: their role's "sees prices" is
+   * off (Admin always sees them). Async for the callers' sake.
    */
-  async hidesPrices(actor: Pick<Actor, 'tenantId' | 'role'>): Promise<boolean> {
-    if (actor.role !== ROLE_TRANSLATOR || !actor.tenantId) return false;
-    const settings = await this.getSettings(actor.tenantId);
-    return !settings.translatorsSeePrices;
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async hidesPrices(actor: Pick<Actor, 'seesPrices'>): Promise<boolean> {
+    return actor.seesPrices === false;
   }
 
   /** The tenant's settings row (created on first use if it is missing). */

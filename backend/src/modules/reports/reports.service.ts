@@ -24,7 +24,7 @@ export class ReportsService {
   ) {}
 
   async getDashboardStats(actor: Actor) {
-    const { userId, isAdmin, tenantId } = actor;
+    const { userId, seesAll, tenantId } = actor;
     // Active jobs
     const activeJobsQb = this.jobRepository
       .createQueryBuilder('job')
@@ -32,7 +32,7 @@ export class ReportsService {
         statuses: ['quote', 'accepted', 'in_progress'],
       })
       .andWhere('job.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       activeJobsQb.innerJoin(
         'job.assignedUsers',
         'ju',
@@ -54,7 +54,7 @@ export class ReportsService {
         end: monthEnd,
       })
       .andWhere('inv.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       revenueQb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
     const revenueResult = await revenueQb.getRawOne<{
@@ -67,7 +67,7 @@ export class ReportsService {
       .createQueryBuilder('inv')
       .where('inv.status IN (:...statuses)', { statuses: ['sent', 'overdue'] })
       .andWhere('inv.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       pendingQb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
     const pendingInvoices = await pendingQb.getCount();
@@ -90,7 +90,7 @@ export class ReportsService {
         open: ['quote', 'accepted', 'in_progress'],
       })
       .andWhere('job.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       dueQb.innerJoin('job.assignedUsers', 'ju2', 'ju2.user_id = :userId', {
         userId,
       });
@@ -117,12 +117,12 @@ export class ReportsService {
   }
 
   async getRevenue(actor: Actor, period: string, from?: string, to?: string) {
-    const { userId, isAdmin, tenantId } = actor;
+    const { userId, seesAll, tenantId } = actor;
     const qb = this.paymentsQuery().where('inv.tenant_id = :tenantId', {
       tenantId,
     });
 
-    if (!isAdmin) {
+    if (!seesAll) {
       qb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
 
@@ -204,7 +204,7 @@ export class ReportsService {
   }
 
   async getByClient(actor: Actor) {
-    const { userId, isAdmin, tenantId } = actor;
+    const { userId, seesAll, tenantId } = actor;
     const qb = this.invoiceRepository
       .createQueryBuilder('inv')
       .where('inv.tenant_id = :tenantId', { tenantId })
@@ -218,7 +218,7 @@ export class ReportsService {
       .addGroupBy('client.name')
       .orderBy('totalRevenue', 'DESC');
 
-    if (!isAdmin) {
+    if (!seesAll) {
       qb.andWhere('inv.created_by_user_id = :userId', { userId });
     }
 
@@ -237,7 +237,7 @@ export class ReportsService {
   }
 
   async getJobStatus(actor: Actor) {
-    const { userId, isAdmin, tenantId } = actor;
+    const { userId, seesAll, tenantId } = actor;
     const qb = this.jobRepository
       .createQueryBuilder('job')
       .where('job.tenant_id = :tenantId', { tenantId })
@@ -245,7 +245,7 @@ export class ReportsService {
       .addSelect('COUNT(*)', 'count')
       .groupBy('job.status');
 
-    if (!isAdmin) {
+    if (!seesAll) {
       qb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
       });

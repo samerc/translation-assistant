@@ -384,15 +384,78 @@ const pProfile = (await req(P, 'GET', '/auth/profile')).data;
 const platformRoleId = pProfile.role.id;
 check('platform admin profile says isPlatformAdmin, no tenant', pProfile.isPlatformAdmin === true && pProfile.tenant === null, JSON.stringify(pProfile).slice(0, 120));
 const aRoles = (await req(a.A, 'GET', '/roles')).data;
-check('tenant role list excludes Platform Admin', !aRoles.some((r) => r.name === 'Platform Admin') && aRoles.length === 3, aRoles.map((r) => r.name).join(','));
+check('tenant role list excludes Platform Admin', !aRoles.some((r) => r.name === 'Platform Admin') && ['Admin', 'Translator', 'Viewer'].every((n) => aRoles.some((r) => r.name === n)), aRoles.map((r) => r.name).join(','));
 const escalate = await req(a.A, 'PATCH', `/users/${a.ids.translator}`, { roleId: platformRoleId });
 check('tenant admin cannot give the Platform Admin role', escalate.status === 400, show(escalate));
 const escalateNew = await req(a.A, 'POST', '/users', { email: `esc-${RUN}@tenancy.test`, password: PW, firstName: 'E', lastName: 'E', roleId: platformRoleId });
 check('…nor create a user with it', escalateNew.status === 400, show(escalateNew));
 const escalateInvite = await req(a.A, 'POST', '/auth/invite', { email: `esc2-${RUN}@tenancy.test`, roleId: platformRoleId });
 check('…nor invite with it', escalateInvite.status === 400, show(escalateInvite));
-const roleWrite = await req(a.A, 'POST', '/roles', { name: 'Custom' });
-check('roles are fixed (no create)', roleWrite.status === 404, show(roleWrite));
+
+console.log('== custom roles ==');
+{
+  const base = { jobScope: 'assigned', seesPrices: true, permissions: [] };
+  check('reserved name refused', (await req(a.A, 'POST', '/roles', { ...base, name: 'admin' })).status === 400);
+  const acc = await req(a.A, 'POST', '/roles', {
+    name: `Accounting ${RUN}`, description: 'Invoices and payments', jobScope: 'all', seesPrices: true,
+    permissions: ['clients:read', 'jobs:read', 'invoices:create', 'invoices:update', 'invoices:delete', 'reports:read'],
+  });
+  check('admin creates a role', ok(acc) && acc.data.source === 'own' && acc.data.permissions.some((x) => x.resource === 'invoices' && x.action === 'read'), show(acc));
+  check('…same name twice refused', (await req(a.A, 'POST', '/roles', { ...base, name: `accounting ${RUN}` })).status === 400);
+  check('translator can’t manage roles', (await req(a.T, 'POST', '/roles', { ...base, name: 'X' })).status === 403 && (await req(a.T, 'GET', '/roles')).status === 403);
+  check('Admin can’t be changed', (await req(a.A, 'PATCH', `/roles/${aRoles.find((r) => r.name === 'Admin').id}`, { seesPrices: false })).status === 400);
+  check('unknown area refused', (await req(a.A, 'POST', '/roles', { ...base, name: `Bad ${RUN}`, permissions: ['users:delete'] })).status === 400);
+  const bRoles = (await req(b.A, 'GET', '/roles')).data;
+  check("other organization doesn't see it", !bRoles.some((r) => r.id === acc.data.id));
+  check("…can't change it (404)", (await req(b.A, 'PATCH', `/roles/${acc.data.id}`, { description: 'x' })).status === 404);
+  check("…can't delete it (404)", (await req(b.A, 'DELETE', `/roles/${acc.data.id}`)).status === 404);
+  check("…can't give it to its people", (await req(b.A, 'PATCH', `/users/${b.ids.translator}`, { roleId: acc.data.id })).status === 400);
+  check("…nor invite with it", (await req(b.A, 'POST', '/auth/invite', { email: `x-${RUN}@tenancy.test`, roleId: acc.data.id })).status === 400);
+
+  // An accountant: every job and invoice, no documents, no team.
+  const accEmail = `acc-${RUN}@tenancy.test`;
+  const accUser = await req(a.A, 'POST', '/users', { email: accEmail, password: PW, firstName: 'Acc', lastName: 'A', roleId: acc.data.id });
+  check('user created with the custom role', ok(accUser), show(accUser));
+  const C = await login(accEmail, PW);
+  const prof = (await req(C, 'GET', '/auth/profile')).data;
+  check('profile: role + sees all jobs', prof.role?.name === `Accounting ${RUN}` && prof.role?.seesAllJobs === true, JSON.stringify(prof.role).slice(0, 200));
+  const cJobs = await req(C, 'GET', '/jobs?limit=100');
+  check('sees jobs not assigned to them', ok(cJobs) && cJobs.data.data.some((j) => j.id === a.ids.job), show(cJobs));
+  check('opens a job not assigned to them', ok(await req(C, 'GET', `/jobs/${a.ids.job}`)));
+  check('can’t edit it (no jobs:update)', (await req(C, 'PATCH', `/jobs/${a.ids.job}`, { notes: 'x' })).status === 403);
+  check('reads invoices', ok(await req(C, 'GET', `/invoices/${a.ids.invoice}`)));
+  check('no documents', (await req(C, 'GET', `/documents/by-job/${a.ids.job}`)).status === 403);
+  check('no team, no roles', (await req(C, 'GET', '/users')).status === 403 && (await req(C, 'GET', '/roles')).status === 403);
+  check("still not the other organization's job", (await req(C, 'GET', `/jobs/${b.ids.job}`)).status === 404);
+  check('sees every client', ok(await req(C, 'GET', `/clients/${a.ids.client}`)));
+  const inUse = await req(a.A, 'DELETE', `/roles/${acc.data.id}`);
+  check('role in use can’t be deleted', inUse.status === 400 && /give them another role/.test(inUse.text), show(inUse));
+  await req(a.A, 'DELETE', `/users/${accUser.data.id}`);
+  check('unused role deleted', ok(await req(a.A, 'DELETE', `/roles/${acc.data.id}`)));
+
+  // Platform defaults: offered to every organization; customizing makes a copy.
+  check('organization admin: no platform roles', (await req(a.A, 'GET', '/platform/roles')).status === 403);
+  const defaults = await req(P, 'GET', '/platform/roles');
+  check('platform admin lists the defaults (no Platform Admin)', ok(defaults) && defaults.data.some((r) => r.name === 'Translator') && !defaults.data.some((r) => r.name === 'Platform Admin'), show(defaults));
+  const rev = await req(P, 'POST', '/platform/roles', { name: `Reviewer ${RUN}`, jobScope: 'assigned', seesPrices: false, permissions: ['jobs:read', 'documents:read', 'documents:update'] });
+  check('platform admin adds a default', ok(rev), show(rev));
+  const seen = (await req(b.A, 'GET', '/roles')).data.find((r) => r.id === rev.data.id);
+  check('every organization gets it', seen?.source === 'default');
+  const custom = await req(a.A, 'PATCH', `/roles/${rev.data.id}`, { description: 'Ours' });
+  check('organization customizes it: its own copy', ok(custom) && custom.data.source === 'customized' && custom.data.id !== rev.data.id, show(custom));
+  await req(P, 'PATCH', `/platform/roles/${rev.data.id}`, { description: 'Platform text' });
+  const aView = (await req(a.A, 'GET', '/roles')).data;
+  const bView = (await req(b.A, 'GET', '/roles')).data;
+  check('the copy keeps its changes; others follow the default', aView.find((r) => r.id === custom.data.id)?.description === 'Ours' && !aView.some((r) => r.id === rev.data.id) && bView.find((r) => r.id === rev.data.id)?.description === 'Platform text');
+  check('platform list counts the customization', (await req(P, 'GET', '/platform/roles')).data.find((r) => r.id === rev.data.id)?.customizedBy === 1);
+  const back = await req(a.A, 'POST', `/roles/${custom.data.id}/reset`);
+  check('reset to default', ok(back) && back.data.id === rev.data.id && (await req(a.A, 'GET', '/roles')).data.some((r) => r.id === rev.data.id));
+  check('B can’t reset A’s copy', (await req(b.A, 'POST', `/roles/${custom.data.id}/reset`)).status === 404);
+  check('platform admin deletes the unused default', ok(await req(P, 'DELETE', `/platform/roles/${rev.data.id}`)));
+  check('built-in default can’t be deleted', (await req(P, 'DELETE', `/platform/roles/${defaults.data.find((r) => r.name === 'Viewer').id}`)).status === 400);
+  const log = (await req(a.A, 'GET', '/audit-log?action=role')).data;
+  check('role changes in the activity log', log?.data?.some((e) => e.action === 'role.created') && log.data.some((e) => e.action === 'role.reset'));
+}
 
 console.log('== platform admin vs tenant endpoints ==');
 for (const path of ['/clients', '/jobs', '/invoices', '/templates', '/users', '/settings', '/reports/dashboard-stats', '/search?q=Client', '/calendar/events?month=11&year=2026']) {
@@ -773,8 +836,10 @@ console.log('== job assignment + translator price visibility ==');
 
   // Prices: on by default; the admin turns them off for translators.
   check('translators see prices by default', (await req(a.T, 'GET', `/jobs/${handed.data.id}`)).data.calculatedTotal !== undefined);
-  check('only an admin can change it', (await req(a.T, 'PATCH', '/settings', { translatorsSeePrices: false })).status === 403);
-  check('admin hides prices from translators', ok(await req(a.A, 'PATCH', '/settings', { translatorsSeePrices: false })));
+  const trRole = (await req(a.A, 'GET', '/roles')).data.find((r) => r.name === 'Translator');
+  check('only an admin can change it', (await req(a.T, 'PATCH', `/roles/${trRole.id}`, { seesPrices: false })).status === 403);
+  const hidden = await req(a.A, 'PATCH', `/roles/${trRole.id}`, { seesPrices: false });
+  check('admin hides prices from translators (own Translator copy)', ok(hidden) && hidden.data.source === 'customized' && hidden.data.userCount >= 1, show(hidden));
   const noPrice = (r) => ok(r) && !/pricePerPage|calculatedTotal|finalPrice|lineTotal|paymentAmount/.test(r.text);
   check('profile tells the frontend', (await req(a.T, 'GET', '/auth/profile')).data.tenant?.pricesHidden === true);
   check('translator: job detail without prices', noPrice(await req(a.T, 'GET', `/jobs/${handed.data.id}`)));
@@ -794,7 +859,7 @@ console.log('== job assignment + translator price visibility ==');
   await req(a.T, 'PATCH', `/jobs/${own.data?.id}`, { finalPrice: 1, paymentAmount: 1, paymentCurrency: 'USD' });
   const after = (await req(a.A, 'GET', `/jobs/${own.data?.id}`)).data;
   check('translator edits keep the price (pages still change)', Number(after.calculatedTotal) === 4 * 10 + 2 * 5 && after.finalPrice == null && after.paymentAmount == null, `total=${after.calculatedTotal} final=${after.finalPrice}`);
-  await req(a.A, 'PATCH', '/settings', { translatorsSeePrices: true });
+  await req(a.A, 'POST', `/roles/${hidden.data.id}/reset`);
   check('turned back on: translators see prices again', (await req(a.T, 'GET', `/jobs/${handed.data.id}`)).data.calculatedTotal !== undefined);
 }
 

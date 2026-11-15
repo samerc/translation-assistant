@@ -1,3 +1,4 @@
+import { roleSeesAllJobs } from '../tenancy/actor.js';
 import {
   Injectable,
   CanActivate,
@@ -47,9 +48,9 @@ export class JobAccessGuard implements CanActivate {
       }));
     if (!inTenant) throw new NotFoundException('Job not found');
 
-    // Tenant admins have full access within their tenant
-    const isAdmin = user.role?.name === 'Admin';
-    if (isAdmin) return true;
+    // Admins, and roles that see all of the organization's jobs (e.g. Accounting):
+    // what they may do is up to their permissions, not to an assignment.
+    if (roleSeesAllJobs(user)) return true;
 
     // Check if user is assigned to this job
     const assignment = await this.jobUserRepository.findOne({

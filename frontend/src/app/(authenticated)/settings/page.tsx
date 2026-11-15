@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, Suspense, FormEvent, ChangeEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -33,7 +34,6 @@ interface AppSettings {
   maxUploadSizeMb: number;
   allowedFileTypes: string[] | null;
   googleTranslateKeySet?: boolean;
-  translatorsSeePrices: boolean;
 }
 
 interface Language {
@@ -167,7 +167,6 @@ function GeneralSettings() {
         baseCurrency: settings.baseCurrency,
         invoicePrefix: settings.invoicePrefix ?? '',
         dateFormat: settings.dateFormat,
-        translatorsSeePrices: settings.translatorsSeePrices,
       });
       setSettings(updated);
       // Dates, currency and invoice defaults across the app follow right away.
@@ -232,16 +231,10 @@ function GeneralSettings() {
         </div>
         <div className="card p-6">
           <h3 className="font-semibold text-text mb-3">Team</h3>
-          <label className="flex items-start gap-3 text-sm text-text cursor-pointer">
-            <input type="checkbox" className="mt-0.5 w-4 h-4" checked={settings.translatorsSeePrices}
-              onChange={(e) => setSettings({ ...settings, translatorsSeePrices: e.target.checked })} />
-            <span>
-              <span className="font-medium">Translators see prices</span>
-              <span className="block text-text-secondary mt-0.5">
-                Job totals, line-item prices and template prices. When off, jobs a translator creates are priced from your templates and freeform types, and only admins change prices.
-              </span>
-            </span>
-          </label>
+          <p className="text-sm text-text-secondary">
+            Who sees prices, and which jobs each person sees, is set per role on{' '}
+            <Link href="/team#roles" className="font-semibold text-primary-text underline">Team › Roles</Link>.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit" variant="primary" disabled={saving}>

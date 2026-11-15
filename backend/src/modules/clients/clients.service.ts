@@ -75,7 +75,7 @@ export class ClientsService {
       });
 
     // Non-admins see clients they created or have jobs with
-    if (!query.actor.isAdmin) {
+    if (!query.actor.seesAll) {
       qb.andWhere(clientVisibleSql('client'), {
         accessUserId: query.actor.userId,
       });
@@ -117,7 +117,7 @@ export class ClientsService {
       where: { id: clientId, tenantId: actor.tenantId },
     });
     if (!inTenant) throw new NotFoundException('Client not found');
-    if (actor.isAdmin) return;
+    if (actor.seesAll) return;
     const hasAccess = await this.clientRepository
       .createQueryBuilder('client')
       .where('client.id = :clientId', { clientId })

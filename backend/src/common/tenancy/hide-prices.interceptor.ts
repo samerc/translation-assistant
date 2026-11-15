@@ -1,3 +1,4 @@
+import { actorOf } from './actor.js';
 import {
   CallHandler,
   ExecutionContext,
@@ -56,10 +57,7 @@ export class HidePricesInterceptor implements NestInterceptor {
         from(
           (async () => {
             if (!user?.tenantId) return body;
-            const hide = await this.tenantsService.hidesPrices({
-              tenantId: user.tenantId,
-              role: user.role?.name,
-            });
+            const hide = await this.tenantsService.hidesPrices(actorOf(user));
             return hide ? stripPrices(body) : body;
           })(),
         ),

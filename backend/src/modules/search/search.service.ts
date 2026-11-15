@@ -26,7 +26,7 @@ export class SearchService {
   ) {}
 
   async search(q: string, actor: Actor) {
-    const { userId, isAdmin, tenantId } = actor;
+    const { userId, seesAll, tenantId } = actor;
     const like = likeContains(q);
 
     // Build client query - non-admins only see clients they created or have jobs with
@@ -35,7 +35,7 @@ export class SearchService {
       .select(['c.id', 'c.name', 'c.type'])
       .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like })
       .andWhere('c.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       clientQb.andWhere(clientVisibleSql('c'), { accessUserId: userId });
     }
 
@@ -43,7 +43,7 @@ export class SearchService {
       .createQueryBuilder('c')
       .where('(c.name LIKE :q OR c.taxId LIKE :q)', { q: like })
       .andWhere('c.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       clientCountQb.andWhere(clientVisibleSql('c'), { accessUserId: userId });
     }
 
@@ -58,7 +58,7 @@ export class SearchService {
         { q: like },
       )
       .andWhere('j.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       jobQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
       });
@@ -71,7 +71,7 @@ export class SearchService {
         { q: like },
       )
       .andWhere('j.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       jobCountQb.innerJoin('j.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
       });
@@ -97,7 +97,7 @@ export class SearchService {
       .addSelect(['client.name'])
       .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like })
       .andWhere('inv.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       invoiceQb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (
           SELECT 1 FROM invoice_items ii
@@ -113,7 +113,7 @@ export class SearchService {
       .leftJoin('inv.client', 'client')
       .where('(inv.invoiceNumber LIKE :q OR client.name LIKE :q)', { q: like })
       .andWhere('inv.tenant_id = :tenantId', { tenantId });
-    if (!isAdmin) {
+    if (!seesAll) {
       invoiceCountQb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (
           SELECT 1 FROM invoice_items ii
