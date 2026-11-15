@@ -18,7 +18,7 @@ Each **organization (tenant)** has its own users, clients, jobs, documents, temp
 - **Sign-up** (`/signup`, public): `POST /auth/signup` creates a pending tenant + its Admin (email unverified) and emails a 24 h link (`EmailVerificationToken`); same answer for an already-registered email (that address gets an "you already have an account" mail). `POST /auth/verify-email` → platform admins get an in-app `tenant_signup` notification + email; approval → the admin is emailed. Turnstile bot check when `TURNSTILE_SECRET_KEY`/`TURNSTILE_SITE_KEY` are set (site key served by `GET /auth/signup-status`); throttled 5/h per IP; honeypot. Platform settings `signupsEnabled` switch. Unconfirmed sign-ups are deleted after 7 days (`SignupCleanupScheduler`, 03:30). Non-production returns the verification token (like password reset).
 - **Deletion** (`platform/tenant-deletion.service.ts`): the organization's Admin only *requests* it (`POST /organization/deletion-request`: typed org name + password + optional reason; withdraw with `DELETE`) → platform admins get a `tenant_deletion_request` notification + email. The platform admin approves (`POST /platform/tenants/:id/delete`, also without a request) or declines (`/decline-deletion`, emails the requester). Approve: **empty** (no clients/jobs/documents/invoices/templates — users don't count) → purged at once; otherwise status **`closing`** (login refused, sessions revoked, admins emailed) with `deleteAfter` = now + `AppSettings.deletionGraceDays` (default 30, 1–365, Settings → Email & Sign-ups); `/restore` → active, `/purge` → now. `TenantPurgeScheduler` (03:45) purges due ones. Purge deletes rows in FK-safe order (invoices → documents → jobs → templates → clients → tenant lists → invites → users + their tokens/sessions/notifications → settings → tenant), then `uploads/<tenantId>`. The platform admin sees only `dataCounts`, never records. Pending sign-ups are rejected, not deleted. **Billing (later)**: a request doesn't stop billing; approval (→ closing) cancels/doesn't renew; restore resumes.
 - **Invites carry an optional first/last name** (`InviteToken.firstName/lastName`; all three invite forms). `POST /auth/invite-details {token}` (public, 20/min) returns email, names, organization and role for a usable invite; `/register` shows the organization, locks the email (server still enforces the match) and pre-fills the editable names.
-- **Tests**: `node scripts/test-tenancy.mjs` (live, ~300 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill + pending invites list/resend/cancel, organization logo/identity/date format, deletion request/decline/approve/restore/purge, job assignment + `myAccess`, translator price hiding) — runs in CI against MariaDB (`tenancy` job).
+- **Tests**: `node scripts/test-tenancy.mjs` (live, ~310 checks: every endpoint with another tenant's ids, lists/search/reports, cross-references, roles, platform boundaries, per-tenant settings/limits, file tokens, suspension, sign-up/approval, invite pre-fill + pending invites list/resend/cancel, organization logo/identity/date format, deletion request/decline/approve/restore/purge, job assignment + `myAccess`, translator price hiding, marking Word fields on the page) — runs in CI against MariaDB (`tenancy` job).
 
 ## Tech Stack
 - **Runtime:** Node ≥ 22.12 (backend `engines`). NestJS 12 packages are ESM-only; the backend compiles to CommonJS and loads them via native `require(esm)`. Jest needs `--experimental-vm-modules` for the same, so `npm test`/`test:e2e` invoke jest through `node` with that flag.
@@ -66,7 +66,7 @@ translation-assistant/
 - `docker compose down` — Stop all containers
 - `cd backend && npm test` — unit tests; `npm run test:e2e` — DB-free security e2e suite (both run in CI)
 - `bash scripts/test-integration.sh` — live integration suite (~172 checks; needs backend on :3005 + frontend on :3080 + a scratch DB; creates its own organization as the platform admin, then runs as that organization's admin)
-- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~300 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
+- `node scripts/test-tenancy.mjs` — live cross-tenant isolation suite (~310 checks, incl. template wizard API; backend on :3005, non-production, scratch DB; also in CI)
 
 ## Dependencies
 - Dependabot (`.github/dependabot.yml`): weekly grouped minor/patch per app, majors as separate PRs. TypeScript 7 majors ignored (no JS API; ts-jest/typescript-eslint unsupported).
@@ -119,7 +119,7 @@ translation-assistant/
 - **A job is billed once**: a job can't be linked on a second invoice unless the other is cancelled (create, edit, and reviving a cancelled invoice). Checked inside the `app_settings` lock, so concurrent invoices can't both pass
 - Search terms are LIKE-escaped with `likeContains()` (`common/utils/like.ts`) — `%`/`_` match literally. Use it for every `LIKE` built from input
 - Request bodies over 1 MB → 413; deletes blocked by an FK the service doesn't pre-check → 409 with a "still used by other records" message (`GlobalExceptionFilter`)
-- Word template uploads rejected if no valid placeholders found
+- Word template uploads rejected if placeholders are malformed (none at all is fine — they're marked on the page). On-page edits (`templates/word-edit.ts`) locate the selection by paragraph text + occurrence + non-whitespace offsets, refuse stale selections (409) and anything that would leave broken/nested placeholders, and write the file via temp file + rename. The rendered document has links, iframes and non-blob images stripped
 - **Client visibility** (non-admins): clients they created (`Client.createdByUserId`) or have a job with — one SQL rule, `clientVisibleSql()` (`clients/client-access.ts`), used by the client list/detail checks, search and job creation (a non-admin can't open a job on a client they can't see)
 - Search access control: non-admins only see clients they created or have jobs with, only active templates; each result type is dropped unless the caller has that resource's `:read` permission (Translators get no invoices)
 - Translate endpoint: language code validation, 5000 char limit, 10s timeout, 30/min rate limit
@@ -236,7 +236,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 
 ### Templates
 - **Template** — type (designer/word/simple), name, description, pricePerPage, discountedPricePerPage, layoutJson, wordFilePath, wordFileName, isActive (false = **draft**, hidden when creating jobs), languages (M2M `template_languages`: the document languages)
-  - **Setup wizard** (`/templates/new`, `/templates/:id/setup?step=`; `templates/setup-wizard.tsx`): ① name/price/document languages/type → ② Word file (instructions, example .docx from `GET /templates/example-docx`, upload; unlinked placeholders become fields automatically and loop fields are moved into their group) → ③ fields (labels only in the document languages — the first is required, others fall back to it; type guessed from the name by `guessFieldType()`; fields missing from the file flagged via preview `orphans`) → ④ try it (`POST /templates/:id/test-export` renders sample values, nothing saved) → ⑤ activate or save as draft. Designer skips ②; pricing-only goes ① → ⑤. New templates are created as drafts
+  - **Setup wizard** (`/templates/new`, `/templates/:id/setup?step=`; `templates/setup-wizard.tsx`): ① name/price/document languages/type → ② Word file (upload the document as filled in by hand — no placeholders needed; it's shown on the page with `docx-preview` (`templates/word-editor.tsx`) and the user selects text → **Make a field** (`POST /:id/word/mark`, label in the first document language, existing field reused by name), clicks a field → remove it (`/word/unmark`, original words restored when known), clicks in a table row → **Repeat row** / Stop repeating (`/word/repeat`, `/word/unrepeat`). Typed `{placeholders}` still work: they're picked up automatically (unlinked placeholders become fields, loop fields move into their group); typing instructions + example .docx from `GET /templates/example-docx` sit in a collapsed "Prefer to type the fields in Word?") → ③ fields (labels only in the document languages — the first is required, others fall back to it; type guessed from the name by `guessFieldType()`; fields missing from the file flagged via preview `orphans`) → ④ try it (`POST /templates/:id/test-export` renders sample values, nothing saved) → ⑤ activate or save as draft. Designer skips ②; pricing-only goes ① → ⑤. New templates are created as drafts
   - **Document languages**: a template with languages set is only offered (job form, add-document) and accepted (`POST /jobs`, add line item → 400) for those target languages; none set = any language
   - **Designer type**: layout built with block-based designer, stored in layoutJson
   - **Word type**: .docx file uploaded, placeholders like `{field_name}` replaced on export
@@ -336,6 +336,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `GET /:id/word-preview` — Get HTML preview + placeholder validation
 - `POST /:id/word-placeholders` — Auto-create fields from placeholders (and move loop fields into their group)
 - `GET /example-docx` — Example Word template; `POST /:id/test-export` — render with sample values (`templates:update`)
+- `GET /:id/word-file` — the Word file (to render on the page); `POST /:id/word/mark|unmark|repeat|unrepeat` — edit it from the page (`templates:update`; body: `spot` {paragraphText, occurrence, start, end, text} + fieldKey/label/languageId | restore | groupKey). `GET /:id/word-preview` adds `hint` when there are no placeholders
 - Create/update take `languageIds` (document languages); create takes `isActive` (wizard: false = draft)
 
 ### Jobs (`/api/jobs`)
@@ -423,7 +424,7 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
   - `maxUploadSizeMb` from the uploader's organization settings
   - `allowedFileTypes` from the organization settings (if list is non-empty, only those extensions accepted)
 - Applied to passport copy uploads and job file uploads
-- Word template uploads additionally validated for placeholders (reject if none or malformed)
+- Word template uploads additionally validated for placeholders (reject if malformed)
 
 ## Build Phases
 - [x] Phase 1: Project setup

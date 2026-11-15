@@ -47,8 +47,8 @@ export function toFieldKey(name: string): string {
 }
 
 /**
- * When a document has no {placeholders}, explain why — and if it uses
- * another placeholder style, say how to convert it.
+ * When a document has no {placeholders}, say how to add them — and if it uses
+ * another placeholder style, how to convert it.
  */
 export function noPlaceholdersMessage(text: string): string {
   for (const { label, pattern } of OTHER_STYLES) {
@@ -62,9 +62,9 @@ export function noPlaceholdersMessage(text: string): string {
         return `${raw} → {${toFieldKey(inner)}}`;
       })
       .join(', ');
-    return `No {placeholders} found, but the file uses ${label} (${unique.length}). Replace each with a name in single braces — for example ${examples} — then upload it again.`;
+    return `The file uses ${label} (${unique.length}), which don't work here. Select each one on the page and make it a field — or replace it in Word with a name in single braces, for example ${examples}.`;
   }
-  return 'This Word file has no placeholders yet. Type a name in braces where each value should go — for example {full_name} or {date_of_birth} — then upload it again. The setup wizard has an example file you can copy.';
+  return 'This Word file has no placeholders yet. Select the text where each value goes and click “Make a field” — or type a name in braces in Word, for example {full_name}.';
 }
 
 /** Scan the plain text of a Word document for placeholders and group loops. */

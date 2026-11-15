@@ -267,3 +267,18 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* Word template shown in the setup wizard (templates/word-editor.tsx): pages
+   stay white paper in both themes; fields and repeating rows are tinted. */
+.word-canvas .docx-wrapper { background: transparent; padding: 16px; align-items: center; }
+.word-canvas .docx-wrapper > section.docx { box-shadow: 0 1px 6px rgb(0 0 0 / 0.18); margin-bottom: 16px; color: #111; }
+.word-canvas .ta-ph {
+  background: color-mix(in srgb, var(--brand) 18%, white);
+  outline: 1px solid color-mix(in srgb, var(--brand) 55%, white);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.word-canvas .ta-ph:hover { background: color-mix(in srgb, var(--brand) 30%, white); }
+.word-canvas .ta-ph.ta-loop { background: #fef3c7; outline-color: #d97706; font-size: 0.85em; }
+.word-canvas tr.ta-repeat > td { box-shadow: inset 0 0 0 9999px rgb(217 119 6 / 0.08); }
+.word-canvas ::highlight(ta-pick) { background-color: color-mix(in srgb, var(--brand) 35%, white); color: #111; }

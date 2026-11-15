@@ -179,6 +179,13 @@ async function download(endpoint: string, fallbackName: string, method = 'POST',
   URL.revokeObjectURL(url);
 }
 
+/** Fetch a file's bytes (e.g. a Word template to show on the page). */
+async function blob(endpoint: string): Promise<Blob> {
+  const res = await authedFetch(endpoint, { method: 'GET' });
+  if (!res.ok) throw await toApiError(res, 'Couldn’t load the file');
+  return res.blob();
+}
+
 export const api = {
   get: <T>(endpoint: string) => request<T>(endpoint),
   post: <T>(endpoint: string, body?: unknown) =>
@@ -188,6 +195,7 @@ export const api = {
   delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
   upload,
   download,
+  blob,
 };
 
 export { ApiError };

@@ -22,12 +22,17 @@ import { contentDisposition } from '../../common/utils/content-disposition.js';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { extname } from 'path';
+import { readFileSync } from 'fs';
 import { TemplatesService } from './templates.service.js';
 import {
   CreateTemplateDto,
   UpdateTemplateDto,
   ReorderFieldsDto,
   WordPlaceholdersDto,
+  MarkWordFieldDto,
+  UnmarkWordFieldDto,
+  RepeatWordRowDto,
+  UnrepeatWordRowDto,
 } from './dto/template.dto.js';
 import {
   CreateTemplateFieldDto,
@@ -171,6 +176,67 @@ export class TemplatesController {
       dto.placeholders,
       actor.tenantId,
     );
+  }
+
+  // ── Editing the Word file on the page (setup wizard) ──
+
+  /** The Word file itself, for the page to render. */
+  @Get(':id/word-file')
+  @RequirePermissions('templates:read')
+  async wordFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+    @Res() res: Response,
+  ) {
+    const file = await this.templatesService.getWordFile(id, actor.tenantId);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    res.setHeader('Content-Disposition', contentDisposition(file.name));
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(readFileSync(file.path));
+  }
+
+  @Post(':id/word/mark')
+  @RequirePermissions('templates:update')
+  markWordField(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MarkWordFieldDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.templatesService.markWordField(id, dto, actor.tenantId);
+  }
+
+  @Post(':id/word/unmark')
+  @RequirePermissions('templates:update')
+  unmarkWordField(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UnmarkWordFieldDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.templatesService.unmarkWordField(id, dto, actor.tenantId);
+  }
+
+  @Post(':id/word/repeat')
+  @RequirePermissions('templates:update')
+  repeatWordRow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RepeatWordRowDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.templatesService.repeatWordRow(id, dto, actor.tenantId);
+  }
+
+  @Post(':id/word/unrepeat')
+  @RequirePermissions('templates:update')
+  unrepeatWordRow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UnrepeatWordRowDto,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.templatesService.unrepeatWordRow(id, dto, actor.tenantId);
   }
 
   // ── Fields ──

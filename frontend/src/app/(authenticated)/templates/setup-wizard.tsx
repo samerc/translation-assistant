@@ -3,7 +3,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import DOMPurify from 'dompurify';
 import { api, ApiError } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import { confirmDialog } from '@/lib/confirm';
@@ -12,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Alert } from '@/components/ui/Alert';
 import { CheckIcon } from '@/components/ui/icons';
+import { WordDocEditor } from './word-editor';
 
 // ── Types ──
 
@@ -30,7 +30,7 @@ export interface WizardTemplate {
 interface WordPreview {
   html: string; valid: string[]; unlinked: string[];
   malformed: { text: string; reason: string }[];
-  groups: Record<string, string>; orphans: string[];
+  groups: Record<string, string>; orphans: string[]; hint: string | null;
 }
 
 type StepId = 'basics' | 'word' | 'fields' | 'try' | 'done';
@@ -156,7 +156,7 @@ export function TemplateSetupWizard({ templateId, initialStep }: { templateId?: 
           }}
         />
       )}
-      {tpl && current === 'word' && <WordStep tpl={tpl} onChanged={reload} onBack={back} onNext={next} />}
+      {tpl && current === 'word' && <WordStep tpl={tpl} firstLanguageId={docLanguages[0]?.id} onChanged={reload} onBack={back} onNext={next} />}
       {tpl && current === 'fields' && (
         <FieldsStep key={tpl.fields.map((f) => f.id).join()} tpl={tpl} docLanguages={docLanguages} onChanged={reload} onBack={back} onNext={next} />
       )}
@@ -235,7 +235,7 @@ function BasicsStep({ tpl, languages, onSaved }: {
   };
 
   const typeOptions: { value: WizardTemplate['type']; title: string; text: string }[] = [
-    { value: 'word', title: 'From my Word file', text: 'Recommended. You write the document in Word with placeholders; translators fill in a form and download it filled in.' },
+    { value: 'word', title: 'From my Word file', text: 'Recommended. Upload the document from Word and mark on the page where the values go; translators fill in a form and download it filled in.' },
     { value: 'designer', title: 'Build the layout here', text: 'Advanced. No Word file: you define the fields, and a clean document is generated from them (optionally with a custom layout).' },
   ];
   // Priced services without a document are Freeform Types (Settings); existing
@@ -325,11 +325,13 @@ function CopyCode({ text }: { text: string }) {
   );
 }
 
-function WordStep({ tpl, onChanged, onBack, onNext }: { tpl: WizardTemplate; onChanged: () => void; onBack: () => void; onNext: () => void }) {
+function WordStep({ tpl, firstLanguageId, onChanged, onBack, onNext }: {
+  tpl: WizardTemplate; firstLanguageId?: string; onChanged: () => void; onBack: () => void; onNext: () => void;
+}) {
   const [preview, setPreview] = useState<WordPreview | null>(null);
   const [busy, setBusy] = useState<'upload' | 'check' | null>(tpl.wordFilePath ? 'check' : null);
   const [error, setError] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
+  const [fileVersion, setFileVersion] = useState(0);
 
   /** Read the file's placeholders; create missing fields and fix loop groups automatically. */
   const inspect = async (): Promise<WordPreview> => {
@@ -340,8 +342,8 @@ function WordStep({ tpl, onChanged, onBack, onNext }: { tpl: WizardTemplate; onC
         placeholders: p.unlinked.map((k) => ({ find: k, fieldKey: k })),
       });
       p = await api.get<WordPreview>(`/templates/${tpl.id}/word-preview`);
-      onChanged();
     }
+    onChanged();
     return p;
   };
 
@@ -353,11 +355,16 @@ function WordStep({ tpl, onChanged, onBack, onNext }: { tpl: WizardTemplate; onC
       .catch((err) => { if (!ignore) setError(errMsg(err, 'Couldn’t read the Word file.')); })
       .finally(() => { if (!ignore) setBusy(null); });
     return () => { ignore = true; };
-    // Inspect once when the step opens; uploads re-inspect themselves.
+    // Inspect once when the step opens; uploads and edits re-inspect themselves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tpl.id]);
 
   const upload = async (file: File) => {
+    if (tpl.wordFileName && tpl.fields.length > 0 && !(await confirmDialog({
+      title: 'Replace the Word file?',
+      message: 'Fields you made on the old file aren’t carried over — mark them again on the new one. Fields it doesn’t use are flagged on the next step.',
+      confirmText: 'Replace',
+    }))) return;
     setError('');
     setBusy('upload');
     const fd = new FormData();
@@ -365,11 +372,19 @@ function WordStep({ tpl, onChanged, onBack, onNext }: { tpl: WizardTemplate; onC
     try {
       await api.upload(`/templates/${tpl.id}/upload-word`, fd, 'POST');
       setPreview(await inspect());
-      onChanged();
+      setFileVersion((v) => v + 1);
     } catch (err) {
       setError(errMsg(err, 'Upload failed.'));
     } finally {
       setBusy(null);
+    }
+  };
+
+  const recheck = async () => {
+    try {
+      setPreview(await inspect());
+    } catch (err) {
+      setError(errMsg(err, 'Couldn’t read the Word file.'));
     }
   };
 
@@ -386,40 +401,50 @@ function WordStep({ tpl, onChanged, onBack, onNext }: { tpl: WizardTemplate; onC
   const loops = preview ? [...new Set(Object.values(preview.groups))] : [];
   const hasFile = !!tpl.wordFileName;
   const canContinue = hasFile && !!preview && problems.length === 0 && found.length > 0 && !busy;
+  const labelOf = (key: string) => {
+    const f = tpl.fields.find((x) => x.fieldKey === key);
+    return f?.labels.find((l) => l.languageId === firstLanguageId)?.label || f?.labels[0]?.label || humanize(key);
+  };
+
+  const filePicker = (label: string, primary: boolean) => (
+    <label className={`btn ${primary ? 'btn-primary' : 'btn-secondary btn-sm'} cursor-pointer ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+      {label}
+      <input
+        type="file"
+        accept=".docx"
+        className="sr-only"
+        disabled={busy !== null}
+        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }}
+      />
+    </label>
+  );
 
   return (
     <div>
-      <StepCard title="Your Word file" intro="Write the translated document in Word, with placeholders where the values go. Translators then fill in a form, and the Word file comes out filled in.">
-        <ol className="list-decimal pl-5 space-y-3 text-sm text-text mb-5">
-          <li>Write the document in Word as usual, in its final layout.</li>
-          <li>
-            Where a value goes, type its name in braces: <CopyCode text="{full_name}" /> <CopyCode text="{date_of_birth}" />
-            <div className="text-xs text-text-muted mt-1">Names use letters, numbers and underscores only — no spaces.</div>
-          </li>
-          <li>
-            For a part that repeats (for example one table row per child), put <CopyCode text="{#children}" /> before it and <CopyCode text="{/children}" /> after it.
-            <div className="text-xs text-text-muted mt-1">In a table, put the opening tag in the row&apos;s first cell and the closing tag in its last cell: the row repeats once per child.</div>
-          </li>
-        </ol>
-        <Button onClick={downloadExample}>↓ Download an example .docx</Button>
+      <StepCard
+        title="Your Word document"
+        intro={hasFile
+          ? 'Select the text where a value goes — a name, a date — and make it a field. Translators fill these in, and the document comes out filled in.'
+          : 'Upload the document as you would fill it in by hand, with a real name, dates and so on. On the next screen you mark the parts that change.'}
+      >
+        {!hasFile && (
+          <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
+            {filePicker(busy === 'upload' ? 'Uploading…' : 'Choose a Word file (.docx)', true)}
+            <p className="text-xs text-text-muted mt-3">Your file isn’t changed on your computer — the template keeps its own copy.</p>
+          </div>
+        )}
 
-        <div className="border-t border-border mt-6 pt-5">
-          <label className="block text-sm font-semibold text-text mb-2">{hasFile ? 'Replace the Word file' : 'Upload your Word file'}</label>
-          <input
-            type="file"
-            accept=".docx"
-            disabled={busy !== null}
-            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }}
-            className="block w-full text-sm text-text file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-sm file:font-medium"
-          />
-          {hasFile && <p className="text-sm text-text-secondary mt-2">Current file: <span className="font-medium text-text">{tpl.wordFileName}</span></p>}
-          {busy === 'upload' && <p className="text-sm text-text-secondary mt-2">Uploading and checking…</p>}
-          {busy === 'check' && <p className="text-sm text-text-secondary mt-2">Checking the file…</p>}
-          {error && <Alert className="mt-3">{error}</Alert>}
-        </div>
+        {hasFile && (
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <span className="text-sm text-text-secondary">File: <span className="font-medium text-text">{tpl.wordFileName}</span></span>
+            {filePicker(busy === 'upload' ? 'Uploading…' : 'Replace file', false)}
+            {busy === 'check' && <span className="text-sm text-text-secondary">Checking the file…</span>}
+          </div>
+        )}
+        {error && <Alert className="mb-4">{error}</Alert>}
 
         {preview && (
-          <div className="mt-5 space-y-3">
+          <div className="space-y-3 mb-4">
             {problems.length > 0 && (
               <Alert>
                 <div className="font-semibold mb-1">{problems.length === 1 ? '1 problem' : `${problems.length} problems`} — fix in Word and upload again</div>
@@ -430,27 +455,47 @@ function WordStep({ tpl, onChanged, onBack, onNext }: { tpl: WizardTemplate; onC
                 </ul>
               </Alert>
             )}
-            {found.length === 0 && problems.length === 0 && (
-              <Alert tone="warning">No placeholders found. Add <code>{'{field_name}'}</code> where values should go, then upload again.</Alert>
+            {found.length === 0 && problems.length === 0 && preview.hint && /don't work here/.test(preview.hint) && (
+              <Alert tone="warning">{preview.hint}</Alert>
             )}
             {found.length > 0 && (
               <div className="tone tone-success rounded-lg p-3 text-sm">
-                Found {found.length} value{found.length === 1 ? '' : 's'}: {found.join(', ')}
-                {loops.length > 0 && <div className="mt-1">Repeating part{loops.length === 1 ? '' : 's'}: {loops.join(', ')}</div>}
+                {found.length} field{found.length === 1 ? '' : 's'}: {found.map(labelOf).join(', ')}
+                {loops.length > 0 && <div className="mt-1">Repeating row{loops.length === 1 ? '' : 's'}: {loops.map(humanize).join(', ')}</div>}
               </div>
-            )}
-            <button type="button" onClick={() => setShowPreview((v) => !v)} className="text-sm text-primary-text underline">
-              {showPreview ? 'Hide' : 'Show'} the document preview
-            </button>
-            {showPreview && (
-              <div className="bg-white text-black border border-border rounded-xl p-6 prose prose-sm max-w-none overflow-x-auto"
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.html) }} />
             )}
           </div>
         )}
+
+        {hasFile && (
+          <WordDocEditor
+            templateId={tpl.id}
+            fields={tpl.fields}
+            firstLanguageId={firstLanguageId}
+            version={fileVersion}
+            onEdited={recheck}
+          />
+        )}
+
+        <details className="mt-5 text-sm">
+          <summary className="cursor-pointer text-text-secondary hover:text-text">Prefer to type the fields in Word?</summary>
+          <ol className="list-decimal pl-5 space-y-3 text-text mt-3 mb-4">
+            <li>
+              Where a value goes, type its name in braces: <CopyCode text="{full_name}" /> <CopyCode text="{date_of_birth}" />
+              <div className="text-xs text-text-muted mt-1">Letters, numbers and underscores only — no spaces.</div>
+            </li>
+            <li>
+              For a table row that repeats (one per child, for example), put <CopyCode text="{#children}" /> in its first cell and <CopyCode text="{/children}" /> in its last.
+            </li>
+            <li>Upload the file — the fields are picked up automatically, and you can still add more on the page.</li>
+          </ol>
+          <Button size="sm" onClick={downloadExample}>↓ Download an example .docx</Button>
+        </details>
       </StepCard>
       <NavRow onBack={onBack}>
-        {!canContinue && hasFile && problems.length > 0 && <span className="text-sm text-text-muted">Fix the problems to continue</span>}
+        {hasFile && !canContinue && !busy && (
+          <span className="text-sm text-text-muted">{problems.length > 0 ? 'Fix the problems to continue' : 'Make at least one field to continue'}</span>
+        )}
         <Button variant="primary" disabled={!canContinue} onClick={onNext}>Next →</Button>
       </NavRow>
     </div>

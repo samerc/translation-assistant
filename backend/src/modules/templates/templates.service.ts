@@ -2,11 +2,18 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { likeContains } from '../../common/utils/like.js';
 import { Brackets, Repository } from 'typeorm';
-import { readFileSync, existsSync, unlinkSync } from 'fs';
+import {
+  readFileSync,
+  existsSync,
+  unlinkSync,
+  writeFileSync,
+  renameSync,
+} from 'fs';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
@@ -14,6 +21,14 @@ import {
   noPlaceholdersMessage,
   scanWordPlaceholders,
 } from './word-placeholders.js';
+import {
+  markField,
+  repeatRow,
+  unmarkField,
+  unrepeatRow,
+  WordEditError,
+  type WordSpot,
+} from './word-edit.js';
 import { Template } from './entities/template.entity.js';
 import { TemplateField } from './entities/template-field.entity.js';
 import { TemplateFieldLabel } from './entities/template-field-label.entity.js';
@@ -233,9 +248,7 @@ export class TemplatesService {
       );
     }
 
-    if (scan.fields.length === 0) {
-      throw new BadRequestException(noPlaceholdersMessage(text));
-    }
+    // No placeholders yet is fine: the setup wizard marks them on the page.
 
     // Save first, then delete the replaced file — a failed save must not
     // leave the template pointing at a deleted file.
@@ -261,6 +274,8 @@ export class TemplatesService {
     groups: Record<string, string>;
     /** Template fields that no longer appear in the Word file. */
     orphans: string[];
+    /** When there are no placeholders: how to add them. */
+    hint: string | null;
   }> {
     const template = await this.findOne(id, tenantId);
     if (!template.wordFilePath) {
@@ -312,6 +327,10 @@ export class TemplatesService {
       malformed,
       groups: { ...scan.groupOf },
       orphans,
+      hint:
+        foundValid.length === 0 && malformed.length === 0
+          ? noPlaceholdersMessage(result.value.replace(/<[^>]*>/g, ' '))
+          : null,
     };
   }
 
@@ -357,6 +376,167 @@ export class TemplatesService {
       }
     }
 
+    return this.findOne(id, tenantId);
+  }
+
+  // ── Editing the Word file on the page (setup wizard) ──
+
+  /** The template's own Word file, for the page to show. */
+  async getWordFile(
+    id: string,
+    tenantId: string,
+  ): Promise<{ path: string; name: string }> {
+    const template = await this.findOne(id, tenantId);
+    if (!template.wordFilePath || !existsSync(template.wordFilePath)) {
+      throw new NotFoundException('No Word file uploaded for this template');
+    }
+    return {
+      path: template.wordFilePath,
+      name: template.wordFileName || 'template.docx',
+    };
+  }
+
+  /**
+   * Apply an edit to the Word file. The result must still be a valid template
+   * (no broken or nested placeholders) or nothing is written.
+   */
+  private async editWordFile<T>(
+    id: string,
+    tenantId: string,
+    edit: (buffer: Buffer) => { buffer: Buffer; extra: T },
+  ) {
+    const template = await this.findOne(id, tenantId);
+    if (template.type !== 'word' || !template.wordFilePath) {
+      throw new BadRequestException('Not a Word template or no file uploaded');
+    }
+    let result: { buffer: Buffer; extra: T };
+    try {
+      result = edit(readFileSync(template.wordFilePath));
+    } catch (err) {
+      if (err instanceof WordEditError) {
+        throw err.conflict
+          ? new ConflictException(err.message)
+          : new BadRequestException(err.message);
+      }
+      throw new BadRequestException('The Word file could not be edited.');
+    }
+    const html = await mammoth.convertToHtml({ buffer: result.buffer });
+    const scan = scanWordPlaceholders(html.value.replace(/<[^>]*>/g, ''));
+    if (scan.malformed.length > 0) {
+      throw new BadRequestException(
+        `That would break the Word file: ${scan.malformed.map((m) => `${m.text} (${m.reason})`).join('; ')}`,
+      );
+    }
+    // Write next to it, then swap, so a failure never leaves half a file.
+    const tmp = `${template.wordFilePath}.tmp`;
+    writeFileSync(tmp, result.buffer);
+    renameSync(tmp, template.wordFilePath);
+    return { template, scan, extra: result.extra };
+  }
+
+  /** Fields inside a {#group} loop belong to that group; fields no longer in any loop leave `left`. */
+  private async syncGroups(
+    template: Template,
+    groupOf: Record<string, string>,
+    left?: string,
+  ) {
+    for (const field of template.fields) {
+      const loop = groupOf[field.fieldKey];
+      if (loop && field.groupKey !== loop) {
+        await this.fieldRepository.update(field.id, { groupKey: loop });
+      } else if (!loop && left && field.groupKey === left) {
+        await this.fieldRepository.update(field.id, {
+          groupKey: null as unknown as string,
+        });
+      }
+    }
+  }
+
+  /** Selected text → a {placeholder}; creates the field if it's new. */
+  async markWordField(
+    id: string,
+    dto: {
+      spot: WordSpot;
+      fieldKey: string;
+      label?: string;
+      languageId?: string;
+    },
+    tenantId: string,
+  ): Promise<Template> {
+    const { template, scan } = await this.editWordFile(id, tenantId, (b) => ({
+      buffer: markField(b, dto.spot, dto.fieldKey),
+      extra: null,
+    }));
+    if (!template.fields.some((f) => f.fieldKey === dto.fieldKey)) {
+      const label = dto.label?.trim();
+      await this.addField(
+        id,
+        {
+          fieldKey: dto.fieldKey,
+          fieldType: guessFieldType(dto.fieldKey),
+          groupKey: scan.groupOf[dto.fieldKey],
+          ...(label && dto.languageId
+            ? { labels: [{ languageId: dto.languageId, label }] }
+            : {}),
+        },
+        tenantId,
+      );
+    }
+    await this.syncGroups(template, scan.groupOf);
+    return this.findOne(id, tenantId);
+  }
+
+  /** A {placeholder} → text again; its field goes too once it's nowhere in the file (unless documents use it). */
+  async unmarkWordField(
+    id: string,
+    dto: { spot: WordSpot; restore?: string },
+    tenantId: string,
+  ): Promise<Template> {
+    const key = dto.spot.text.replace(/\s+/g, '').slice(1, -1);
+    const { template, scan } = await this.editWordFile(id, tenantId, (b) => ({
+      buffer: unmarkField(b, dto.spot, dto.restore ?? ''),
+      extra: null,
+    }));
+    const field = template.fields.find((f) => f.fieldKey === key);
+    if (field && !scan.fields.includes(key)) {
+      const used = await this.fieldRepository.manager.count(
+        DocumentFieldValue,
+        { where: { templateFieldId: field.id } },
+      );
+      if (used === 0) await this.fieldRepository.delete(field.id);
+    }
+    return this.findOne(id, tenantId);
+  }
+
+  /** Make the table row at `spot` repeat once per entry of `groupKey`. */
+  async repeatWordRow(
+    id: string,
+    dto: { spot: WordSpot; groupKey: string },
+    tenantId: string,
+  ): Promise<Template> {
+    const { template, scan } = await this.editWordFile(id, tenantId, (b) => ({
+      buffer: repeatRow(b, dto.spot, dto.groupKey),
+      extra: null,
+    }));
+    await this.syncGroups(template, scan.groupOf);
+    return this.findOne(id, tenantId);
+  }
+
+  /** Stop the table row at `spot` repeating; its fields become single values. */
+  async unrepeatWordRow(
+    id: string,
+    dto: { spot: WordSpot },
+    tenantId: string,
+  ): Promise<Template> {
+    const { template, scan, extra } = await this.editWordFile(
+      id,
+      tenantId,
+      (b) => {
+        const r = unrepeatRow(b, dto.spot);
+        return { buffer: r.buffer, extra: r.group };
+      },
+    );
+    await this.syncGroups(template, scan.groupOf, extra ?? undefined);
     return this.findOne(id, tenantId);
   }
 

@@ -13,6 +13,7 @@ import {
   Max,
   ArrayMaxSize,
   Matches,
+  IsInt,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { FIELD_KEY_PATTERN } from './template-field.dto.js';
@@ -155,4 +156,80 @@ export class WordPlaceholdersDto {
   @ValidateNested({ each: true })
   @Type(() => WordPlaceholderItemDto)
   placeholders: WordPlaceholderItemDto[];
+}
+
+// ── Editing the Word file on the page (setup wizard) ──
+
+/** Where on the page the user selected — see word-edit.ts. */
+export class WordSpotDto {
+  @IsString()
+  @MaxLength(20000)
+  paragraphText: string;
+
+  @IsInt()
+  @Min(0)
+  occurrence: number;
+
+  @IsInt()
+  @Min(0)
+  start: number;
+
+  @IsInt()
+  @Min(1)
+  end: number;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  text: string;
+}
+
+export class MarkWordFieldDto {
+  @ValidateNested()
+  @Type(() => WordSpotDto)
+  spot: WordSpotDto;
+
+  @IsString()
+  @MaxLength(100)
+  @Matches(FIELD_KEY_PATTERN)
+  fieldKey: string;
+
+  /** Label of a new field, in `languageId` (the template's first document language). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  label?: string;
+
+  @IsOptional()
+  @IsUUID()
+  languageId?: string;
+}
+
+export class UnmarkWordFieldDto {
+  @ValidateNested()
+  @Type(() => WordSpotDto)
+  spot: WordSpotDto;
+
+  /** The text to put back (what was there before it became a field). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  restore?: string;
+}
+
+export class RepeatWordRowDto {
+  @ValidateNested()
+  @Type(() => WordSpotDto)
+  spot: WordSpotDto;
+
+  @IsString()
+  @MaxLength(100)
+  @Matches(FIELD_KEY_PATTERN)
+  groupKey: string;
+}
+
+export class UnrepeatWordRowDto {
+  @ValidateNested()
+  @Type(() => WordSpotDto)
+  spot: WordSpotDto;
 }
