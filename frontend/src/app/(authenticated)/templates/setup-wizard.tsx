@@ -25,7 +25,7 @@ export interface WizardTemplate {
   id: string; type: 'designer' | 'word' | 'simple'; name: string; description: string | null;
   pricePerPage: number | string; discountedPricePerPage: number | string | null; isActive: boolean;
   wordFileName: string | null; wordFilePath: string | null; layoutJson: unknown[] | null;
-  fields: TField[]; languages: Language[];
+  fields: TField[]; languages: Language[]; sourceLanguages?: Language[];
 }
 interface WordPreview {
   html: string; valid: string[]; unlinked: string[];
@@ -202,16 +202,17 @@ function BasicsStep({ tpl, languages, onSaved }: {
     type: tpl?.type ?? ('word' as WizardTemplate['type']),
   });
   const [langIds, setLangIds] = useState<string[]>(tpl?.languages.map((l) => l.id) ?? []);
+  const [srcIds, setSrcIds] = useState<string[]>(tpl?.sourceLanguages?.map((l) => l.id) ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const toggleLang = (id: string) => setLangIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const toggle = (id: string) => (ids: string[]) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
-    if (form.type !== 'simple' && langIds.length === 0) {
-      setError('Pick at least one document language.');
+    if (form.type !== 'simple' && (srcIds.length === 0 || langIds.length === 0)) {
+      setError('Pick the language the documents are translated from and the one they are translated into.');
       return;
     }
     setSaving(true);
@@ -221,6 +222,7 @@ function BasicsStep({ tpl, languages, onSaved }: {
       pricePerPage: parseFloat(form.pricePerPage) || 0,
       ...(form.discountedPricePerPage ? { discountedPricePerPage: parseFloat(form.discountedPricePerPage) } : {}),
       languageIds: langIds,
+      sourceLanguageIds: srcIds,
     };
     try {
       if (tpl) {
@@ -281,21 +283,25 @@ function BasicsStep({ tpl, languages, onSaved }: {
           </fieldset>
         )}
 
-        {form.type !== 'simple' && (
-          <fieldset className="mt-6">
-            <legend className="text-sm font-semibold text-text mb-1">Document languages</legend>
-            <p className="text-sm text-text-secondary mb-2">
-              The languages this document is produced in. You&apos;ll be asked for field labels in these only, and the template is offered for jobs translating into them.
-            </p>
+        {form.type !== 'simple' && ([
+          { id: 'src', title: 'Translated from', text: 'The language of the original documents, e.g. Arabic.', ids: srcIds, set: setSrcIds },
+          { id: 'doc', title: 'Translated into', text: 'The language this document is produced in, e.g. English. Field labels are asked in these.', ids: langIds, set: setLangIds },
+        ] as const).map((g) => (
+          <fieldset key={g.id} className="mt-6">
+            <legend className="text-sm font-semibold text-text mb-1">{g.title}</legend>
+            <p className="text-sm text-text-secondary mb-2">{g.text}</p>
             <div className="flex flex-wrap gap-2">
               {languages.map((l) => (
-                <label key={l.id} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm cursor-pointer ${langIds.includes(l.id) ? 'border-primary bg-primary-light text-primary-text' : 'border-border text-text'}`}>
-                  <input type="checkbox" checked={langIds.includes(l.id)} onChange={() => toggleLang(l.id)} />
+                <label key={l.id} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm cursor-pointer ${g.ids.includes(l.id) ? 'border-primary bg-primary-light text-primary-text' : 'border-border text-text'}`}>
+                  <input type="checkbox" checked={g.ids.includes(l.id)} onChange={() => g.set(toggle(l.id))} />
                   {l.name}
                 </label>
               ))}
             </div>
           </fieldset>
+        ))}
+        {form.type !== 'simple' && (
+          <p className="text-xs text-text-muted mt-2">New jobs using this template take their languages from here. Pick more than one only if the template really serves several.</p>
         )}
       </StepCard>
       <NavRow>
@@ -841,7 +847,13 @@ function DoneStep({ tpl, docLanguages, tried, onBack }: { tpl: WizardTemplate; d
     { ok: true, text: `${tpl.name} · ${Number(tpl.pricePerPage).toFixed(2)} per page` },
   ];
   if (tpl.type !== 'simple') {
-    items.push({ ok: docLanguages.length > 0, text: docLanguages.length ? `Document languages: ${docLanguages.map((l) => l.name).join(', ')}` : 'No document language chosen' });
+    const from = tpl.sourceLanguages ?? [];
+    items.push({
+      ok: from.length > 0 && docLanguages.length > 0,
+      text: from.length && docLanguages.length
+        ? `Translates ${from.map((l) => l.name).join(' / ')} → ${docLanguages.map((l) => l.name).join(' / ')}`
+        : `No ${from.length ? 'target' : 'source'} language chosen`,
+    });
     if (tpl.type === 'word') items.push({ ok: !!tpl.wordFileName, text: tpl.wordFileName ? `Word file: ${tpl.wordFileName}` : 'No Word file uploaded' });
     items.push({ ok: tpl.fields.length > 0 && unlabelled === 0, text: tpl.fields.length ? `${tpl.fields.length} field${tpl.fields.length === 1 ? '' : 's'}${unlabelled ? `, ${unlabelled} without a ${first?.name} label` : ', all labelled'}` : 'No fields' });
     for (const m of missingOther) items.push({ ok: true, warn: true, text: `${m.count} field${m.count === 1 ? '' : 's'} without a ${m.lang.name} label (the ${first?.name} one is shown instead)` });

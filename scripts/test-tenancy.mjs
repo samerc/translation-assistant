@@ -580,6 +580,18 @@ console.log('== template setup wizard (Word) ==');
   check('job accepted in a document language', ok(rightLang), show(rightLang));
   const noLangTpl = await req(a.A, 'POST', '/jobs', { title: 'Any lang', clientId, sourceLanguageId: a.en, targetLanguageId: a.ar, lineItems: [{ description: 'p', pageCount: 1, pricePerPage: 10, templateId: a.ids.template }] });
   check('a template without document languages works for any language', ok(noLangTpl), show(noLangTpl));
+  // Source languages: a template translates from these only.
+  const srcSet = await req(a.A, 'PATCH', `/templates/${tid}`, { sourceLanguageIds: [a.ar] });
+  check('template takes its source languages', ok(srcSet) && srcSet.data.sourceLanguages?.map((l) => l.id).join() === a.ar, show(srcSet));
+  const badSrc = await req(a.A, 'PATCH', `/templates/${tid}`, { sourceLanguageIds: ['00000000-0000-4000-8000-000000000000'] });
+  check('unknown source language refused', badSrc.status === 400, show(badSrc));
+  const wrongSrc = await req(a.A, 'POST', '/jobs', { title: 'Src check', clientId, sourceLanguageId: a.en, targetLanguageId: a.en, lineItems: [{ description: 'p', pageCount: 1, pricePerPage: 12, templateId: tid }] });
+  check('job refused when the template is not for the source language', wrongSrc.status === 400 && /source language/i.test(wrongSrc.data.message), show(wrongSrc));
+  const rightSrc = await req(a.A, 'POST', '/jobs', { title: 'Src ok', clientId, sourceLanguageId: a.ar, targetLanguageId: a.en, lineItems: [{ description: 'p', pageCount: 1, pricePerPage: 12, templateId: tid }] });
+  check('job accepted from the source language', ok(rightSrc), show(rightSrc));
+  const enJob = await req(a.A, 'POST', '/jobs', { title: 'From English', clientId, sourceLanguageId: a.en, targetLanguageId: a.en, lineItems: [] });
+  const addSrc = await req(a.A, 'POST', `/jobs/${enJob.data.id}/line-items`, { description: 'p', pageCount: 1, pricePerPage: 12, templateId: tid });
+  check('adding the template to a job from another source language is refused', addSrc.status === 400 && /source language/i.test(addSrc.data.message), show(addSrc));
 }
 
 console.log('== invite pre-fill ==');

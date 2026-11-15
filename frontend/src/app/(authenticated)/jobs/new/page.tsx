@@ -18,7 +18,38 @@ import Link from 'next/link';
 interface Client { id: string; name: string; type: string; }
 interface Contact { id: string; firstName: string; lastName: string; }
 interface Language { id: string; code: string; name: string; isActive: boolean; }
-interface Template { id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null; languages?: { id: string }[]; }
+interface Template {
+  id: string; type: string; name: string; pricePerPage: number; discountedPricePerPage: number | null;
+  /** Translated into (none = any). */
+  languages?: { id: string; code: string }[];
+  /** Translated from (none = any). */
+  sourceLanguages?: { id: string; code: string }[];
+}
+
+/**
+ * The languages a set of templates allows: the ones every template that sets
+ * them has in common. null = no template sets them (any language).
+ */
+function allowedBy(list: Template[], pick: (t: Template) => { id: string }[] | undefined): string[] | null {
+  let allowed: string[] | null = null;
+  for (const t of list) {
+    const ids = (pick(t) ?? []).map((l) => l.id);
+    if (ids.length === 0) continue;
+    allowed = allowed === null ? ids : allowed.filter((id) => ids.includes(id));
+  }
+  return allowed;
+}
+const fromLangs = (t: Template) => t.sourceLanguages;
+const intoLangs = (t: Template) => t.languages;
+/** The chosen value, or the only allowed one; '' when the choice isn't allowed. */
+const settle = (allowed: string[] | null, chosen: string) =>
+  allowed === null ? chosen : allowed.length === 1 ? allowed[0] : allowed.includes(chosen) ? chosen : '';
+/** "Birth certificate · AR → EN" */
+const pairLabel = (t: Template) => {
+  const from = t.sourceLanguages?.map((l) => l.code.toUpperCase()).join('/');
+  const into = t.languages?.map((l) => l.code.toUpperCase()).join('/');
+  return from || into ? ` · ${from || 'any'} → ${into || 'any'}` : '';
+};
 interface FreeformJobType { id: string; name: string; description: string | null; pricePerPage: number; discountedPricePerPage: number | null; isActive: boolean; }
 
 interface LineItem {
@@ -119,12 +150,31 @@ export default function NewJobPage() {
   };
 
   // Filter templates based on job type
-  // A template whose document languages are set is offered only for those target languages.
-  const fitsTarget = (t: Template) =>
-    !form.targetLanguageId || !t.languages?.length || t.languages.some((l) => l.id === form.targetLanguageId);
   const availableTemplates = form.type === 'freeform'
     ? templates.filter((t) => t.type === 'simple')
-    : templates.filter((t) => t.type !== 'simple' && fitsTarget(t));
+    : templates.filter((t) => t.type !== 'simple');
+
+  // The templates' languages decide the job's; without them the user picks.
+  const chosenTemplates = (except?: string) => lineItems
+    .filter((li) => li.key !== except)
+    .map((li) => templates.find((t) => t.id === li.templateId))
+    .filter((t): t is Template => !!t);
+  const chosen = chosenTemplates();
+  const sourceAllowed = allowedBy(chosen, fromLangs);
+  const targetAllowed = allowedBy(chosen, intoLangs);
+  const sourceId = settle(sourceAllowed, form.sourceLanguageId);
+  const isTranslation = form.isTranslation || targetAllowed !== null;
+  const targetId = isTranslation ? settle(targetAllowed, form.targetLanguageId) : '';
+  const languageClash = sourceAllowed?.length === 0 || targetAllowed?.length === 0;
+  /** Templates a row can take: ones that share languages with the other rows' templates. */
+  const templatesForRow = (key: string) => {
+    const others = chosenTemplates(key);
+    const from = allowedBy(others, fromLangs);
+    const into = allowedBy(others, intoLangs);
+    const fits = (ids: { id: string }[] | undefined, allowed: string[] | null) =>
+      allowed === null || !ids?.length || ids.some((l) => allowed.includes(l.id));
+    return availableTemplates.filter((t) => fits(t.sourceLanguages, from) && fits(t.languages, into));
+  };
 
   const handleTemplateSelect = (key: string, templateId: string) => {
     const tmpl = templates.find((t) => t.id === templateId);
@@ -208,6 +258,14 @@ export default function NewJobPage() {
       setError(problem);
       return;
     }
+    if (languageClash) {
+      setError('The templates you picked are for different languages. Put them in separate jobs.');
+      return;
+    }
+    if (!sourceId || (isTranslation && !targetId)) {
+      setError('Choose the job’s languages.');
+      return;
+    }
     setSaving(true);
 
     try {
@@ -215,7 +273,7 @@ export default function NewJobPage() {
         type: form.type,
         title: form.title,
         clientId: form.clientId,
-        sourceLanguageId: form.sourceLanguageId,
+        sourceLanguageId: sourceId,
         status: form.status,
         isFreeOfCharge: form.isFreeOfCharge,
         lineItems: lineItems.map((li) => ({
@@ -228,7 +286,7 @@ export default function NewJobPage() {
         })),
       };
 
-      if (form.isTranslation && form.targetLanguageId) body.targetLanguageId = form.targetLanguageId;
+      if (isTranslation && targetId) body.targetLanguageId = targetId;
       if (form.description) body.description = form.description;
       if (form.contactId) body.contactId = form.contactId;
       if (form.deadline) body.deadline = form.deadline;
@@ -291,7 +349,7 @@ export default function NewJobPage() {
 
         {/* Client & Language */}
         <div className="card p-6 space-y-4">
-          <h3 className="font-semibold text-text">Client & Languages</h3>
+          <h3 className="font-semibold text-text">Client</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="flex items-baseline justify-between mb-1.5">
@@ -338,31 +396,6 @@ export default function NewJobPage() {
               <p className="text-xs text-text-muted">Add emails, phones and addresses later from the client&apos;s page.</p>
             </div>
           )}
-          <label className="flex items-center gap-2 text-sm text-text cursor-pointer mb-2">
-            <input type="checkbox" checked={form.isTranslation}
-              onChange={(e) => setForm({ ...form, isTranslation: e.target.checked, targetLanguageId: '' })}
-              className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
-            Translation job (has a target language)
-          </label>
-          <div className={`grid gap-4 ${form.isTranslation ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
-            <Field label={form.isTranslation ? 'Source Language' : 'Language'} htmlFor="job-source" required>
-              <Select id="job-source" value={form.sourceLanguageId} onChange={(e) => setForm({ ...form, sourceLanguageId: e.target.value })} required>
-                <option value="">Select...</option>
-                {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
-              </Select>
-            </Field>
-            {form.isTranslation && (
-              <Field label="Target Language" htmlFor="job-target" required>
-                <Select id="job-target" value={form.targetLanguageId} onChange={(e) => setForm({ ...form, targetLanguageId: e.target.value })} required>
-                  <option value="">Select...</option>
-                  {languages.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
-                </Select>
-              </Field>
-            )}
-          </div>
-          {languages.length === 0 && (
-            <Alert tone="warning">No languages are set up yet. An admin can add them in Settings &gt; Languages.</Alert>
-          )}
           <Field label="Deadline" htmlFor="job-deadline">
             <DateInput id="job-deadline" value={form.deadline} onChange={(deadline) => setForm({ ...form, deadline })} />
           </Field>
@@ -381,9 +414,7 @@ export default function NewJobPage() {
 
           {form.type === 'template' && availableTemplates.length === 0 && (
             <Alert tone="info" className="mb-3">
-              {templates.some((t) => t.type !== 'simple')
-                ? 'None of your active templates are for this target language. '
-                : 'You have no active templates yet. '}
+              {'You have no active templates yet. '}
               <Link href="/templates/new" className="font-semibold underline">Create a template</Link>
               {' '}or switch the job type to Freeform.
             </Alert>
@@ -416,7 +447,7 @@ export default function NewJobPage() {
                       <select value={li.templateId || ''} onChange={(e) => handleTemplateSelect(li.key, e.target.value)}
                         className="input h-8 px-2 w-full">
                         <option value="">Select...</option>
-                        {availableTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{perPage(t.pricePerPage)}</option>)}
+                        {templatesForRow(li.key).map((t) => <option key={t.id} value={t.id}>{t.name}{pairLabel(t)}{perPage(t.pricePerPage)}</option>)}
                       </select>
                     ) : (
                       <select
@@ -498,6 +529,46 @@ export default function NewJobPage() {
                 <span className="text-lg font-bold text-text">{formatCurrency(grandTotal, baseCurrency)}</span>
               </div>
             </div>
+          )}
+        </div>
+
+        {/* Languages: from the templates when they set them */}
+        <div className="card p-6 space-y-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-semibold text-text">Languages</h3>
+            {(sourceAllowed !== null || targetAllowed !== null) && !languageClash && (
+              <span className="text-xs text-text-muted">Set by the template{chosen.length > 1 ? 's' : ''}</span>
+            )}
+          </div>
+          {languageClash && (
+            <Alert>The templates you picked are for different languages. Put them in separate jobs.</Alert>
+          )}
+          <label className={`flex items-center gap-2 text-sm text-text ${targetAllowed !== null ? 'opacity-60' : 'cursor-pointer'}`}>
+            <input type="checkbox" checked={isTranslation} disabled={targetAllowed !== null}
+              onChange={(e) => setForm({ ...form, isTranslation: e.target.checked, targetLanguageId: '' })}
+              className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
+            Translation job (has a target language)
+          </label>
+          <div className={`grid gap-4 ${isTranslation ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+            <Field label={isTranslation ? 'Source Language' : 'Language'} htmlFor="job-source" required>
+              <Select id="job-source" value={sourceId} required disabled={sourceAllowed?.length === 1}
+                onChange={(e) => setForm({ ...form, sourceLanguageId: e.target.value })}>
+                <option value="">Select...</option>
+                {languages.filter((l) => sourceAllowed === null || sourceAllowed.includes(l.id)).map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
+              </Select>
+            </Field>
+            {isTranslation && (
+              <Field label="Target Language" htmlFor="job-target" required>
+                <Select id="job-target" value={targetId} required disabled={targetAllowed?.length === 1}
+                  onChange={(e) => setForm({ ...form, targetLanguageId: e.target.value })}>
+                  <option value="">Select...</option>
+                  {languages.filter((l) => targetAllowed === null || targetAllowed.includes(l.id)).map((l) => <option key={l.id} value={l.id}>{l.name} ({l.code})</option>)}
+                </Select>
+              </Field>
+            )}
+          </div>
+          {languages.length === 0 && (
+            <Alert tone="warning">No languages are set up yet. An admin can add them in Settings &gt; Languages.</Alert>
           )}
         </div>
 

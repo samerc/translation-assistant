@@ -56,6 +56,13 @@ export class CreateTemplateDto {
   @ArrayMaxSize(20)
   @IsUUID('all', { each: true })
   languageIds?: string[];
+
+  /** Languages documents are translated from (none = any). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('4', { each: true })
+  sourceLanguageIds?: string[];
 }
 
 export class UpdateTemplateDto {
@@ -97,6 +104,13 @@ export class UpdateTemplateDto {
   @ArrayMaxSize(20)
   @IsUUID('all', { each: true })
   languageIds?: string[];
+
+  /** Languages documents are translated from (none = any). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('4', { each: true })
+  sourceLanguageIds?: string[];
 }
 
 /** Sample values for a test export (nothing is saved). */

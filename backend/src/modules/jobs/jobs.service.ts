@@ -161,19 +161,32 @@ export class JobsService {
     if (ids.length === 0) return [];
     return this.templateRepository.find({
       where: { id: In(ids), tenantId },
-      relations: { languages: true },
+      relations: { languages: true, sourceLanguages: true },
     });
   }
 
-  /** A template with document languages set can only produce those languages. */
+  /** A template with languages set only translates from / into those languages. */
   private assertTemplateLanguage(
     template: Template,
     targetLanguageId: string | null | undefined,
+    sourceLanguageId?: string | null,
   ): void {
-    if (!targetLanguageId || !template.languages?.length) return;
-    if (!template.languages.some((l) => l.id === targetLanguageId)) {
+    if (
+      targetLanguageId &&
+      template.languages?.length &&
+      !template.languages.some((l) => l.id === targetLanguageId)
+    ) {
       throw new BadRequestException(
         `The template "${template.name}" isn't available in the job's target language`,
+      );
+    }
+    if (
+      sourceLanguageId &&
+      template.sourceLanguages?.length &&
+      !template.sourceLanguages.some((l) => l.id === sourceLanguageId)
+    ) {
+      throw new BadRequestException(
+        `The template "${template.name}" isn't available for the job's source language`,
       );
     }
   }
@@ -400,7 +413,12 @@ export class JobsService {
         );
       }
       const t = li.templateId ? templateMap.get(li.templateId) : undefined;
-      if (t) this.assertTemplateLanguage(t, dto.targetLanguageId);
+      if (t)
+        this.assertTemplateLanguage(
+          t,
+          dto.targetLanguageId,
+          dto.sourceLanguageId,
+        );
     }
 
     // Wrap all writes in a transaction
@@ -608,7 +626,11 @@ export class JobsService {
         job.tenantId,
       );
       if (!template) throw new BadRequestException('Template not found');
-      this.assertTemplateLanguage(template, job.targetLanguageId);
+      this.assertTemplateLanguage(
+        template,
+        job.targetLanguageId,
+        job.sourceLanguageId,
+      );
     }
 
     const maxSort = await this.lineItemRepository

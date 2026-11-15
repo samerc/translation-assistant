@@ -121,6 +121,7 @@ export class TemplatesService {
       .leftJoinAndSelect('fields.labels', 'labels')
       .leftJoinAndSelect('labels.language', 'language')
       .leftJoinAndSelect('template.languages', 'docLanguages')
+      .leftJoinAndSelect('template.sourceLanguages', 'sourceLanguages')
       .where('template.tenant_id = :tenantId', { tenantId: query.tenantId });
 
     if (search) {
@@ -153,6 +154,7 @@ export class TemplatesService {
           },
         },
         languages: true,
+        sourceLanguages: true,
       },
       order: { fields: { sortOrder: 'ASC' } },
     });
@@ -161,12 +163,18 @@ export class TemplatesService {
   }
 
   async create(dto: CreateTemplateDto, tenantId: string): Promise<Template> {
-    const { languageIds, ...rest } = dto;
-    await this.assertLanguages(languageIds ?? [], tenantId);
+    const { languageIds, sourceLanguageIds, ...rest } = dto;
+    await this.assertLanguages(
+      [...(languageIds ?? []), ...(sourceLanguageIds ?? [])],
+      tenantId,
+    );
     const template = this.templateRepository.create({
       ...rest,
       tenantId,
       languages: (languageIds ?? []).map((id) => ({ id }) as Language),
+      sourceLanguages: (sourceLanguageIds ?? []).map(
+        (id) => ({ id }) as Language,
+      ),
     });
     const saved = await this.templateRepository.save(template);
     return this.findOne(saved.id, tenantId);
@@ -178,11 +186,17 @@ export class TemplatesService {
     tenantId: string,
   ): Promise<Template> {
     const template = await this.findOne(id, tenantId);
-    const { languageIds, ...rest } = dto;
+    const { languageIds, sourceLanguageIds, ...rest } = dto;
     Object.assign(template, rest);
     if (languageIds) {
       await this.assertLanguages(languageIds, tenantId);
       template.languages = languageIds.map((lid) => ({ id: lid }) as Language);
+    }
+    if (sourceLanguageIds) {
+      await this.assertLanguages(sourceLanguageIds, tenantId);
+      template.sourceLanguages = sourceLanguageIds.map(
+        (lid) => ({ id: lid }) as Language,
+      );
     }
     await this.templateRepository.save(template);
     return this.findOne(id, tenantId);

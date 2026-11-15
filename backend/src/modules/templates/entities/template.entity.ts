@@ -69,6 +69,15 @@ export class Template {
   })
   languages: Language[];
 
+  // The languages documents are translated from. Empty = any source language.
+  @ManyToMany(() => Language)
+  @JoinTable({
+    name: 'template_source_languages',
+    joinColumn: { name: 'template_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'language_id', referencedColumnName: 'id' },
+  })
+  sourceLanguages: Language[];
+
   @OneToMany(() => TemplateField, (field) => field.template, {
     cascade: true,
     eager: true,
