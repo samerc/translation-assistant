@@ -145,7 +145,8 @@ export default function JobDetailPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'details', label: 'Details' },
-    { id: 'documents', label: 'Documents' },
+    // Roles without documents (e.g. Accounting) don't get the tab.
+    ...(hasPermission('documents:read') ? [{ id: 'documents' as Tab, label: 'Documents' }] : []),
     { id: 'source-files', label: `Source Files (${sourceFiles.length})` },
     { id: 'translated-files', label: `Translated Files (${translatedFiles.length})` },
   ];

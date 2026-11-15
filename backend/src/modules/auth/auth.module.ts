@@ -1,3 +1,4 @@
+import { RolesModule } from '../roles/roles.module.js';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -27,6 +28,7 @@ import { TurnstileService } from './turnstile.service.js';
     ]),
     PassportModule,
     MailModule,
+    RolesModule,
     SettingsModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

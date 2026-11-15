@@ -1,3 +1,5 @@
+import { RolesService } from '../roles/roles.service.js';
+import { isAdminRole, roleSeesAllJobs } from '../../common/tenancy/actor.js';
 import {
   Injectable,
   UnauthorizedException,
@@ -30,12 +32,7 @@ import { TurnstileService } from './turnstile.service.js';
 import { SignupDto } from './dto/signup.dto.js';
 import { actorOf, type Actor } from '../../common/tenancy/actor.js';
 import { bindRequestTenant } from '../../common/tenancy/tenant-context.js';
-import {
-  ROLE_ADMIN,
-  ROLE_PLATFORM_ADMIN,
-  ROLE_TRANSLATOR,
-  TENANT_ROLES,
-} from '../../common/tenancy/roles.js';
+import { ROLE_ADMIN, ROLE_PLATFORM_ADMIN } from '../../common/tenancy/roles.js';
 
 interface LoginAttempt {
   failures: number;
@@ -83,6 +80,7 @@ export class AuthService {
     private readonly settingsService: SettingsService,
     private readonly turnstile: TurnstileService,
     private readonly dataSource: DataSource,
+    private readonly rolesService: RolesService,
   ) {
     setInterval(() => this.cleanupAttempts(), 10 * 60_000);
   }
@@ -407,11 +405,10 @@ export class AuthService {
     // users.role_id is NOT NULL: resolve the role now, so a bad or missing role
     // fails here instead of at registration. No role picked = Translator.
     // Only the tenant roles can be given, never Platform Admin.
-    const role = await this.userRepository.manager.findOne(Role, {
-      where: roleId
-        ? { id: roleId, name: In(TENANT_ROLES) }
-        : { name: DEFAULT_INVITE_ROLE },
-    });
+    // The organization's roles only (its customized copy of Translator by default).
+    const role = roleId
+      ? await this.rolesService.assertAssignable(roleId, tenantId)
+      : await this.rolesService.defaultInviteRole(tenantId);
     if (!role) {
       throw new BadRequestException(
         roleId
@@ -1083,10 +1080,9 @@ export class AuthService {
             id: user.tenant.id,
             name: user.tenant.name,
             dateFormat: settings?.dateFormat || 'DD/MM/YYYY',
-            // Translators of an organization that hides prices see none (the API strips them too).
+            // Their role doesn't see prices (the API strips them too).
             pricesHidden:
-              user.role?.name === ROLE_TRANSLATOR &&
-              settings?.translatorsSeePrices === false,
+              !isAdminRole(user.role) && user.role?.seesPrices === false,
           }
         : null,
       isPlatformAdmin:
@@ -1094,6 +1090,8 @@ export class AuthService {
       role: {
         id: user.role.id,
         name: user.role.name,
+        // Every job and client of the organization, not only assigned ones.
+        seesAllJobs: !!user.tenantId && roleSeesAllJobs(user),
         permissions: user.role.permissions.map(
           (p) => `${p.resource}:${p.action}`,
         ),

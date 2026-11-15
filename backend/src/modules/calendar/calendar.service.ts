@@ -32,7 +32,7 @@ export class CalendarService {
     month: number,
     year: number,
   ): Promise<CalendarEvent[]> {
-    const { userId, isAdmin, tenantId } = actor;
+    const { userId, seesAll, tenantId } = actor;
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -56,7 +56,7 @@ export class CalendarService {
       })
       .andWhere('job.tenant_id = :tenantId', { tenantId });
 
-    if (!isAdmin) {
+    if (!seesAll) {
       jobQb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', {
         userId,
       });
@@ -77,7 +77,7 @@ export class CalendarService {
       })
       .andWhere('inv.tenant_id = :tenantId', { tenantId });
 
-    if (!isAdmin) {
+    if (!seesAll) {
       invQb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (
           SELECT 1 FROM invoice_items ii

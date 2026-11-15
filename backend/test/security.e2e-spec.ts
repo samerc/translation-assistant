@@ -142,8 +142,20 @@ const AUTH_EXTRAS = [
 ] as [any, any, any, any, any];
 
 // Callers as the services see them (tenant t1).
-const T_USER = { userId: 'user-1', tenantId: 't1', isAdmin: false };
-const T_ADMIN = { userId: 'admin', tenantId: 't1', isAdmin: true };
+const T_USER = {
+  userId: 'user-1',
+  tenantId: 't1',
+  isAdmin: false,
+  seesAll: false,
+  seesPrices: true,
+};
+const T_ADMIN = {
+  userId: 'admin',
+  tenantId: 't1',
+  isAdmin: true,
+  seesAll: true,
+  seesPrices: true,
+};
 
 describe('Refresh-token architecture (AuthService)', () => {
   let authService: AuthService;
@@ -196,6 +208,7 @@ describe('Refresh-token architecture (AuthService)', () => {
       configService,
       mailService,
       ...AUTH_EXTRAS,
+      {} as any, // roles
     );
   });
 
@@ -362,6 +375,7 @@ describe('Token-type enforcement (passport strategies)', () => {
       configService,
       mailService,
       ...AUTH_EXTRAS,
+      {} as any, // roles
     ).generateFileToken('user-1');
     await expect(
       jwtStrategy.validate(jwtService.verify(fileToken)),
@@ -598,6 +612,7 @@ describe('Login lockout & account-state oracle (AuthService)', () => {
       configService,
       mailService,
       ...AUTH_EXTRAS,
+      {} as any, // roles
     );
   });
 
@@ -878,21 +893,82 @@ describe('View-only job assignments grant read, never write', () => {
   });
 });
 
-describe('Roles are fixed', () => {
-  it('the roles API only reads, and only the tenant roles', async () => {
-    const roleRepo = { find: jest.fn().mockResolvedValue([]) };
-    const svc = new RolesService(roleRepo as any, {} as any);
-    await svc.findTenantRoles();
-    const where = roleRepo.find.mock.calls[0][0].where;
-    expect((where.name as FindOperator<string[]>).value).toEqual([
-      'Admin',
-      'Translator',
-      'Viewer',
+describe('Roles', () => {
+  const platform = (name: string, extra: object = {}) => ({
+    id: `p-${name}`,
+    name,
+    tenantId: null,
+    isBuiltIn: ['Admin', 'Translator', 'Viewer'].includes(name),
+    overridesRoleId: null,
+    jobScope: name === 'Admin' ? 'all' : 'assigned',
+    seesPrices: true,
+    permissions: [],
+    ...extra,
+  });
+  function svcWith(rows: any[]) {
+    const roleRepo = {
+      find: jest.fn(({ where }: any) =>
+        Promise.resolve(
+          rows.filter((r) =>
+            where.tenantId && typeof where.tenantId === 'string'
+              ? r.tenantId === where.tenantId
+              : r.tenantId === null && r.name !== 'Platform Admin',
+          ),
+        ),
+      ),
+    };
+    return new RolesService(roleRepo as any, {} as any);
+  }
+
+  it('an organization sees the defaults it kept and its own roles — never Platform Admin or another organization’s', async () => {
+    const svc = svcWith([
+      platform('Admin'),
+      platform('Translator'),
+      platform('Viewer'),
+      platform('Platform Admin'),
+      platform('Accounting'),
+      {
+        ...platform('Translator'),
+        id: 't1-tr',
+        tenantId: 't1',
+        overridesRoleId: 'p-Translator',
+      },
+      {
+        ...platform('Interns'),
+        id: 't2-own',
+        tenantId: 't2',
+        isBuiltIn: false,
+      },
     ]);
-    // Nothing to create, rename or delete — permissions come from the seed.
-    expect((svc as any).create).toBeUndefined();
-    expect((svc as any).update).toBeUndefined();
-    expect((svc as any).remove).toBeUndefined();
+    const ids = (await (svc as any).effectiveRoles('t1'))
+      .map((r: any) => r.id)
+      .sort();
+    expect(ids).toEqual(['p-Accounting', 'p-Admin', 'p-Viewer', 't1-tr']);
+    await expect(
+      svc.assertAssignable('p-Platform Admin', 't1'),
+    ).rejects.toThrow(BadRequestException);
+    await expect(svc.assertAssignable('t2-own', 't1')).rejects.toThrow(
+      BadRequestException,
+    );
+    // The default the organization replaced can't be given any more.
+    await expect(svc.assertAssignable('p-Translator', 't1')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('Admin is locked, built-in names are reserved', async () => {
+    const svc = svcWith([platform('Admin'), platform('Translator')]);
+    await expect(
+      svc.updateForTenant('t1', 'p-Admin', { seesPrices: false }),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      svc.createForTenant('t1', {
+        name: 'admin',
+        permissions: [],
+        jobScope: 'all',
+        seesPrices: true,
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });
 
@@ -930,11 +1006,16 @@ describe('Invites resolve their role up front', () => {
       create: (e: any) => e,
       save: jest.fn((e: any) => Promise.resolve(e)),
     };
-    const userRepo = {
-      manager: { findOne: jest.fn().mockResolvedValue(role) },
+    const roles = {
+      assertAssignable: jest.fn((id: string) =>
+        role
+          ? Promise.resolve({ ...role, id })
+          : Promise.reject(new BadRequestException('Role not found')),
+      ),
+      defaultInviteRole: jest.fn().mockResolvedValue(role),
     };
     const svc = new AuthService(
-      userRepo as any,
+      {} as any,
       inviteRepo as any,
       noopRepo,
       noopRepo,
@@ -948,30 +1029,25 @@ describe('Invites resolve their role up front', () => {
       {} as any,
       {} as any,
       {} as any,
+      roles as any,
     );
-    return { svc, inviteRepo, userRepo };
+    return { svc, inviteRepo, roles };
   };
 
-  it('no role picked → stores the Translator role id', async () => {
-    const { svc, inviteRepo, userRepo } = make({ id: 'r-translator' });
+  it("no role picked → stores the organization's Translator role id", async () => {
+    const { svc, inviteRepo, roles } = make({ id: 'r-translator' });
     await svc.createInvite('new@example.com', undefined, 't1');
-    expect(userRepo.manager.findOne.mock.calls[0][1]).toEqual({
-      where: { name: 'Translator' },
-    });
+    expect(roles.defaultInviteRole).toHaveBeenCalledWith('t1');
     expect(inviteRepo.save.mock.calls[0][0]).toMatchObject({
       roleId: 'r-translator',
       tenantId: 't1', // the invitee joins the inviting admin's organization
     });
   });
 
-  it('a picked role must be one of the tenant roles (never Platform Admin)', async () => {
-    const { svc, userRepo } = make({ id: 'r-admin' });
-    await svc.createInvite('new@example.com', 'r-admin', 't1');
-    const where = userRepo.manager.findOne.mock.calls[0][1].where;
-    expect(where.id).toBe('r-admin');
-    expect((where.name as FindOperator<string[]>).value).not.toContain(
-      'Platform Admin',
-    );
+  it("a picked role must be one of the organization's roles", async () => {
+    const { svc, roles } = make({ name: 'Accounting' });
+    await svc.createInvite('new@example.com', 'r-acc', 't1');
+    expect(roles.assertAssignable).toHaveBeenCalledWith('r-acc', 't1');
   });
 
   it('unknown role id → 400 at invite time, nothing stored', async () => {

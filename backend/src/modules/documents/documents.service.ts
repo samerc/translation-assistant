@@ -1,3 +1,4 @@
+import { can } from '../../common/tenancy/actor.js';
 import {
   BadRequestException,
   Injectable,
@@ -49,7 +50,7 @@ export class DocumentsService {
         'This job is locked (delivered, invoiced or paid). Reopen it to change its documents.',
       );
     }
-    if (actor.isAdmin) return;
+    if (actor.seesAll) return;
     const assignment = await this.jobUserRepository.findOne({
       where: { jobId, userId: actor.userId },
     });
@@ -61,9 +62,10 @@ export class DocumentsService {
     }
   }
 
-  /** 'edit' for admins and edit assignees, else 'view' (call after an access check). */
+  /** 'edit' when the role may edit documents and sees all jobs or is an edit assignee, else 'view' (call after an access check). */
   async accessLevel(jobId: string, actor: Actor): Promise<'edit' | 'view'> {
-    if (actor.isAdmin) return 'edit';
+    if (!can(actor, 'documents:update')) return 'view';
+    if (actor.seesAll) return 'edit';
     const assignment = await this.jobUserRepository.findOne({
       where: { jobId, userId: actor.userId },
     });
@@ -238,7 +240,7 @@ export class DocumentsService {
       .andWhere('doc.status = :status', { status: 'completed' });
 
     // Non-admins can only see documents from their assigned jobs
-    if (!query.actor.isAdmin) {
+    if (!query.actor.seesAll) {
       qb.innerJoin(
         'job_users',
         'ju',

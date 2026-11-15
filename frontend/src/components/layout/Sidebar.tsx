@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useAuth } from '@/lib/auth-context';
 import {
-  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, ClockIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UserPlusIcon, UsersIcon, XIcon,
+  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, ClockIcon, FileTextIcon, HomeIcon, KeyIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UserPlusIcon, UsersIcon, XIcon,
 } from '@/components/ui/icons';
 
 interface NavItem {
@@ -21,14 +21,14 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     items: [
       { label: 'Dashboard', href: '/', icon: HomeIcon },
-      { label: 'Jobs', href: '/jobs', icon: BriefcaseIcon },
+      { label: 'Jobs', href: '/jobs', icon: BriefcaseIcon, permission: 'jobs:read' },
       { label: 'Calendar', href: '/calendar', icon: CalendarIcon, permission: 'calendar:read' },
     ],
   },
   {
     label: 'Business',
     items: [
-      { label: 'Clients', href: '/clients', icon: UsersIcon },
+      { label: 'Clients', href: '/clients', icon: UsersIcon, permission: 'clients:read' },
       { label: 'Invoices', href: '/invoices', icon: ReceiptIcon, permission: 'invoices:read' },
       { label: 'Reports', href: '/reports', icon: ChartIcon, permission: 'reports:read' },
     ],
@@ -36,7 +36,7 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     label: 'Library',
     items: [
-      { label: 'Templates', href: '/templates', icon: FileTextIcon },
+      { label: 'Templates', href: '/templates', icon: FileTextIcon, permission: 'templates:read' },
     ],
   },
   {
@@ -53,6 +53,7 @@ const platformGroups: { label?: string; items: NavItem[] }[] = [
   {
     items: [
       { label: 'Organizations', href: '/platform', icon: BuildingIcon },
+      { label: 'Roles', href: '/platform/roles', icon: KeyIcon },
       { label: 'Activity', href: '/platform/activity', icon: ClockIcon },
     ],
   },

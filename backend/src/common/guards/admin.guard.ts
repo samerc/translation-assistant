@@ -1,3 +1,4 @@
+import { isAdminRole } from '../tenancy/actor.js';
 import {
   Injectable,
   CanActivate,
@@ -36,7 +37,7 @@ export class AdminGuard implements CanActivate {
       .switchToHttp()
       .getRequest<MaybeAuthenticatedRequest>();
 
-    if (!user || !user.role || user.role.name !== 'Admin') {
+    if (!user || !isAdminRole(user.role)) {
       throw new ForbiddenException(
         'This action requires administrator privileges',
       );

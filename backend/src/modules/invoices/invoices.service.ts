@@ -53,7 +53,7 @@ export class InvoicesService {
     });
     if (!inTenant) throw new NotFoundException('Invoice not found');
     const invoice = await this.findOne(invoiceId);
-    if (actor.isAdmin) return invoice;
+    if (actor.seesAll) return invoice;
     const userId = actor.userId;
 
     // Check if user created the invoice
@@ -84,7 +84,7 @@ export class InvoicesService {
       where: { id: jobId, tenantId: actor.tenantId },
     });
     if (!inTenant) throw new NotFoundException('Job not found');
-    if (actor.isAdmin) return;
+    if (actor.seesAll) return;
     const assignment = await this.jobUserRepository.findOne({
       where: { jobId, userId: actor.userId },
     });
@@ -263,7 +263,7 @@ export class InvoicesService {
       .where('inv.tenant_id = :tenantId', { tenantId: query.actor.tenantId });
 
     // Non-admins: only see invoices they created or where they have access to linked jobs
-    if (!query.actor.isAdmin) {
+    if (!query.actor.seesAll) {
       qb.andWhere(
         `(inv.created_by_user_id = :userId OR EXISTS (
           SELECT 1 FROM invoice_items ii

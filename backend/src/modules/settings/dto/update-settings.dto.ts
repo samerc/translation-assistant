@@ -9,7 +9,6 @@ import {
   ArrayMaxSize,
   Matches,
   IsIn,
-  IsBoolean,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
@@ -49,10 +48,6 @@ export class UpdateSettingsDto {
     message: 'Date format must be DD/MM/YYYY, MM/DD/YYYY or YYYY-MM-DD',
   })
   dateFormat?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  translatorsSeePrices?: boolean;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>

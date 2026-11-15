@@ -224,7 +224,7 @@ export class JobsService {
       .where('job.tenant_id = :tenantId', { tenantId: query.actor.tenantId });
 
     // Non-admin users can only see jobs they are assigned to
-    if (!query.actor.isAdmin) {
+    if (!query.actor.seesAll) {
       qb.innerJoin(
         'job.assignedUsers',
         'jobUser',
@@ -251,7 +251,7 @@ export class JobsService {
       qb.andWhere('job.client_id = :clientId', { clientId });
     }
     // Who works on it (admins; everyone else only sees their own jobs anyway).
-    if (query.actor.isAdmin && query.assignee) {
+    if (query.actor.seesAll && query.assignee) {
       if (query.assignee === 'none') {
         qb.andWhere(
           'NOT EXISTS (SELECT 1 FROM job_users ju WHERE ju.job_id = job.id)',
@@ -383,9 +383,9 @@ export class JobsService {
       });
       if (!assignTo) throw new BadRequestException('User not found');
     }
-    // A non-admin can only open jobs for clients they can already see —
-    // otherwise any client id would grant access to that client.
-    if (!actor.isAdmin) {
+    // Someone who sees only their own jobs can only open jobs for clients they
+    // can already see — otherwise any client id would grant access to it.
+    if (!actor.seesAll) {
       const visible = await this.clientRepository
         .createQueryBuilder('client')
         .where('client.id = :clientId', { clientId: dto.clientId })

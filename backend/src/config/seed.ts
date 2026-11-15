@@ -7,11 +7,14 @@ import { LabelOption } from '../modules/settings/entities/label-option.entity.js
 import { Language } from '../modules/settings/entities/language.entity.js';
 import { AppSettings } from '../modules/settings/entities/app-settings.entity.js';
 import {
+  ALWAYS_GRANTED,
+  GRANTABLE_RESOURCES,
   ROLE_ADMIN,
   ROLE_PLATFORM_ADMIN,
   ROLE_TRANSLATOR,
   ROLE_VIEWER,
 } from '../common/tenancy/roles.js';
+import type { JobScope } from '../modules/roles/entities/role.entity.js';
 
 const TENANT_RESOURCES = [
   'users',
@@ -32,46 +35,54 @@ const ACTIONS = ['create', 'read', 'update', 'delete'];
 type Perm = Pick<Permission, 'resource' | 'action'>;
 
 /**
- * The fixed roles and exactly what each may do. Enforced on every boot, so a
- * permission change is a code change here (no migration needed).
+ * The built-in roles. `locked` ones (Admin, Platform Admin) get exactly these
+ * permissions on every boot. Translator and Viewer get them only when they are
+ * first created — after that the platform admin (or an organization, for
+ * itself) may change them, and the seed leaves them alone.
  */
 const ROLE_DEFINITIONS: {
   name: string;
   description: string;
+  locked: boolean;
+  jobScope: JobScope;
   grants: (p: Perm) => boolean;
 }[] = [
   {
     name: ROLE_ADMIN,
     description: 'Manages the organization: users, settings, everything',
+    locked: true,
+    jobScope: 'all',
     grants: (p) => p.resource !== 'platform',
   },
   {
     name: ROLE_TRANSLATOR,
     description: 'Works on clients, jobs and documents',
+    locked: false,
+    jobScope: 'assigned',
     grants: (p) =>
-      ([
-        'clients',
-        'jobs',
-        'documents',
-        'files',
-        'calendar',
-        'notifications',
-      ].includes(p.resource) &&
+      ALWAYS_GRANTED.includes(`${p.resource}:${p.action}`) ||
+      (['clients', 'jobs', 'documents', 'files', 'calendar'].includes(
+        p.resource,
+      ) &&
         ['create', 'read', 'update'].includes(p.action)) ||
-      // languages, labels, job types and currency are needed to create jobs
-      (p.resource === 'settings' && p.action === 'read') ||
       // templates are shared by the whole organization's documents: read-only
       (p.resource === 'templates' && p.action === 'read'),
   },
   {
     name: ROLE_VIEWER,
     description: 'Read-only access',
-    grants: (p) => p.resource !== 'platform' && p.action === 'read',
+    locked: false,
+    jobScope: 'assigned',
+    grants: (p) =>
+      ALWAYS_GRANTED.includes(`${p.resource}:${p.action}`) ||
+      (GRANTABLE_RESOURCES.includes(p.resource) && p.action === 'read'),
   },
   {
     name: ROLE_PLATFORM_ADMIN,
     description:
       'Manages organizations and platform settings — no access to their data',
+    locked: true,
+    jobScope: 'assigned',
     grants: (p) =>
       p.resource === 'platform' ||
       (p.resource === 'notifications' && ['read', 'update'].includes(p.action)),
@@ -99,43 +110,54 @@ export async function seed(dataSource: DataSource) {
   }
   const allPermissions = await permissionRepo.find();
 
-  // ── Fixed roles with their exact permissions ──
+  // ── Built-in roles (platform rows) ──
   for (const def of ROLE_DEFINITIONS) {
     const perms = allPermissions.filter(def.grants);
     let role = await roleRepo.findOne({
-      where: { name: def.name },
+      where: { name: def.name, tenantId: IsNull(), overridesRoleId: IsNull() },
       relations: { permissions: true },
     });
     if (!role) {
-      role = roleRepo.create({ name: def.name, description: def.description });
+      role = roleRepo.create({
+        name: def.name,
+        description: def.description,
+        tenantId: null,
+        isBuiltIn: true,
+        jobScope: def.jobScope,
+        seesPrices: true,
+        permissions: perms,
+      });
+      await roleRepo.save(role);
       console.log(`Seeded role: ${def.name}`);
+      continue;
     }
+    if (!role.isBuiltIn) {
+      role.isBuiltIn = true;
+      await roleRepo.update(role.id, { isBuiltIn: true });
+    }
+    if (!def.locked) continue;
     const current = new Set((role.permissions ?? []).map((p) => p.id));
     const target = new Set(perms.map((p) => p.id));
     const same =
       current.size === target.size &&
       [...target].every((id) => current.has(id));
-    if (!role.id || !same || role.description !== def.description) {
+    if (
+      !same ||
+      role.description !== def.description ||
+      role.jobScope !== def.jobScope ||
+      !role.seesPrices
+    ) {
       role.description = def.description;
       role.permissions = perms;
+      role.jobScope = def.jobScope;
+      role.seesPrices = true;
       await roleRepo.save(role);
     }
-  }
-  // Roles from before roles were fixed: users keep working only via the fixed four.
-  const fixedNames = ROLE_DEFINITIONS.map((d) => d.name);
-  const stray = await roleRepo
-    .createQueryBuilder('r')
-    .where('r.name NOT IN (:...fixedNames)', { fixedNames })
-    .getMany();
-  if (stray.length) {
-    console.warn(
-      `[SEED] Roles outside the fixed set exist and are ignored: ${stray.map((r) => r.name).join(', ')}`,
-    );
   }
 
   // ── Platform admin (belongs to no tenant) ──
   const platformRole = await roleRepo.findOneOrFail({
-    where: { name: ROLE_PLATFORM_ADMIN },
+    where: { name: ROLE_PLATFORM_ADMIN, tenantId: IsNull() },
   });
   const platformAdmins = await userRepo.count({
     where: { roleId: platformRole.id, tenantId: IsNull() },
