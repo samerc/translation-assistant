@@ -69,7 +69,7 @@ export default function JobsPage() {
   const [loadError, setLoadError] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Admins: whose jobs (?assignee= a user id, "me" or "none" — linked from Settings › Users).
+  // Admins: whose jobs (?assignee= a user id, "me" or "none" — linked from the Team page).
   const assignee = isAdmin ? searchParams.get('assignee') ?? '' : '';
   const [colleagues, setColleagues] = useState<Colleague[]>([]);
   useEffect(() => {
