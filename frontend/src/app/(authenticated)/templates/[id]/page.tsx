@@ -1008,6 +1008,12 @@ function WordTemplateTab({ template, onUpdate, readOnly }: { template: Template;
           {template.wordFileName ? <>Word file: <span className="font-medium text-text">{template.wordFileName}</span></> : 'No Word file uploaded yet.'}
         </p>
       )}
+      {!readOnly && template.wordFileName && (
+        <div className="tone tone-info rounded-lg p-3 text-sm mb-4 flex flex-wrap items-center justify-between gap-2">
+          <span>Mark fields and repeating rows by selecting text on the document itself.</span>
+          <Link href={`/templates/${template.id}/setup?step=word`} className="font-semibold underline">Edit fields on the document →</Link>
+        </div>
+      )}
       {/* Upload */}
       {!readOnly && <form onSubmit={handleUpload} className="card p-5 mb-6">
         <h3 className="font-semibold text-text mb-3">
@@ -1120,7 +1126,8 @@ function WordTemplateTab({ template, onUpdate, readOnly }: { template: Template;
                       No placeholders found in the document.
                     </p>
                     <p className="text-xs text-text-muted mt-2">
-                      Add <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{field_name}'}</code> in your Word file where values should go.
+                      Add <code className="bg-bg px-1 py-0.5 rounded text-primary">{'{field_name}'}</code> in your Word file where values should go
+                      {!readOnly && <> — or <Link href={`/templates/${template.id}/setup?step=word`} className="underline text-primary-text">mark them on the document</Link></>}.
                     </p>
                   </div>
                 )}

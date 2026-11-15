@@ -507,7 +507,7 @@ console.log('== template setup wizard (Word) ==');
   const up = await req(a.A, 'POST', `/templates/${tid}/upload-word`, undefined, { form: fileForm({}, 'example.docx', ex.buf, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') });
   check('the example file uploads as a Word template', ok(up), show(up));
   const pv = (await req(a.A, 'GET', `/templates/${tid}/word-preview`)).data;
-  // Refused files explain themselves: mail-merge style, and no placeholders at all.
+  // Files without {placeholders} are accepted (fields are marked on the page); the preview says how.
   const variant = (fn) => {
     const zip = new PizZip(ex.buf);
     zip.file('word/document.xml', fn(zip.file('word/document.xml').asText()));
@@ -516,9 +516,38 @@ console.log('== template setup wizard (Word) ==');
   const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   const t2 = (await req(a.A, 'POST', '/templates', { type: 'word', name: `Wizard refusals ${RUN}`, isActive: false })).data.id;
   const merge = await req(a.A, 'POST', `/templates/${t2}/upload-word`, undefined, { form: fileForm({}, 'merge.docx', variant((x) => x.replace(/\{[#/]?([a-z_]+)\}/g, '«$1»')), DOCX) });
-  check('mail-merge style file refused with how to convert it', merge.status === 400 && /mail-merge/.test(merge.data.message) && /«full_name» → \{full_name\}/.test(merge.data.message), show(merge));
-  const plain = await req(a.A, 'POST', `/templates/${t2}/upload-word`, undefined, { form: fileForm({}, 'plain.docx', variant((x) => x.replace(/\{[^}]*\}/g, 'x')), DOCX) });
-  check('file without placeholders refused with what to add', plain.status === 400 && /no placeholders yet/.test(plain.data.message), show(plain));
+  const mergeHint = (await req(a.A, 'GET', `/templates/${t2}/word-preview`)).data.hint ?? '';
+  check('mail-merge style file accepted; preview says how to convert it', ok(merge) && /mail-merge/.test(mergeHint) && /«full_name» → \{full_name\}/.test(mergeHint), mergeHint || show(merge));
+  const plainDoc = variant((x) => x.replace(/\{[^}]*\}/g, 'x').replace('Full name: </w:t>', 'Full name: </w:t></w:r><w:r><w:t>Rana Haddad</w:t>'));
+  const plain = await req(a.A, 'POST', `/templates/${t2}/upload-word`, undefined, { form: fileForm({}, 'plain.docx', plainDoc, DOCX) });
+  const plainHint = (await req(a.A, 'GET', `/templates/${t2}/word-preview`)).data.hint ?? '';
+  check('file without placeholders accepted; preview says how to add them', ok(plain) && /no placeholders yet/.test(plainHint) && /Make a field/.test(plainHint), plainHint || show(plain));
+
+  // Marking fields on the page edits the Word file.
+  const wf = await rawReq(a.A, 'GET', `/templates/${t2}/word-file`);
+  check('the Word file is served to its organization', wf.status === 200 && wf.type.includes('wordprocessingml') && docText(wf.buf).includes('Rana Haddad'), `${wf.status} ${wf.type}`);
+  const para = docText(wf.buf).split(/(?=Full name:)/)[1]?.split(/(?=Date of birth)/)[0] ?? 'Full name: Rana Haddad';
+  const sq = (x) => x.replace(/\s+/g, '');
+  const at = sq(para).indexOf('RanaHaddad');
+  const spot = { paragraphText: para, occurrence: 0, start: at, end: at + 10, text: 'Rana Haddad' };
+  const markB = await req(a.A, 'POST', `/templates/${b.ids.template}/word/mark`, { spot, fieldKey: 'x' });
+  check("marking another organization's template → 404", markB.status === 404, show(markB));
+  const markT = await req(a.T, 'POST', `/templates/${t2}/word/mark`, { spot, fieldKey: 'holder' });
+  check('a translator cannot mark fields', markT.status === 403, show(markT));
+  const fileB = await rawReq(a.A, 'GET', `/templates/${b.ids.template}/word-file`);
+  check("another organization's Word file → 404", fileB.status === 404, String(fileB.status));
+  const stale = await req(a.A, 'POST', `/templates/${t2}/word/mark`, { spot: { ...spot, text: 'Someone Else' }, fieldKey: 'holder' });
+  check('a stale selection is refused (409), file untouched', stale.status === 409, show(stale));
+  const mark = await req(a.A, 'POST', `/templates/${t2}/word/mark`, { spot, fieldKey: 'holder_name', label: 'Holder name', languageId: a.en });
+  const holder = mark.data.fields?.find((f) => f.fieldKey === 'holder_name');
+  check('marking text creates the field with its label', ok(mark) && holder?.labels?.[0]?.label === 'Holder name', show(mark));
+  const after = await rawReq(a.A, 'GET', `/templates/${t2}/word-file`);
+  check('…and the file now has the placeholder', docText(after.buf).includes('Full name: {holder_name}'), docText(after.buf).slice(0, 200));
+  const badKey = await req(a.A, 'POST', `/templates/${t2}/word/mark`, { spot, fieldKey: 'has space' });
+  check('field names are validated', badKey.status === 400, show(badKey));
+  const unmark = await req(a.A, 'POST', `/templates/${t2}/word/unmark`, { spot: { paragraphText: para.replace('Rana Haddad', '{holder_name}'), occurrence: 0, start: 9, end: 22, text: '{holder_name}' }, restore: 'Rana Haddad' });
+  const restored = await rawReq(a.A, 'GET', `/templates/${t2}/word-file`);
+  check('removing it puts the text back and drops the unused field', ok(unmark) && !unmark.data.fields.some((f) => f.fieldKey === 'holder_name') && docText(restored.buf).includes('Full name: Rana Haddad'), show(unmark));
   const found = [...(pv.valid ?? []), ...(pv.unlinked ?? [])];
   check('preview finds the placeholders and the loop', found.includes('full_name') && found.includes('child_name') && pv.groups?.child_name === 'children' && pv.malformed?.length === 0, JSON.stringify(pv).slice(0, 200));
   const sync = await req(a.A, 'POST', `/templates/${tid}/word-placeholders`, { placeholders: pv.unlinked.map((k) => ({ find: k, fieldKey: k })) });
