@@ -84,8 +84,10 @@ export class ReportsService {
         today: todayStr,
         weekEnd: weekEndStr,
       })
-      .andWhere('job.status NOT IN (:...excluded)', {
-        excluded: ['paid', 'cancelled', 'lost'],
+      // Open work only — the same jobs the dashboard's "Upcoming deadlines"
+      // lists (delivered/invoiced work is done, whatever its deadline).
+      .andWhere('job.status IN (:...open)', {
+        open: ['quote', 'accepted', 'in_progress'],
       })
       .andWhere('job.tenant_id = :tenantId', { tenantId });
     if (!isAdmin) {

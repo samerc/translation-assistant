@@ -22,12 +22,35 @@ import PDFDocument from 'pdfkit';
 import { Invoice } from './entities/invoice.entity.js';
 import { PdfText, TextAlign, TextStyle } from './pdf-text.js';
 import { TenantsService } from '../tenants/tenants.service.js';
-import { User } from '../users/entities/user.entity.js';
+import {
+  formatDateOnly,
+  formatMoney,
+} from '../../common/utils/display-format.js';
 
 interface InvoiceBranding {
   businessName: string;
   businessAddress: string;
+  taxId: string;
+  /** How to pay — printed after the notes. */
+  bankDetails: string;
+  dateFormat: string;
   logo: { buffer: Buffer; docxType: 'png' | 'jpg' } | null;
+}
+
+/** Word ignores line feeds inside a run: one run per line, joined by breaks. */
+function lineRuns(
+  text: string,
+  style: { size: number; color?: string; bold?: boolean },
+): TextRun[] {
+  return text.split(/\r?\n/).map(
+    (line, i) =>
+      new TextRun({
+        text: line,
+        font: 'Arial',
+        break: i > 0 ? 1 : 0,
+        ...style,
+      }),
+  );
 }
 
 @Injectable()
@@ -35,33 +58,20 @@ export class InvoiceExportService {
   constructor(
     @InjectRepository(Invoice)
     private readonly invoiceRepository: Repository<Invoice>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
     private readonly tenantsService: TenantsService,
   ) {}
 
-  // ── Invoice branding: the creator's "My Business" details, falling back to
-  // the organization's details in Settings > General so an invoice always has
-  // a sender ──
+  // ── Invoice branding: the organization's details (Settings > General) ──
 
   private async getBranding(invoice: Invoice): Promise<InvoiceBranding> {
-    const [creator, settings] = await Promise.all([
-      invoice.createdByUserId
-        ? this.userRepository.findOne({
-            where: { id: invoice.createdByUserId },
-          })
-        : Promise.resolve(null),
-      this.tenantsService.getSettings(invoice.tenantId),
-    ]);
-    const ownName = creator?.businessName?.trim();
+    const settings = await this.tenantsService.getSettings(invoice.tenantId);
     return {
-      businessName: ownName || settings?.companyName?.trim() || '',
-      // The address follows the name it belongs to.
-      businessAddress: ownName
-        ? creator?.businessAddress?.trim() || ''
-        : settings?.companyAddress?.trim() || '',
-      logo:
-        this.parseLogo(creator?.logo) ?? this.parseLogo(settings?.companyLogo),
+      businessName: settings.companyName?.trim() || '',
+      businessAddress: settings.companyAddress?.trim() || '',
+      taxId: settings.companyTaxId?.trim() || '',
+      bankDetails: settings.bankDetails?.trim() || '',
+      dateFormat: settings.dateFormat || 'DD/MM/YYYY',
+      logo: this.parseLogo(settings.companyLogo),
     };
   }
 
@@ -145,13 +155,6 @@ export class InvoiceExportService {
     return Math.max(0, Math.round(owed * 100) / 100);
   }
 
-  // issueDate/dueDate are date-only strings ("2026-10-26"). new Date() reads
-  // them as UTC midnight, so format in UTC — the server's own time zone would
-  // shift the printed day.
-  private formatDate(value: string | Date): string {
-    return new Date(value).toLocaleDateString(undefined, { timeZone: 'UTC' });
-  }
-
   private ensureExportDir(): string {
     const dir = join(process.cwd(), 'exports', 'invoices');
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -191,9 +194,21 @@ export class InvoiceExportService {
     if (branding.businessAddress) {
       nameParas.push(
         new Paragraph({
+          children: lineRuns(branding.businessAddress, {
+            size: 18,
+            color: '666666',
+          }),
+          spacing: { after: 100 },
+        }),
+      );
+    }
+
+    if (branding.taxId) {
+      nameParas.push(
+        new Paragraph({
           children: [
             new TextRun({
-              text: branding.businessAddress,
+              text: `Tax ID: ${branding.taxId}`,
               size: 18,
               color: '666666',
               font: 'Arial',
@@ -282,8 +297,8 @@ export class InvoiceExportService {
     // Invoice details
     const detailLines = [
       `Invoice Number: ${invoice.invoiceNumber}`,
-      `Issue Date: ${this.formatDate(invoice.issueDate)}`,
-      `Due Date: ${this.formatDate(invoice.dueDate)}`,
+      `Issue Date: ${formatDateOnly(invoice.issueDate, branding.dateFormat)}`,
+      `Due Date: ${formatDateOnly(invoice.dueDate, branding.dateFormat)}`,
       `Status: ${invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}`,
     ];
 
@@ -342,14 +357,10 @@ export class InvoiceExportService {
     if (billingAddress) {
       children.push(
         new Paragraph({
-          children: [
-            new TextRun({
-              text: billingAddress.address,
-              size: 18,
-              color: '666666',
-              font: 'Arial',
-            }),
-          ],
+          children: lineRuns(billingAddress.address, {
+            size: 18,
+            color: '666666',
+          }),
           spacing: { after: 40 },
         }),
       );
@@ -504,7 +515,7 @@ export class InvoiceExportService {
                 new Paragraph({
                   children: [
                     new TextRun({
-                      text: `${invoice.currency} ${Number(item.unitPrice).toFixed(2)}`,
+                      text: `${formatMoney(item.unitPrice, invoice.currency)}`,
                       size: 18,
                       font: 'Arial',
                     }),
@@ -520,7 +531,7 @@ export class InvoiceExportService {
                 new Paragraph({
                   children: [
                     new TextRun({
-                      text: `${invoice.currency} ${Number(item.lineTotal).toFixed(2)}`,
+                      text: `${formatMoney(item.lineTotal, invoice.currency)}`,
                       size: 18,
                       font: 'Arial',
                     }),
@@ -548,7 +559,7 @@ export class InvoiceExportService {
       new Paragraph({
         children: [
           new TextRun({
-            text: `Subtotal: ${invoice.currency} ${Number(invoice.subtotal).toFixed(2)}`,
+            text: `Subtotal: ${formatMoney(invoice.subtotal, invoice.currency)}`,
             size: 20,
             font: 'Arial',
           }),
@@ -562,7 +573,7 @@ export class InvoiceExportService {
         new Paragraph({
           children: [
             new TextRun({
-              text: `Tax (${invoice.taxRate}%): ${invoice.currency} ${Number(invoice.taxAmount).toFixed(2)}`,
+              text: `Tax (${invoice.taxRate}%): ${formatMoney(invoice.taxAmount, invoice.currency)}`,
               size: 20,
               font: 'Arial',
             }),
@@ -576,7 +587,7 @@ export class InvoiceExportService {
       new Paragraph({
         children: [
           new TextRun({
-            text: `Total: ${invoice.currency} ${Number(invoice.total).toFixed(2)}`,
+            text: `Total: ${formatMoney(invoice.total, invoice.currency)}`,
             bold: true,
             size: 24,
             font: 'Arial',
@@ -591,14 +602,14 @@ export class InvoiceExportService {
     const paymentLines: [string, string, boolean][] = [];
     if (invoice.paidAmount !== null) {
       paymentLines.push([
-        `Paid: ${invoice.currency} ${Number(invoice.paidAmount).toFixed(2)}`,
+        `Paid: ${formatMoney(invoice.paidAmount, invoice.currency)}`,
         '16A34A',
         false,
       ]);
     }
     if (invoice.paidAmount !== null && balance > 0) {
       paymentLines.push([
-        `Balance due: ${invoice.currency} ${balance.toFixed(2)}`,
+        `Balance due: ${formatMoney(balance, invoice.currency)}`,
         'B91C1C',
         true,
       ]);
@@ -634,14 +645,33 @@ export class InvoiceExportService {
       );
       notesChildren.push(
         new Paragraph({
+          children: lineRuns(invoice.notes, { size: 18, color: '666666' }),
+        }),
+      );
+    }
+
+    // Payment details (Settings > General) — how the client pays
+    if (branding.bankDetails) {
+      notesChildren.push(new Paragraph({ spacing: { after: 200 } }));
+      notesChildren.push(
+        new Paragraph({
           children: [
             new TextRun({
-              text: invoice.notes,
-              size: 18,
-              color: '666666',
+              text: 'Payment details:',
+              bold: true,
+              size: 20,
               font: 'Arial',
             }),
           ],
+          spacing: { after: 80 },
+        }),
+      );
+      notesChildren.push(
+        new Paragraph({
+          children: lineRuns(branding.bankDetails, {
+            size: 18,
+            color: '666666',
+          }),
         }),
       );
     }
@@ -717,7 +747,7 @@ export class InvoiceExportService {
     const pageWidth = doc.page.width - 100; // margins
     const top = 50;
     const bottom = doc.page.height - 60; // room for the page-number footer
-    const money = (n: unknown) => `${invoice.currency} ${Number(n).toFixed(2)}`;
+    const money = (n: unknown) => formatMoney(n, invoice.currency);
     const muted = '#666666';
 
     // Company header — per-user branding, logo beside the business name.
@@ -759,6 +789,17 @@ export class InvoiceExportService {
       );
     }
 
+    if (branding.taxId) {
+      headerY = t.draw(
+        `Tax ID: ${branding.taxId}`,
+        textX,
+        headerY + 2,
+        240,
+        { size: 9, color: muted },
+        'left',
+      );
+    }
+
     // INVOICE title + details (right side)
     t.drawLine(
       'INVOICE',
@@ -771,8 +812,8 @@ export class InvoiceExportService {
     let detailsY = 90;
     for (const line of [
       `Invoice #: ${invoice.invoiceNumber}`,
-      `Issue Date: ${this.formatDate(invoice.issueDate)}`,
-      `Due Date: ${this.formatDate(invoice.dueDate)}`,
+      `Issue Date: ${formatDateOnly(invoice.issueDate, branding.dateFormat)}`,
+      `Due Date: ${formatDateOnly(invoice.dueDate, branding.dateFormat)}`,
       `Status: ${invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}`,
     ]) {
       t.drawLine(
@@ -988,6 +1029,25 @@ export class InvoiceExportService {
         ensure(notesLH);
         t.drawLine(line, left, y, pageWidth, notesStyle);
         y += notesLH;
+      }
+    }
+
+    // Payment details (Settings > General) — how the client pays
+    if (branding.bankDetails) {
+      const style = { size: 9, color: muted };
+      const lh = t.lineHeight(style);
+      y += 20;
+      ensure(16 + lh);
+      t.drawLine('Payment details:', left, y, pageWidth, {
+        size: 10,
+        bold: true,
+        color: '#000000',
+      });
+      y += 16;
+      for (const line of t.lines(branding.bankDetails, pageWidth, style)) {
+        ensure(lh);
+        t.drawLine(line, left, y, pageWidth, style);
+        y += lh;
       }
     }
 

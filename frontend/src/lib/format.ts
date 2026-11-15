@@ -24,10 +24,34 @@ function parseDate(value: string | Date): Date {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
 }
 
+export const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'] as const;
+
+// The organization's date format (Settings > General), set by the auth context
+// from the profile before each re-render. Default: DD/MM/YYYY.
+let dateFormat: string = 'DD/MM/YYYY';
+export function setDateFormat(format: string | null | undefined): void {
+  dateFormat = format && (DATE_FORMATS as readonly string[]).includes(format) ? format : 'DD/MM/YYYY';
+}
+
+/** A calendar date in the organization's format, from a `Date` or `YYYY-MM-DD`. */
 export function formatDate(value: string | Date | null | undefined): string {
   if (!value) return '—';
   const d = parseDate(value);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+  if (isNaN(d.getTime())) return '—';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  if (dateFormat === 'MM/DD/YYYY') return `${mm}/${dd}/${y}`;
+  if (dateFormat === 'YYYY-MM-DD') return `${y}-${mm}-${dd}`;
+  return `${dd}/${mm}/${y}`;
+}
+
+/** Date and time ("15/11/2026, 11:43"), the date in the organization's format. */
+export function formatDateTime(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '—';
+  return `${formatDate(d)}, ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 /** A Date's local calendar date as `YYYY-MM-DD` (unlike `toISOString()`, which is UTC). */
@@ -67,4 +91,25 @@ export function humanize(key: string): string {
     .trim()
     .toLowerCase();
   return words ? words[0].toUpperCase() + words.slice(1) : key;
+}
+
+/** "Edge on Windows" from a browser user-agent string (the raw string is kept for tooltips). */
+export function describeUserAgent(ua: string | null | undefined): string {
+  if (!ua) return 'Unknown device';
+  const browser =
+    /Edg\//.test(ua) ? 'Edge'
+    : /OPR\/|Opera/.test(ua) ? 'Opera'
+    : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\/|CriOS/.test(ua) ? 'Chrome'
+    : /Safari\//.test(ua) ? 'Safari'
+    : null;
+  const os =
+    /iPhone|iPad|iPod/.test(ua) ? 'iOS'
+    : /Android/.test(ua) ? 'Android'
+    : /Windows/.test(ua) ? 'Windows'
+    : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
+    : /Linux/.test(ua) ? 'Linux'
+    : null;
+  if (browser && os) return `${browser} on ${os}`;
+  return browser || os || 'Unknown device';
 }

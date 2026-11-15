@@ -84,6 +84,11 @@ export class SettingsService {
     return this.tenantsService.updateSettings(tenantId, patch);
   }
 
+  /** Set (data URL) or clear (null) the organization's invoice logo. */
+  setLogo(tenantId: string, logo: string | null): Promise<TenantSettings> {
+    return this.tenantsService.updateSettings(tenantId, { companyLogo: logo });
+  }
+
   /** The tenant's Google Translate key (no platform-wide fallback: each tenant pays its own). */
   getTranslateApiKey(tenantId: string): Promise<string | null> {
     return this.tenantsService.getTranslateApiKey(tenantId);

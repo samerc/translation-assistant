@@ -169,7 +169,9 @@ export default function DocumentFillPage() {
     if (!(await handleSave())) return;
     try {
       await api.patch(`/documents/${doc.id}/status`, { status: 'completed' });
-      router.push(`/jobs/${doc.jobId}`);
+      // Stay here: exporting is usually the next step.
+      setDoc({ ...doc, status: 'completed' });
+      flash('Completed — you can export it now');
     } catch (err) {
       logger.error('Failed to complete document', err, 'documents');
       flash(err instanceof ApiError ? err.message : 'Could not mark the document complete', 'danger');
@@ -274,7 +276,7 @@ export default function DocumentFillPage() {
           </button>
           <h1 className="text-2xl font-bold tracking-tight text-text">{doc.template.name}</h1>
           <p className="text-sm text-text-secondary mt-1">
-            {sourceLang.name}{targetLang ? ` → ${targetLang.name}` : ''} —
+            {sourceLang.name}{targetLang ? ` → ${targetLang.name}` : ''}
             <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-semibold ${
               doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'
             }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
@@ -286,13 +288,15 @@ export default function DocumentFillPage() {
               <Button onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving...' : 'Save'}
               </Button>
-              <Button variant="primary" onClick={handleMarkComplete} disabled={saving}>
-                Save & Complete
-              </Button>
+              {doc.status !== 'completed' && (
+                <Button variant="primary" onClick={handleMarkComplete} disabled={saving}>
+                  Save & Complete
+                </Button>
+              )}
             </>
           )}
           {doc.template.type !== 'simple' && (
-            <Button variant={locked ? 'primary' : 'secondary'} onClick={handleExport}>
+            <Button variant={locked || doc.status === 'completed' ? 'primary' : 'secondary'} onClick={handleExport}>
               Export .docx
             </Button>
           )}

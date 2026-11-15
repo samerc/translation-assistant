@@ -7,7 +7,8 @@ import { INVOICE_STATUS_BADGE } from '@/lib/status';
 import { logger } from '@/lib/logger';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from '@/lib/toast';
-import { formatDate, todayLocal } from '@/lib/format';
+import { formatCurrency, formatDate, todayLocal } from '@/lib/format';
+import { CurrencySelect } from '@/components/ui/CurrencySelect';
 import { useNow } from '@/lib/use-now';
 import { RequirePermission } from '@/components/RequirePermission';
 import { NO_AUTOFILL } from '@/lib/no-autofill';
@@ -117,7 +118,7 @@ function InvoiceDetailPage() {
 
   const handleDeletePayment = async (payment: Payment) => {
     if (!invoice) return;
-    const ok = await confirmDialog(`Delete the payment of ${invoice.currency} ${Number(payment.amount).toFixed(2)} from ${formatDate(payment.paidAt)}?`);
+    const ok = await confirmDialog(`Delete the payment of ${formatCurrency(payment.amount, invoice.currency)} from ${formatDate(payment.paidAt)}?`);
     if (!ok) return;
     try {
       await api.delete(`/invoices/${id}/payments/${payment.id}`);
@@ -139,6 +140,17 @@ function InvoiceDetailPage() {
       toast.error(msg);
       logger.error('Failed to update status', err, 'invoices');
     }
+  };
+
+  const markSent = async () => {
+    const jobs = invoice?.items.filter((it) => it.jobId).length ?? 0;
+    if (!(await confirmDialog({
+      title: 'Mark as sent',
+      message: `Mark ${invoice?.invoiceNumber} as sent to the client? It can't be edited afterwards${jobs ? ', and its linked jobs move to Invoiced' : ''}. Use Email to send it from here, or download the PDF.`,
+      confirmText: 'Mark as sent',
+      danger: false,
+    }))) return;
+    await handleStatusChange('sent');
   };
 
   const handleRecordPayment = async () => {
@@ -264,6 +276,8 @@ function InvoiceDetailPage() {
   const partlyPaid = canPay && Number(invoice.paidAmount) > 0;
   const badge = partlyPaid ? { ...found, label: `${found.label} · partially paid` } : found;
   const nextStatuses = VALID_TRANSITIONS[invoice.status] || [];
+  // Draft → sent has its own button; the dropdown keeps the rest (cancel, revive…).
+  const otherStatuses = invoice.status === 'draft' ? nextStatuses.filter((st) => st !== 'sent') : nextStatuses;
 
   return (
     <div className="max-w-4xl">
@@ -295,8 +309,14 @@ function InvoiceDetailPage() {
           </button>
           {invoice.status === 'draft' && !editing && (
             <button onClick={startEditing}
-              className="btn btn-primary btn-sm">
+              className="btn btn-secondary btn-sm">
               Edit
+            </button>
+          )}
+          {invoice.status === 'draft' && !editing && (
+            <button onClick={markSent}
+              className="btn btn-primary btn-sm">
+              Mark as sent
             </button>
           )}
           {canPay && (
@@ -305,11 +325,11 @@ function InvoiceDetailPage() {
               Record Payment
             </button>
           )}
-          {nextStatuses.length > 0 && (
+          {otherStatuses.length > 0 && (
             <select value="" onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
               aria-label="Change invoice status" className="input h-8 px-2 w-auto">
               <option value="">Change status...</option>
-              {nextStatuses.map((s) => {
+              {otherStatuses.map((s) => {
                 const st = STATUSES.find((x) => x.value === s);
                 return <option key={s} value={s}>{st?.label || s}</option>;
               })}
@@ -331,28 +351,28 @@ function InvoiceDetailPage() {
           {editing ? (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Issue Date</label>
-                <input type="date" value={editForm.issueDate} onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })}
+                <label htmlFor="edit-issue" className="block text-xs font-medium text-text-muted mb-1">Issue Date</label>
+                <input id="edit-issue" type="date" value={editForm.issueDate} onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })}
                   className="input w-full" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Due Date</label>
-                <input type="date" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
+                <label htmlFor="edit-due" className="block text-xs font-medium text-text-muted mb-1">Due Date</label>
+                <input id="edit-due" type="date" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })}
                   className="input w-full" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Tax Rate (%)</label>
-                <input type="number" step="0.01" min="0" value={editForm.taxRate} onChange={(e) => setEditForm({ ...editForm, taxRate: Number(e.target.value) })}
+                <label htmlFor="edit-tax" className="block text-xs font-medium text-text-muted mb-1">Tax Rate (%)</label>
+                <input id="edit-tax" type="number" step="0.01" min="0" value={editForm.taxRate} onChange={(e) => setEditForm({ ...editForm, taxRate: Number(e.target.value) })}
                   className="input w-full" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Currency</label>
-                <input value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
-                  className="input w-full" />
+                <label htmlFor="edit-currency" className="block text-xs font-medium text-text-muted mb-1">Currency</label>
+                <CurrencySelect id="edit-currency" value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })}
+                  className="w-full" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">Notes</label>
-                <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3}
+                <label htmlFor="edit-notes" className="block text-xs font-medium text-text-muted mb-1">Notes</label>
+                <textarea id="edit-notes" value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} rows={3}
                   className="input w-full resize-y" />
               </div>
               <div className="flex gap-2 pt-1">
@@ -379,16 +399,16 @@ function InvoiceDetailPage() {
         <div className="card p-5">
           <h3 className="text-sm font-semibold text-text-secondary mb-3">Payment Summary</h3>
           <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-text-muted">Subtotal</span><span className="text-text">{invoice.currency} {Number(invoice.subtotal).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-text-muted">Subtotal</span><span className="text-text">{formatCurrency(invoice.subtotal, invoice.currency)}</span></div>
             {Number(invoice.taxRate) > 0 && (
-              <div className="flex justify-between"><span className="text-text-muted">Tax ({invoice.taxRate}%)</span><span className="text-text">{invoice.currency} {Number(invoice.taxAmount).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-text-muted">Tax ({invoice.taxRate}%)</span><span className="text-text">{formatCurrency(invoice.taxAmount, invoice.currency)}</span></div>
             )}
-            <div className="flex justify-between font-bold border-t border-border pt-2"><span className="text-text">Total</span><span className="text-text">{invoice.currency} {Number(invoice.total).toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold border-t border-border pt-2"><span className="text-text">Total</span><span className="text-text">{formatCurrency(invoice.total, invoice.currency)}</span></div>
             {invoice.paidAmount !== null && (
               <>
-                <div className="flex justify-between text-success"><span>Paid</span><span>{invoice.currency} {Number(invoice.paidAmount).toFixed(2)}</span></div>
+                <div className="flex justify-between text-success"><span>Paid</span><span>{formatCurrency(invoice.paidAmount, invoice.currency)}</span></div>
                 {balance > 0 && (
-                  <div className="flex justify-between font-semibold text-danger"><span>Balance due</span><span>{invoice.currency} {balance.toFixed(2)}</span></div>
+                  <div className="flex justify-between font-semibold text-danger"><span>Balance due</span><span>{formatCurrency(balance, invoice.currency)}</span></div>
                 )}
                 {invoice.paidAt && (
                   <div className="flex justify-between"><span className="text-text-muted">Paid in full on</span><span className="text-text">{formatDate(invoice.paidAt)}</span></div>
@@ -407,7 +427,7 @@ function InvoiceDetailPage() {
                       {p.note && <div className="text-xs text-text-muted">{p.note}</div>}
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                      <span className="text-text">{invoice.currency} {Number(p.amount).toFixed(2)}</span>
+                      <span className="text-text">{formatCurrency(p.amount, invoice.currency)}</span>
                       {invoice.status !== 'cancelled' && (
                         <button onClick={() => handleDeletePayment(p)} className="text-xs text-danger hover:underline">Delete</button>
                       )}
@@ -456,8 +476,8 @@ function InvoiceDetailPage() {
                   ) : '—'}
                 </td>
                 <td className="px-4 py-3 text-text text-right">{Number(item.quantity)}</td>
-                <td className="px-4 py-3 text-text text-right">{invoice.currency} {Number(item.unitPrice).toFixed(2)}</td>
-                <td className="px-4 py-3 text-text font-medium text-right">{invoice.currency} {Number(item.lineTotal).toFixed(2)}</td>
+                <td className="px-4 py-3 text-text text-right">{formatCurrency(item.unitPrice, invoice.currency)}</td>
+                <td className="px-4 py-3 text-text font-medium text-right">{formatCurrency(item.lineTotal, invoice.currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -469,7 +489,7 @@ function InvoiceDetailPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="card p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-text mb-1">Record Payment</h3>
-            <p className="text-sm text-text-muted mb-4">Balance due: {invoice.currency} {balance.toFixed(2)} — record the full amount or part of it.</p>
+            <p className="text-sm text-text-muted mb-4">Balance due: {formatCurrency(balance, invoice.currency)} — record the full amount or part of it.</p>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Amount</label>

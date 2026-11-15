@@ -237,8 +237,9 @@ function BasicsStep({ tpl, languages, onSaved }: {
   const typeOptions: { value: WizardTemplate['type']; title: string; text: string }[] = [
     { value: 'word', title: 'From my Word file', text: 'Recommended. You write the document in Word with placeholders; translators fill in a form and download it filled in.' },
     { value: 'designer', title: 'Build the layout here', text: 'Advanced. No Word file: you define the fields, and a clean document is generated from them (optionally with a custom layout).' },
-    { value: 'simple', title: 'No form — pricing only', text: 'For freeform jobs: just a name and a price per page. No document is produced.' },
   ];
+  // Priced services without a document are Freeform Types (Settings); existing
+  // pricing-only templates still open here, they just can't be created any more.
 
   return (
     <form onSubmit={submit}>
@@ -273,6 +274,10 @@ function BasicsStep({ tpl, languages, onSaved }: {
                 </label>
               ))}
             </div>
+            <p className="text-xs text-text-muted mt-2">
+              Charging for work with no document (proofreading, interpreting…)? Add it under{' '}
+              <Link href="/settings?tab=freeform" className="font-medium underline">Settings › Freeform Types</Link> instead.
+            </p>
           </fieldset>
         )}
 

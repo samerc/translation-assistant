@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { api, ApiError } from './api';
 import { logger } from './logger';
+import { setDateFormat } from './format';
 
 interface UserRole {
   id: string;
@@ -23,7 +24,7 @@ interface AuthUser {
   mustChangePassword?: boolean;
   role: UserRole;
   /** The organization the user works in; null for the platform admin. */
-  tenant: { id: string; name: string } | null;
+  tenant: { id: string; name: string; dateFormat: string } | null;
   /** Manages organizations and platform settings; sees no organization's data. */
   isPlatformAdmin: boolean;
 }
@@ -41,6 +42,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   logoutEverywhere: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
+  /** Re-read the profile (e.g. after the organization's date format changed). */
+  refreshUser: () => Promise<void>;
 }
 
 export interface RegisterData {
@@ -54,7 +57,12 @@ export interface RegisterData {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUserState] = useState<AuthUser | null>(null);
+  // Dates everywhere follow the organization's format: set it before the re-render.
+  const setUser = useCallback((u: AuthUser | null) => {
+    setDateFormat(u?.tenant?.dateFormat);
+    setUserState(u);
+  }, []);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,21 +85,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
     }
-  }, []);
+  }, [setUser]);
+
+  const refreshUser = useCallback(async () => {
+    setUser(await api.get<AuthUser>('/auth/profile'));
+  }, [setUser]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<LoginResponse>('/auth/login', { email, password });
     localStorage.setItem('accessToken', data.accessToken);
     // refreshToken is set as httpOnly cookie by the server — not stored in localStorage
     setUser(data.user);
-  }, []);
+  }, [setUser]);
 
   // Registration logs the user in (access token in body, refresh cookie set).
   const register = useCallback(async (dto: RegisterData) => {
     const data = await api.post<LoginResponse>('/auth/register', dto);
     localStorage.setItem('accessToken', data.accessToken);
     setUser(data.user);
-  }, []);
+  }, [setUser]);
 
   const logout = useCallback(async () => {
     try {
@@ -101,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('accessToken');
     setUser(null);
-  }, []);
+  }, [setUser]);
 
   const logoutEverywhere = useCallback(async () => {
     try {
@@ -111,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('accessToken');
     setUser(null);
-  }, []);
+  }, [setUser]);
 
   const hasPermission = useCallback(
     (permission: string) => {
@@ -122,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, logoutEverywhere, hasPermission }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, logoutEverywhere, hasPermission, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

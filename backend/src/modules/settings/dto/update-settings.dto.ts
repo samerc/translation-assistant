@@ -8,7 +8,11 @@ import {
   MaxLength,
   ArrayMaxSize,
   Matches,
+  IsIn,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+export const DATE_FORMATS = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
 
 /** A tenant's own settings (tenant admin). */
 export class UpdateSettingsDto {
@@ -22,12 +26,33 @@ export class UpdateSettingsDto {
   @MaxLength(1000)
   companyAddress?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(255) // column is varchar(255)
-  companyLogo?: string;
+  // The logo is uploaded through PATCH /settings/logo (validated image), never here.
 
   @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  companyTaxId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  bankDetails?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  invoiceFooter?: string;
+
+  @IsOptional()
+  @IsIn(DATE_FORMATS, {
+    message: 'Date format must be DD/MM/YYYY, MM/DD/YYYY or YYYY-MM-DD',
+  })
+  dateFormat?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @Matches(/^[A-Z]{3}$/, {
     message: 'Base currency must be a 3-letter code, like USD, EUR or AED',
   })

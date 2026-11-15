@@ -194,6 +194,39 @@ export class AuthController {
     );
   }
 
+  @Get('invites')
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
+  @RequirePermissions('users:create')
+  @AdminOnly()
+  listInvites(@CurrentActor() actor: Actor) {
+    return this.authService.listInvites(actor.tenantId);
+  }
+
+  @Post('invites/:id/resend')
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
+  @RequirePermissions('users:create')
+  @AdminOnly()
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  resendInvite(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.authService.resendInvite(id, actor.tenantId);
+  }
+
+  @Delete('invites/:id')
+  @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
+  @RequirePermissions('users:create')
+  @AdminOnly()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  revokeInvite(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentActor() actor: Actor,
+  ) {
+    return this.authService.revokeInvite(id, actor.tenantId);
+  }
+
   /** Public: what an invite link is for, to pre-fill the registration form. */
   @Post('invite-details')
   @HttpCode(HttpStatus.OK)

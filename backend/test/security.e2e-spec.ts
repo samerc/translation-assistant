@@ -132,7 +132,14 @@ const mailService = {
 
 // AuthService deps added with multi-tenancy (verification tokens, tenants,
 // settings, Turnstile, DataSource) — not used by these tests.
-const AUTH_EXTRAS = [noopRepo, {}, {}, {}, {}] as [any, any, any, any, any];
+// [notifications repo, TenantsService, SettingsService, Turnstile, DataSource]
+const AUTH_EXTRAS = [
+  noopRepo,
+  { getSettings: () => Promise.resolve({ dateFormat: 'DD/MM/YYYY' }) },
+  {},
+  {},
+  {},
+] as [any, any, any, any, any];
 
 // Callers as the services see them (tenant t1).
 const T_USER = { userId: 'user-1', tenantId: 't1', isAdmin: false };
@@ -1137,8 +1144,15 @@ describe('Invoice PDF (Unicode fonts + pagination)', () => {
     };
     const svc = new InvoiceExportService(
       { findOne: jest.fn().mockResolvedValue(invoice) } as any,
-      { findOne: jest.fn().mockResolvedValue(null) } as any,
-      { getSettings: jest.fn().mockResolvedValue({ companyName: '' }) } as any,
+      {
+        getSettings: jest.fn().mockResolvedValue({
+          companyName: 'مكتب الترجمة',
+          companyAddress: 'شارع الحمراء\nبيروت',
+          companyTaxId: '123-456',
+          bankDetails: 'IBAN LB00 0000 0000\nBank of Beirut',
+          dateFormat: 'DD/MM/YYYY',
+        }),
+      } as any,
     );
     const { filePath } = await svc.exportPdf('inv-1');
     try {

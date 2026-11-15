@@ -7,11 +7,40 @@ import { logger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 import { ClientPicker } from '@/components/ui/ClientPicker';
 import { useSettings } from '@/lib/settings-context';
-import { localDateString, todayLocal } from '@/lib/format';
+import { formatCurrency, localDateString, todayLocal } from '@/lib/format';
+import { CurrencySelect } from '@/components/ui/CurrencySelect';
+import { Button } from '@/components/ui/Button';
 import { RequirePermission } from '@/components/RequirePermission';
 
 interface JobOption { id: string; jobNumber: string; title: string; calculatedTotal: number; finalPrice: number | null; status: string; clientId: string; client: { id: string; name: string }; }
 interface LineItem { description: string; jobId: string; quantity: number; unitPrice: number; }
+interface JobDetail extends JobOption {
+  sourceLanguage: { name: string } | null;
+  targetLanguage: { name: string } | null;
+  lineItems: { description: string | null; pageCount: number }[];
+}
+
+/**
+ * What the client reads on the invoice: the documents and languages, not
+ * internal job numbers or titles. Plain words (no arrows): the PDF font has no glyph for them.
+ */
+function describeJob(job: JobDetail): string {
+  const docs = job.lineItems
+    .filter((li) => li.description)
+    .map((li) => `${li.description}${li.pageCount > 1 ? ` (${li.pageCount} pages)` : ''}`)
+    .join(', ');
+  const langs = job.sourceLanguage && job.targetLanguage
+    ? `${job.sourceLanguage.name} to ${job.targetLanguage.name} translation`
+    : job.sourceLanguage?.name ?? '';
+  return [docs || job.title, langs].filter(Boolean).join(' — ');
+}
+
+const jobLine = (job: JobDetail): LineItem => ({
+  description: describeJob(job),
+  jobId: job.id,
+  quantity: 1,
+  unitPrice: Number(job.finalPrice ?? job.calculatedTotal),
+});
 
 function NewInvoicePage() {
   const router = useRouter();
@@ -23,7 +52,7 @@ function NewInvoicePage() {
   const prefilled = useRef(false);
 
   const [clientId, setClientId] = useState('');
-  const { baseCurrency } = useSettings();
+  const { baseCurrency, invoiceFooter } = useSettings();
   const [issueDate, setIssueDate] = useState(() => todayLocal());
   const [dueDate, setDueDate] = useState(() => {
     const due = new Date();
@@ -34,22 +63,18 @@ function NewInvoicePage() {
   // null = not edited yet → follow the base currency (settings may load after mount).
   const [currencyInput, setCurrency] = useState<string | null>(null);
   const currency = currencyInput ?? baseCurrency;
-  const [notes, setNotes] = useState('');
+  // null = not edited yet → the organization's default notes (Settings > General).
+  const [notesInput, setNotes] = useState<string | null>(null);
+  const notes = notesInput ?? invoiceFooter;
   const [items, setItems] = useState<LineItem[]>([{ description: '', jobId: '', quantity: 1, unitPrice: 0 }]);
 
   useEffect(() => {
     // Pre-fill from job if jobId is in URL
     if (prefillJobId && !prefilled.current) {
       prefilled.current = true;
-      api.get<JobOption>(`/jobs/${prefillJobId}`).then((job) => {
+      api.get<JobDetail>(`/jobs/${prefillJobId}`).then((job) => {
         setClientId(job.client.id);
-        const price = Number(job.finalPrice ?? job.calculatedTotal);
-        setItems([{
-          description: `${job.jobNumber} — ${job.title}`,
-          jobId: job.id,
-          quantity: 1,
-          unitPrice: price,
-        }]);
+        setItems([jobLine(job)]);
       }).catch(() => {});
     }
   }, []);
@@ -77,19 +102,14 @@ function NewInvoicePage() {
     setItems(updated);
   };
 
-  const selectJob = (index: number, jobId: string) => {
-    const job = jobs.find((j) => j.id === jobId);
-    if (job) {
-      const updated = [...items];
-      updated[index] = {
-        description: `${job.jobNumber} — ${job.title}`,
-        jobId: job.id,
-        quantity: 1,
-        unitPrice: Number(job.finalPrice ?? job.calculatedTotal),
-      };
-      setItems(updated);
-    } else {
-      updateItem(index, 'jobId', '');
+  const selectJob = async (index: number, jobId: string) => {
+    if (!jobId) { updateItem(index, 'jobId', ''); return; }
+    try {
+      // The list has no line items: read the job for the description.
+      const job = await api.get<JobDetail>(`/jobs/${jobId}`);
+      setItems((prev) => prev.map((it, i) => (i === index ? jobLine(job) : it)));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Failed to load the job.');
     }
   };
 
@@ -153,21 +173,20 @@ function NewInvoicePage() {
           <h2 className="text-lg font-semibold text-text mb-4">Invoice Details</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="invoice-client" className="block text-sm font-medium text-text-secondary mb-1">Client *</label>
+              <label htmlFor="invoice-client" className="block text-sm font-medium text-text-secondary mb-1">Client<span className="text-danger ml-0.5" aria-hidden="true">*</span></label>
               <ClientPicker id="invoice-client" value={clientId} onChange={setClientId} required />
             </div>
             <div>
               <label htmlFor="invoice-currency" className="block text-sm font-medium text-text-secondary mb-1">Currency</label>
-              <input id="invoice-currency" value={currency} onChange={(e) => setCurrency(e.target.value)}
-                className="input w-full" />
+              <CurrencySelect id="invoice-currency" value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full" />
             </div>
             <div>
-              <label htmlFor="invoice-issue" className="block text-sm font-medium text-text-secondary mb-1">Issue Date *</label>
+              <label htmlFor="invoice-issue" className="block text-sm font-medium text-text-secondary mb-1">Issue Date<span className="text-danger ml-0.5" aria-hidden="true">*</span></label>
               <input id="invoice-issue" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} required
                 className="input w-full" />
             </div>
             <div>
-              <label htmlFor="invoice-due" className="block text-sm font-medium text-text-secondary mb-1">Due Date *</label>
+              <label htmlFor="invoice-due" className="block text-sm font-medium text-text-secondary mb-1">Due Date<span className="text-danger ml-0.5" aria-hidden="true">*</span></label>
               <input id="invoice-due" type="date" min={issueDate} value={dueDate} onChange={(e) => setDueDate(e.target.value)} required
                 className="input w-full" />
             </div>
@@ -188,10 +207,7 @@ function NewInvoicePage() {
         <div className="card p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold text-text">Line Items</h2>
-            <button type="button" onClick={addItem}
-              className="btn btn-primary btn-sm">
-              + Add Item
-            </button>
+            <Button size="sm" onClick={addItem}>+ Add item</Button>
           </div>
 
           <div className="space-y-3">
@@ -240,17 +256,17 @@ function NewInvoicePage() {
               <div className="w-64 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-text-secondary">Subtotal</span>
-                  <span className="text-text font-medium">{currency} {subtotal.toFixed(2)}</span>
+                  <span className="text-text font-medium">{formatCurrency(subtotal, currency)}</span>
                 </div>
                 {taxRate > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-text-secondary">Tax ({taxRate}%)</span>
-                    <span className="text-text font-medium">{currency} {taxAmount.toFixed(2)}</span>
+                    <span className="text-text font-medium">{formatCurrency(taxAmount, currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-base font-bold border-t border-border pt-2">
                   <span className="text-text">Total</span>
-                  <span className="text-text">{currency} {total.toFixed(2)}</span>
+                  <span className="text-text">{formatCurrency(total, currency)}</span>
                 </div>
               </div>
             </div>

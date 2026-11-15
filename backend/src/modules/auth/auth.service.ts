@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
@@ -137,7 +138,7 @@ export class AuthService {
     );
 
     return {
-      user: this.sanitizeUser(user),
+      user: await this.sanitizeUser(user),
       accessToken,
       refreshToken,
       sessionId: session.id,
@@ -220,7 +221,7 @@ export class AuthService {
     );
 
     return {
-      user: this.sanitizeUser(fullUser!),
+      user: await this.sanitizeUser(fullUser!),
       accessToken,
       refreshToken,
       sessionId: session.id,
@@ -391,7 +392,7 @@ export class AuthService {
       },
     });
     if (!user) throw new UnauthorizedException();
-    return this.sanitizeUser(user);
+    return await this.sanitizeUser(user);
   }
 
   // ── Invite ──
@@ -447,6 +448,77 @@ export class AuthService {
         );
       });
     return { token, expiresAt };
+  }
+
+  /** The organization's unused invites (pending or expired), newest first. */
+  async listInvites(tenantId: string) {
+    const invites = await this.inviteTokenRepository.find({
+      where: { tenantId, used: false },
+      order: { createdAt: 'DESC' },
+    });
+    const roleIds = [...new Set(invites.map((i) => i.roleId).filter(Boolean))];
+    const roles = roleIds.length
+      ? await this.userRepository.manager.find(Role, {
+          where: { id: In(roleIds) },
+        })
+      : [];
+    const now = Date.now();
+    return invites.map((i) => ({
+      id: i.id,
+      email: i.email,
+      firstName: i.firstName,
+      lastName: i.lastName,
+      role: roles.find((r) => r.id === i.roleId)?.name ?? null,
+      // The admin created it: they may copy the link again.
+      token: i.token,
+      createdAt: i.createdAt,
+      expiresAt: i.expiresAt,
+      expired: i.expiresAt.getTime() <= now,
+    }));
+  }
+
+  private async findOpenInvite(id: string, tenantId: string) {
+    const invite = await this.inviteTokenRepository.findOne({
+      where: { id, tenantId, used: false },
+    });
+    // Another organization's invite answers like a missing one.
+    if (!invite) throw new NotFoundException('Invite not found');
+    return invite;
+  }
+
+  /** New link (the old one stops working), valid 7 more days, emailed again. */
+  async resendInvite(
+    id: string,
+    tenantId: string,
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const invite = await this.findOpenInvite(id, tenantId);
+    invite.token = randomBytes(32).toString('hex');
+    invite.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.inviteTokenRepository.save(invite);
+    const [tenant, role] = await Promise.all([
+      this.tenantsService.findOne(tenantId),
+      this.userRepository.manager.findOne(Role, {
+        where: { id: invite.roleId },
+      }),
+    ]);
+    this.mailService
+      .sendInvite(invite.email, invite.token, {
+        firstName: invite.firstName ?? undefined,
+        organizationName: tenant.name,
+        roleName: role?.name ?? DEFAULT_INVITE_ROLE,
+      })
+      .catch((err: unknown) => {
+        this.logger.error(
+          `[INVITE_EMAIL_FAILED] email=${invite.email}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    return { token: invite.token, expiresAt: invite.expiresAt };
+  }
+
+  /** Cancel an unused invite: its link stops working. */
+  async revokeInvite(id: string, tenantId: string): Promise<void> {
+    const invite = await this.findOpenInvite(id, tenantId);
+    await this.inviteTokenRepository.delete({ id: invite.id, used: false });
   }
 
   /**
@@ -988,7 +1060,11 @@ export class AuthService {
 
   // ── Sanitize ──
 
-  private sanitizeUser(user: User) {
+  private async sanitizeUser(user: User) {
+    // Display preferences of the organization (every page formats dates with it).
+    const settings = user.tenantId
+      ? await this.tenantsService.getSettings(user.tenantId)
+      : null;
     return {
       id: user.id,
       email: user.email,
@@ -1001,7 +1077,11 @@ export class AuthService {
       mustChangePassword: user.mustChangePassword,
       // The organization the user works in; null for the platform admin.
       tenant: user.tenant
-        ? { id: user.tenant.id, name: user.tenant.name }
+        ? {
+            id: user.tenant.id,
+            name: user.tenant.name,
+            dateFormat: settings?.dateFormat || 'DD/MM/YYYY',
+          }
         : null,
       isPlatformAdmin:
         !user.tenantId && user.role?.name === ROLE_PLATFORM_ADMIN,

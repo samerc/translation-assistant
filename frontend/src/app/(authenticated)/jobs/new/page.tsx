@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Alert } from '@/components/ui/Alert';
+import Link from 'next/link';
 
 interface Client { id: string; name: string; type: string; }
 interface Contact { id: string; firstName: string; lastName: string; }
@@ -356,6 +357,15 @@ export default function NewJobPage() {
             </Button>
           </div>
 
+          {form.type === 'template' && availableTemplates.length === 0 && (
+            <Alert tone="info" className="mb-3">
+              {templates.some((t) => t.type !== 'simple')
+                ? 'None of your active templates are for this target language. '
+                : 'You have no active templates yet. '}
+              <Link href="/templates/new" className="font-semibold underline">Create a template</Link>
+              {' '}or switch the job type to Freeform.
+            </Alert>
+          )}
           {lineItems.length === 0 && (
             <p className="text-sm text-text-muted py-4 text-center">
               No {form.type === 'template' ? 'templates' : 'documents'} added yet.
