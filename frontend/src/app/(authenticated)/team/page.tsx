@@ -19,6 +19,9 @@ import { formatDate } from '@/lib/format';
  * The organization's people (Admin only): who is in it, their roles and open
  * jobs, invitations — and what each role may do. Was Settings › Users / Roles.
  */
+/** Where the Team page was scrolled (the app's <main> scrolls) when you opened someone's jobs. */
+const TEAM_SCROLL_KEY = 'teamScrollY';
+
 export default function TeamPage() {
   const { user } = useAuth();
   if (!user) return null;
@@ -100,7 +103,14 @@ function Members() {
 
   const load = () => {
     api.get<AdminUser[]>('/users')
-      .then((res) => { setUsers(res); setLoadError(false); })
+      .then((res) => {
+        setUsers(res);
+        setLoadError(false);
+        // Coming back from a member's jobs: return to where the list was.
+        let y: string | null = null;
+        try { y = sessionStorage.getItem(TEAM_SCROLL_KEY); sessionStorage.removeItem(TEAM_SCROLL_KEY); } catch { /* storage blocked */ }
+        if (y) requestAnimationFrame(() => document.querySelector('main')?.scrollTo(0, Number(y)));
+      })
       .catch(() => setLoadError(true));
     api.get<RoleOption[]>('/roles').then(setRoles).catch(() => {});
     api.get<PendingInvite[]>('/auth/invites').then(setInvites).catch(() => {});
@@ -305,8 +315,9 @@ Send this to ${u.email} over a channel you trust. It is shown only once (it was 
                   <td className="py-2 text-text-secondary">{u.email}</td>
                   <td className="py-2 text-text-secondary">{u.role?.name || '—'}</td>
                   <td className="py-2">
-                    <Link href={`/jobs?assignee=${u.id === me?.id ? 'me' : u.id}`} className="text-primary-text hover:underline tabular-nums"
-                      title={`${u.firstName}'s jobs`}>
+                    <Link href={`/jobs?assignee=${u.id === me?.id ? 'me' : u.id}&from=team`} className="text-primary-text hover:underline tabular-nums"
+                      title={`${u.firstName}'s jobs`}
+                      onClick={() => { try { sessionStorage.setItem(TEAM_SCROLL_KEY, String(document.querySelector('main')?.scrollTop ?? 0)); } catch { /* storage blocked */ } }}>
                       {u.openJobCount ?? 0}
                     </Link>
                   </td>
