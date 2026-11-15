@@ -496,7 +496,7 @@ interface CloneResult {
 
 function DocumentsTab({ job, locked }: { job: Job; locked: boolean }) {
   const [docs, setDocs] = useState<DocSummary[] | null>(null);
-  const [templates, setTemplates] = useState<{ id: string; name: string; type?: string; languages?: { id: string }[] }[]>([]);
+  const [templates, setTemplates] = useState<{ id: string; name: string; type?: string; languages?: { id: string }[]; sourceLanguages?: { id: string }[] }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [showClone, setShowClone] = useState(false);
@@ -509,7 +509,7 @@ function DocumentsTab({ job, locked }: { job: Job; locked: boolean }) {
 
   useEffect(() => {
     loadDocs();
-    api.get<{ id: string; name: string; type?: string; languages?: { id: string }[] }[]>('/templates?isActive=true').then(setTemplates).catch((err) => logger.error('Failed to load templates', err, 'jobs'));
+    api.get<{ id: string; name: string; type?: string; languages?: { id: string }[]; sourceLanguages?: { id: string }[] }[]>('/templates?isActive=true').then(setTemplates).catch((err) => logger.error('Failed to load templates', err, 'jobs'));
   }, [job.id]);
 
   useEffect(() => {
@@ -603,7 +603,9 @@ function DocumentsTab({ job, locked }: { job: Job; locked: boolean }) {
                 <option value="">Select template...</option>
                 {templates
                   // Documents need a form (not pricing-only) in the job's target language.
-                  .filter((t) => t.type !== 'simple' && (!job.targetLanguage || !t.languages?.length || t.languages.some((l) => l.id === job.targetLanguage?.id)))
+                  .filter((t) => t.type !== 'simple'
+                    && (!job.targetLanguage || !t.languages?.length || t.languages.some((l) => l.id === job.targetLanguage?.id))
+                    && (!job.sourceLanguage || !t.sourceLanguages?.length || t.sourceLanguages.some((l) => l.id === job.sourceLanguage?.id)))
                   .map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>

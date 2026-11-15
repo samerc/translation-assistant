@@ -24,6 +24,7 @@ interface Template {
   layoutJson: object | null; wordFilePath: string | null; wordFileName: string | null;
   fields: TemplateField[];
   languages: Language[];
+  sourceLanguages?: Language[];
 }
 
 const FIELD_TYPES = [
@@ -1152,7 +1153,8 @@ function WordTemplateTab({ template, onUpdate, readOnly }: { template: Template;
 /** What still needs doing before the template is usable, with a way into the wizard. */
 function TemplateStatus({ template }: { template: Template }) {
   const issues: string[] = [];
-  if (template.type !== 'simple' && !template.languages?.length) issues.push('no document language');
+  if (template.type !== 'simple' && !template.sourceLanguages?.length) issues.push('no source language');
+  if (template.type !== 'simple' && !template.languages?.length) issues.push('no target language');
   if (template.type === 'word' && !template.wordFileName) issues.push('no Word file');
   if (template.type !== 'simple' && template.fields.length === 0) issues.push('no fields');
   if (issues.length === 0 && template.isActive) return null;
@@ -1179,6 +1181,7 @@ function SettingsTab({ template, languages, onUpdate, readOnly }: { template: Te
     isActive: template.isActive,
   });
   const [langIds, setLangIds] = useState<string[]>(template.languages?.map((l) => l.id) ?? []);
+  const [srcIds, setSrcIds] = useState<string[]>(template.sourceLanguages?.map((l) => l.id) ?? []);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -1193,6 +1196,7 @@ function SettingsTab({ template, languages, onUpdate, readOnly }: { template: Te
         discountedPricePerPage: form.discountedPricePerPage ? parseFloat(form.discountedPricePerPage) : null,
         isActive: form.isActive,
         languageIds: langIds,
+        sourceLanguageIds: srcIds,
       });
       setMessage('Saved');
       setTimeout(() => setMessage(''), 3000);
@@ -1232,21 +1236,24 @@ function SettingsTab({ template, languages, onUpdate, readOnly }: { template: Te
               className="input w-full" />
           </div>
         </div>}
-        {template.type !== 'simple' && (
-          <div>
-            <span className="block text-sm font-medium text-text mb-1.5">Document languages</span>
-            <div className="flex flex-wrap gap-2">
+        {template.type !== 'simple' && ([
+          { title: 'Translated from', ids: srcIds, set: setSrcIds, hint: 'The language of the original documents.' },
+          { title: 'Translated into', ids: langIds, set: setLangIds, hint: 'The language of this document (field labels are asked in these).' },
+        ] as const).map((g) => (
+          <div key={g.title}>
+            <span className="block text-sm font-medium text-text mb-1.5">{g.title}</span>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
               {languages.map((l) => (
                 <label key={l.id} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
-                  <input type="checkbox" checked={langIds.includes(l.id)}
-                    onChange={() => setLangIds((ids) => (ids.includes(l.id) ? ids.filter((x) => x !== l.id) : [...ids, l.id]))} />
+                  <input type="checkbox" checked={g.ids.includes(l.id)} disabled={readOnly}
+                    onChange={() => g.set((ids) => (ids.includes(l.id) ? ids.filter((x) => x !== l.id) : [...ids, l.id]))} />
                   {l.name}
                 </label>
               ))}
             </div>
-            <p className="text-xs text-text-muted mt-1">Offered for jobs translating into these languages.</p>
+            <p className="text-xs text-text-muted mt-1">{g.hint} New jobs with this template take their languages from here.</p>
           </div>
-        )}
+        ))}
         <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
           <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
             className="w-4 h-4 rounded border-border text-primary focus:ring-primary" />
