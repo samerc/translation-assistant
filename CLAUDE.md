@@ -415,9 +415,10 @@ Indigo Minimal (default) `#4F46E5`, Ocean Blue `#1D4ED8`, Teal Focus `#0D9488`, 
 - `/invoices/new` — Create invoice form (client, dates, tax rate, line items with job linking). Supports `?jobId=` query param for pre-fill from job detail page
 - `/invoices/:id` — Invoice detail (status workflow, edit mode for drafts, Record Payment modal for partial/full payments, payments list with delete, balance due, line items with job links, PDF/Word export buttons)
 - `/calendar` — Month grid calendar (job deadlines + invoice due dates, day detail panel)
+- `/team` — Team (organization Admin only; sidebar group "Organization", `adminOnly` nav item): invite (optional names, role), pending invites (copy link / resend / cancel), members (role, open jobs → their job list, (de)activate, reset password, delete), and what each role may do. Was Settings › Users / Roles
 - `/notifications` — Full notifications list with read/unread filter
 - `/reports` — Reports page (Revenue: range presets — last 6/12 months, this/last year — with total + best month, monthly/weekly; Revenue line chart, By Client bar chart, Job Status donut chart via recharts — charts live in `reports/charts.tsx`, loaded with `next/dynamic` so recharts stays off other pages)
-- `/settings` — Settings (`?tab=general|users|…` opens a tab). Organization admin: General (identity + logo, currency, invoice prefix, date format, Team: translators see prices, Google Translate, delete organization), File Uploads, Appearance, Security, Freeform Types, Users (open jobs per person → their job list; invite + pending invites: copy link / resend / cancel), Roles (read-only). Platform admin: Email & Sign-ups, Languages, Labels (global), Appearance, Security
+- `/settings` — Settings (`?tab=general|uploads|…` opens a tab). Organization admin: General (identity + logo, currency, invoice prefix, date format, Team: translators see prices, Google Translate, delete organization), File Uploads, Appearance, Security, Freeform Types (`?tab=users|roles` → redirects to `/team`). Platform admin: Email & Sign-ups, Languages, Labels (global), Appearance, Security
 
 ## File Upload Validation
 - `FileValidationPipe` checks every upload against:

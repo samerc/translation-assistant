@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/lib/sidebar-context';
 import { useAuth } from '@/lib/auth-context';
 import {
-  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UsersIcon, XIcon,
+  BellIcon, BriefcaseIcon, BuildingIcon, CalendarIcon, ChartIcon, FileTextIcon, HomeIcon, PanelLeftIcon, ReceiptIcon, SettingsIcon, UserPlusIcon, UsersIcon, XIcon,
 } from '@/components/ui/icons';
 
 interface NavItem {
@@ -13,6 +13,8 @@ interface NavItem {
   href: string;
   icon: typeof HomeIcon;
   permission?: string;
+  /** Only the organization's Admin. */
+  adminOnly?: boolean;
 }
 
 const navGroups: { label?: string; items: NavItem[] }[] = [
@@ -35,6 +37,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     label: 'Library',
     items: [
       { label: 'Templates', href: '/templates', icon: FileTextIcon },
+    ],
+  },
+  {
+    label: 'Organization',
+    items: [
+      { label: 'Team', href: '/team', icon: UserPlusIcon, adminOnly: true },
     ],
   },
 ];
@@ -115,7 +123,8 @@ export default function Sidebar() {
         {/* Nav groups */}
         <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-3 flex flex-col gap-5" aria-label="Main">
           {groups.map((group, i) => {
-            const items = group.items.filter((item) => !item.permission || hasPermission(item.permission));
+            const items = group.items.filter((item) =>
+              (!item.permission || hasPermission(item.permission)) && (!item.adminOnly || user?.role?.name === 'Admin'));
             if (items.length === 0) return null;
             return (
               <div key={group.label ?? i} className="flex flex-col gap-0.5">

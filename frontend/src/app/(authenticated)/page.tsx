@@ -186,7 +186,7 @@ function GettingStarted() {
         { done: Boolean(settings.companyName?.trim() && settings.companyAddress?.trim()), title: 'Add your company details', hint: 'Address, logo and payment details appear on invoices.', href: '/settings?tab=general' },
         { done: templates.length > 0, title: 'Create a document template', hint: 'Birth certificates, diplomas, contracts…', href: '/templates' },
         { done: clients.total > 0, title: 'Add your first client', hint: 'A company or a person you translate for.', href: '/clients' },
-        { done: users.length > 1 || invites.length > 0, title: 'Invite a translator', hint: 'Settings › Users › Invite.', href: '/settings?tab=users' },
+        { done: users.length > 1 || invites.length > 0, title: 'Invite a translator', hint: 'Team › Invite.', href: '/team' },
         { done: gt.configured, title: 'Connect Google Translate (optional)', hint: 'Turns on the GT helper in documents.', href: '/settings?tab=general' },
       ]);
     });
