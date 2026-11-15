@@ -64,7 +64,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Write preference changes back to the user's profile (best-effort).
   const persist = (patch: { colorPalette?: string; darkMode?: boolean }) => {
-    if (typeof window !== 'undefined' && localStorage.getItem('accessToken')) {
+    if (user) {
       api.patch('/users/profile/me', patch).catch(() => {});
     }
   };

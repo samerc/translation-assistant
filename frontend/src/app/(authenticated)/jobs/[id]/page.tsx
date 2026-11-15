@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -302,8 +303,8 @@ function DetailsTab({ job, locked, onUpdate }: { job: Job; locked: boolean; onUp
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} className="input w-full resize-none" /></div>
             {saveError && <div className="p-3 tone tone-danger rounded-lg text-sm">{saveError}</div>}
             <div className="flex gap-2 pt-2">
-              <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Saving...' : 'Save'}</button>
-              <button type="button" onClick={() => setEditing(false)} className="btn btn-secondary">Cancel</button>
+              <Button variant="primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+              <Button onClick={() => setEditing(false)}>Cancel</Button>
             </div>
           </form>
         ) : (
@@ -468,7 +469,7 @@ function AssignedUsersCard({ job, onUpdate }: { job: Job; onUpdate: () => void }
             <option value="edit">Edit</option>
             <option value="view">View</option>
           </select>
-          <button onClick={add} disabled={busy || !pickUser} className="btn btn-primary">Assign</button>
+          <Button variant="primary" onClick={add} disabled={busy || !pickUser}>Assign</Button>
         </div>
       )}
     </div>
@@ -629,9 +630,9 @@ function DocumentsTab({ job, locked }: { job: Job; locked: boolean }) {
             <div className="cursor-pointer flex-1" onClick={() => router.push(`/documents/${doc.id}`)}>
               <div className="flex items-center gap-3">
                 <span className="font-medium text-text">{doc.template.name}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'
-                }`}>{doc.status === 'completed' ? 'Completed' : 'Draft'}</span>
+                <Badge tone={doc.status === 'completed' ? 'tone tone-success' : 'tone tone-warning'}>
+                  {doc.status === 'completed' ? 'Completed' : 'Draft'}
+                </Badge>
               </div>
               <div className="text-xs text-text-muted mt-1">
                 {doc.fieldValueCount || 0} field(s) filled — Last updated {formatDate(doc.updatedAt)}
@@ -721,9 +722,9 @@ function FilesTab({ job, category, files, locked, onUpdate }: { job: Job; catego
             <input type="file" required
               className="w-full px-3 py-1.5 bg-bg border border-border rounded-lg text-text text-sm file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-white file:text-xs file:font-medium" />
           </div>
-          <button type="submit" disabled={uploading} className="btn btn-primary">
+          <Button variant="primary" type="submit" disabled={uploading}>
             {uploading ? 'Uploading...' : 'Upload'}
-          </button>
+          </Button>
         </div>
         {error && <div className="mt-3 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
       </form>

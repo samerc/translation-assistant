@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { api, ApiError } from './api';
+import { api, ApiError, maybeSignedIn, restoreSession, setAccessToken } from './api';
 import { logger } from './logger';
 import { setDateFormat } from './format';
 
@@ -20,6 +20,8 @@ interface AuthUser {
   isActive: boolean;
   colorPalette: string;
   darkMode: boolean;
+  /** Daily reminder email (deadlines, overdue invoices). */
+  emailReminders?: boolean;
   /** Seeded admin still on the documented default password. */
   mustChangePassword?: boolean;
   role: UserRole;
@@ -67,18 +69,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token) {
-      api
-        .get<AuthUser>('/auth/profile')
-        .then(setUser)
+    if (maybeSignedIn()) {
+      // The access token is kept in memory only: a reload gets a new one from the
+      // refresh cookie, then the profile.
+      restoreSession()
+        .then(async (result) => {
+          // 'error' (offline, server restarting): stay signed out for now but keep
+          // the hint, so the next load tries again.
+          if (result === 'denied') setAccessToken(null);
+          if (result !== 'ok') return;
+          setUser(await api.get<AuthUser>('/auth/profile'));
+        })
         .catch((err) => {
           logger.error('Profile fetch failed', err, 'auth');
-          // Only an auth failure invalidates the token — a 5xx/429/network blip
-          // during a backend restart must not log the user out.
-          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
-            localStorage.removeItem('accessToken');
-          }
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) setAccessToken(null);
         })
         .finally(() => setLoading(false));
     } else {
@@ -94,15 +98,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<LoginResponse>('/auth/login', { email, password });
-    localStorage.setItem('accessToken', data.accessToken);
-    // refreshToken is set as httpOnly cookie by the server — not stored in localStorage
+    setAccessToken(data.accessToken); // memory only; the refresh token is an httpOnly cookie
     setUser(data.user);
   }, [setUser]);
 
   // Registration logs the user in (access token in body, refresh cookie set).
   const register = useCallback(async (dto: RegisterData) => {
     const data = await api.post<LoginResponse>('/auth/register', dto);
-    localStorage.setItem('accessToken', data.accessToken);
+    setAccessToken(data.accessToken);
     setUser(data.user);
   }, [setUser]);
 
@@ -112,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       logger.error('Logout request failed', err, 'auth');
     }
-    localStorage.removeItem('accessToken');
+    setAccessToken(null);
     setUser(null);
   }, [setUser]);
 
@@ -122,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       logger.error('Logout everywhere failed', err, 'auth');
     }
-    localStorage.removeItem('accessToken');
+    setAccessToken(null);
     setUser(null);
   }, [setUser]);
 

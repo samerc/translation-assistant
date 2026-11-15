@@ -43,6 +43,11 @@ export class WriteThrottleGuard implements CanActivate {
     if (method === 'GET' || method === 'OPTIONS' || method === 'HEAD') {
       return true;
     }
+    // Token refresh isn't a data change, and is limited per user by
+    // RefreshThrottleGuard (counting it per IP would hit offices sharing one).
+    if ((request.path || request.url || '').endsWith('/auth/refresh')) {
+      return true;
+    }
 
     // Use user ID if authenticated, otherwise IP
     const userId = request.user?.id;

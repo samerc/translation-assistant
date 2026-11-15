@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { likeContains } from '../../common/utils/like.js';
+import { attachRelationCount } from '../../common/utils/relation-count.js';
 import { Brackets, Repository } from 'typeorm';
 import {
   readFileSync,
@@ -115,11 +116,23 @@ export class TemplatesService {
   }) {
     const { search, isActive, sortBy = 'name', sortOrder = 'ASC' } = query;
 
+    // The list only needs each template's summary — not its fields, labels or
+    // designer layout (those come with GET /templates/:id): `fieldCount` instead.
     const qb = this.templateRepository
       .createQueryBuilder('template')
-      .leftJoinAndSelect('template.fields', 'fields')
-      .leftJoinAndSelect('fields.labels', 'labels')
-      .leftJoinAndSelect('labels.language', 'language')
+      .select([
+        'template.id',
+        'template.tenantId',
+        'template.type',
+        'template.name',
+        'template.description',
+        'template.pricePerPage',
+        'template.discountedPricePerPage',
+        'template.wordFileName',
+        'template.isActive',
+        'template.createdAt',
+        'template.updatedAt',
+      ])
       .leftJoinAndSelect('template.languages', 'docLanguages')
       .leftJoinAndSelect('template.sourceLanguages', 'sourceLanguages')
       .where('template.tenant_id = :tenantId', { tenantId: query.tenantId });
@@ -137,10 +150,14 @@ export class TemplatesService {
     const allowedSortFields = ['name', 'createdAt', 'pricePerPage'];
     const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'name';
     qb.orderBy(`template.${safeSortBy}`, sortOrder === 'DESC' ? 'DESC' : 'ASC');
-    qb.addOrderBy('fields.sortOrder', 'ASC');
 
     const data = await qb.getMany();
-    return data;
+    return attachRelationCount(
+      data,
+      this.fieldRepository,
+      'templateId',
+      'fieldCount',
+    );
   }
 
   /** A template of this tenant (404 for any other tenant's id). */

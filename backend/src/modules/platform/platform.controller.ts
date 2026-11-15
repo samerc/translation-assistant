@@ -40,6 +40,7 @@ import {
   UpdateLabelOptionDto,
 } from '../settings/dto/label-option.dto.js';
 import { AppSettings } from '../settings/entities/app-settings.entity.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 /**
  * Platform administration: organizations (tenants), their accounts, and the
@@ -81,12 +82,18 @@ export class PlatformController {
   }
 
   @Post('tenants')
+  @Audited('tenant.created', {
+    target: 'tenant',
+    body: ['name', 'adminEmail'],
+    responseId: 'tenant.id',
+  })
   @RequirePermissions('platform:create')
   createTenant(@Body() dto: CreateTenantDto) {
     return this.platformService.createTenant(dto);
   }
 
   @Patch('tenants/:id')
+  @Audited('tenant.updated', { target: 'tenant', body: ['name'] })
   @RequirePermissions('platform:update')
   updateTenant(
     @Param('id', ParseUUIDPipe) id: string,
@@ -96,6 +103,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/approve')
+  @Audited('tenant.approved', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:update')
   approve(@Param('id', ParseUUIDPipe) id: string) {
@@ -103,6 +111,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/suspend')
+  @Audited('tenant.suspended', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:update')
   suspend(@Param('id', ParseUUIDPipe) id: string) {
@@ -110,6 +119,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/reactivate')
+  @Audited('tenant.reactivated', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:update')
   reactivate(@Param('id', ParseUUIDPipe) id: string) {
@@ -117,6 +127,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/reject')
+  @Audited('tenant.rejected', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:delete')
   async reject(@Param('id', ParseUUIDPipe) id: string) {
@@ -128,6 +139,7 @@ export class PlatformController {
 
   /** Empty → deleted now; otherwise closing for the grace period. */
   @Post('tenants/:id/delete')
+  @Audited('tenant.deletion_approved', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:delete')
   approveDeletion(
@@ -139,6 +151,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/decline-deletion')
+  @Audited('tenant.deletion_declined', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:update')
   declineDeletion(
@@ -150,6 +163,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/restore')
+  @Audited('tenant.restored', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:update')
   restore(@Param('id', ParseUUIDPipe) id: string) {
@@ -157,6 +171,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/purge')
+  @Audited('tenant.purged', { target: 'tenant' })
   @HttpCode(HttpStatus.OK)
   @RequirePermissions('platform:delete')
   async purge(@Param('id', ParseUUIDPipe) id: string) {
@@ -165,6 +180,7 @@ export class PlatformController {
   }
 
   @Post('tenants/:id/invite')
+  @Audited('tenant.invite_sent', { target: 'tenant', body: ['email'] })
   @RequirePermissions('platform:create')
   @Throttle({ default: { limit: 20, ttl: 3600000 } })
   invite(@Param('id', ParseUUIDPipe) id: string, @Body() dto: TenantInviteDto) {
@@ -177,6 +193,7 @@ export class PlatformController {
   // ── Accounts of tenant users (support: lockouts, offboarding) ──
 
   @Post('users/:id/reset-password')
+  @Audited('user.password_reset', { target: 'user' })
   @RequirePermissions('platform:update')
   @Throttle({ default: { limit: 10, ttl: 3600000 } })
   resetPassword(@Param('id', ParseUUIDPipe) id: string) {
@@ -184,12 +201,14 @@ export class PlatformController {
   }
 
   @Patch('users/:id/activate')
+  @Audited('user.activated', { target: 'user' })
   @RequirePermissions('platform:update')
   activateUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.activate(id, 'platform');
   }
 
   @Patch('users/:id/deactivate')
+  @Audited('user.deactivated', { target: 'user' })
   @RequirePermissions('platform:update')
   deactivateUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.deactivate(id, 'platform');
@@ -204,6 +223,7 @@ export class PlatformController {
   }
 
   @Patch('settings')
+  @Audited('platform.settings_updated', { bodyKeys: true })
   @RequirePermissions('platform:update')
   async updateSettings(@Body() dto: UpdatePlatformSettingsDto) {
     return this.present(await this.settingsService.updatePlatformSettings(dto));
@@ -224,12 +244,14 @@ export class PlatformController {
   }
 
   @Post('languages')
+  @Audited('language.created', { target: 'language' })
   @RequirePermissions('platform:create')
   createLanguage(@Body() dto: CreateLanguageDto) {
     return this.settingsService.createGlobalLanguage(dto);
   }
 
   @Patch('languages/:id')
+  @Audited('language.updated', { target: 'language', bodyKeys: true })
   @RequirePermissions('platform:update')
   updateLanguage(
     @Param('id', ParseUUIDPipe) id: string,
@@ -239,6 +261,7 @@ export class PlatformController {
   }
 
   @Delete('languages/:id')
+  @Audited('language.deleted', { target: 'language' })
   @RequirePermissions('platform:delete')
   removeLanguage(@Param('id', ParseUUIDPipe) id: string) {
     return this.settingsService.removeGlobalLanguage(id);
@@ -253,12 +276,14 @@ export class PlatformController {
   }
 
   @Post('labels')
+  @Audited('label.created', { target: 'label' })
   @RequirePermissions('platform:create')
   createLabel(@Body() dto: CreateLabelOptionDto) {
     return this.settingsService.createGlobalLabel(dto);
   }
 
   @Patch('labels/:id')
+  @Audited('label.updated', { target: 'label', bodyKeys: true })
   @RequirePermissions('platform:update')
   updateLabel(
     @Param('id', ParseUUIDPipe) id: string,
@@ -268,6 +293,7 @@ export class PlatformController {
   }
 
   @Delete('labels/:id')
+  @Audited('label.deleted', { target: 'label' })
   @RequirePermissions('platform:delete')
   removeLabel(@Param('id', ParseUUIDPipe) id: string) {
     return this.settingsService.removeGlobalLabel(id);

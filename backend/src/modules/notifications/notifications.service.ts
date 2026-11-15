@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, Between, In } from 'typeorm';
 import { Notification } from './entities/notification.entity.js';
@@ -6,6 +6,9 @@ import { Job } from '../jobs/entities/job.entity.js';
 import { JobUser } from '../jobs/entities/job-user.entity.js';
 import { Invoice } from '../invoices/entities/invoice.entity.js';
 import { User } from '../users/entities/user.entity.js';
+import { TenantSettings } from '../tenants/entities/tenant-settings.entity.js';
+import { MailService } from '../mail/mail.service.js';
+import { formatDateOnly } from '../../common/utils/display-format.js';
 
 const JOB_STATUS_LABELS: Record<string, string> = {
   quote: 'Quote',
@@ -30,7 +33,10 @@ export class NotificationsService {
     private readonly jobUserRepository: Repository<JobUser>,
     @InjectRepository(Invoice)
     private readonly invoiceRepository: Repository<Invoice>,
+    private readonly mailService: MailService,
   ) {}
+
+  private readonly logger = new Logger('Notifications');
 
   async findAll(
     userId: string,
@@ -144,7 +150,8 @@ export class NotificationsService {
 
   // ── Scheduled checks ──
 
-  async checkDeadlines(): Promise<void> {
+  /** Creates the deadline reminders; returns them (for the reminder email). */
+  async checkDeadlines(): Promise<Notification[]> {
     const now = new Date();
     const threeDaysLater = new Date(now);
     threeDaysLater.setDate(threeDaysLater.getDate() + 3);
@@ -160,7 +167,7 @@ export class NotificationsService {
       },
     });
 
-    if (jobs.length === 0) return;
+    if (jobs.length === 0) return [];
 
     const jobIds = jobs.map((j) => j.id);
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -192,6 +199,16 @@ export class NotificationsService {
       assignmentsByJob.get(a.jobId)!.push(a);
     }
 
+    // Dates in each organization's own format.
+    const formats = new Map(
+      (
+        await this.notificationRepository.manager.find(TenantSettings, {
+          where: { tenantId: In([...new Set(jobs.map((j) => j.tenantId))]) },
+          select: { tenantId: true, dateFormat: true },
+        })
+      ).map((s) => [s.tenantId, s.dateFormat]),
+    );
+
     // Batch create notifications
     const notificationsToCreate: Notification[] = [];
     for (const job of jobs) {
@@ -204,7 +221,7 @@ export class NotificationsService {
               userId: a.userId,
               type: 'deadline_approaching',
               title: 'Deadline approaching',
-              message: `${job.jobNumber} "${job.title}" is due on ${job.deadline}`,
+              message: `${job.jobNumber} "${job.title}" is due on ${formatDateOnly(job.deadline, formats.get(job.tenantId))}`,
               link: `/jobs/${job.id}`,
             }),
           );
@@ -215,9 +232,11 @@ export class NotificationsService {
     if (notificationsToCreate.length > 0) {
       await this.notificationRepository.save(notificationsToCreate);
     }
+    return notificationsToCreate;
   }
 
-  async checkOverdueInvoices(): Promise<void> {
+  /** Marks overdue invoices; returns the reminders it created. */
+  async checkOverdueInvoices(): Promise<Notification[]> {
     const today = new Date().toISOString().split('T')[0];
 
     // Find overdue invoices before updating (need IDs for notifications)
@@ -230,7 +249,7 @@ export class NotificationsService {
       },
     });
 
-    if (overdueInvoices.length === 0) return;
+    if (overdueInvoices.length === 0) return [];
 
     // Batch update all to overdue in one query. Still require 'sent': an invoice
     // paid off since the find above must not be flipped back to overdue.
@@ -269,5 +288,41 @@ export class NotificationsService {
     if (notifications.length > 0) {
       await this.notificationRepository.save(notifications);
     }
+    return notifications;
+  }
+
+  /**
+   * One email per person with the reminders just created — for those who keep
+   * `emailReminders` on, are active, and whose organization is active. A failed
+   * send is logged and skipped (the in-app notification is there either way).
+   */
+  async emailReminders(created: Notification[]): Promise<number> {
+    const byUser = new Map<string, Notification[]>();
+    for (const n of created) {
+      byUser.set(n.userId, [...(byUser.get(n.userId) ?? []), n]);
+    }
+    if (byUser.size === 0) return 0;
+    const users = await this.notificationRepository.manager.find(User, {
+      where: {
+        id: In([...byUser.keys()]),
+        isActive: true,
+        emailReminders: true,
+      },
+      relations: { tenant: true },
+    });
+    let sent = 0;
+    for (const user of users) {
+      if (!user.tenant || user.tenant.status !== 'active') continue;
+      const items = byUser.get(user.id) ?? [];
+      try {
+        await this.mailService.sendReminders(user.email, user.firstName, items);
+        sent++;
+      } catch (err) {
+        this.logger.warn(
+          `Reminder email to user ${user.id} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return sent;
   }
 }

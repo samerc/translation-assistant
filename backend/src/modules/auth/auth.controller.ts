@@ -39,6 +39,8 @@ import {
   type AuthenticatedRequest,
   type RefreshRequest,
 } from '../../common/types/authenticated-request.js';
+import { Audited } from '../audit/audited.decorator.js';
+import { RefreshThrottleGuard } from '../../common/guards/refresh-throttle.guard.js';
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -108,9 +110,12 @@ export class AuthController {
   }
 
   @Post('refresh')
-  @UseGuards(AuthGuard('jwt-refresh'))
+  // Every page load and every new tab refreshes (the access token is kept in
+  // memory only): limited per user by RefreshThrottleGuard (30/min, after the
+  // token is verified), and per IP only loosely — an office shares one address.
+  @UseGuards(AuthGuard('jwt-refresh'), RefreshThrottleGuard)
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Throttle({ default: { limit: 300, ttl: 60000 } })
   async refresh(
     @Req() req: RefreshRequest,
     @Res({ passthrough: true }) res: Response,
@@ -139,6 +144,7 @@ export class AuthController {
   }
 
   @Post('logout-everywhere')
+  @Audited('session.logout_everywhere')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
   async logoutEverywhere(
@@ -177,6 +183,10 @@ export class AuthController {
   }
 
   @Post('invite')
+  @Audited('invite.created', {
+    body: ['email'],
+    refs: [{ key: 'role', type: 'role', from: 'body', name: 'roleId' }],
+  })
   @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
   @RequirePermissions('users:create')
   @AdminOnly()
@@ -203,6 +213,7 @@ export class AuthController {
   }
 
   @Post('invites/:id/resend')
+  @Audited('invite.resent', { target: 'invite' })
   @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
   @RequirePermissions('users:create')
   @AdminOnly()
@@ -216,6 +227,7 @@ export class AuthController {
   }
 
   @Delete('invites/:id')
+  @Audited('invite.cancelled', { target: 'invite' })
   @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
   @RequirePermissions('users:create')
   @AdminOnly()

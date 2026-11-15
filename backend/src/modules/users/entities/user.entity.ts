@@ -46,6 +46,10 @@ export class User {
   @Column({ default: false })
   mustChangePassword: boolean;
 
+  /** Daily email with the day's reminders (deadlines, overdue invoices). */
+  @Column({ default: true })
+  emailReminders: boolean;
+
   // The organisation the user belongs to. Null only for platform admins, who
   // manage tenants but never see tenant data.
   @ManyToOne(() => Tenant, { nullable: true })

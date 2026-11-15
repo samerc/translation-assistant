@@ -39,6 +39,7 @@ import {
   formatDateOnly,
   formatMoney,
 } from '../../common/utils/display-format.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 @Controller('invoices')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
@@ -100,12 +101,14 @@ export class InvoicesController {
   }
 
   @Post()
+  @Audited('invoice.created', { target: 'invoice' })
   @RequirePermissions('invoices:create')
   create(@Body() dto: CreateInvoiceDto, @CurrentUser() user: User) {
     return this.invoicesService.create(dto, actorOf(user));
   }
 
   @Patch(':id')
+  @Audited('invoice.updated', { target: 'invoice', bodyKeys: true })
   @RequirePermissions('invoices:update')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -118,6 +121,7 @@ export class InvoicesController {
   }
 
   @Patch(':id/status')
+  @Audited('invoice.status_changed', { target: 'invoice', body: ['status'] })
   @RequirePermissions('invoices:update')
   async updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
@@ -130,6 +134,10 @@ export class InvoicesController {
   }
 
   @Post(':id/record-payment')
+  @Audited('invoice.payment_recorded', {
+    target: 'invoice',
+    body: ['paidAmount', 'paidAt', 'method'],
+  })
   @RequirePermissions('invoices:update')
   async recordPayment(
     @Param('id', ParseUUIDPipe) id: string,
@@ -142,6 +150,7 @@ export class InvoicesController {
   }
 
   @Delete(':id/payments/:paymentId')
+  @Audited('invoice.payment_deleted', { target: 'invoice' })
   @RequirePermissions('invoices:update')
   async removePayment(
     @Param('id', ParseUUIDPipe) id: string,
@@ -193,6 +202,7 @@ export class InvoicesController {
   // Sends company-branded mail to any address — a write, and rate-limited so it
   // cannot be used as a relay.
   @Post(':id/email')
+  @Audited('invoice.emailed', { target: 'invoice', body: ['email'] })
   @RequirePermissions('invoices:update')
   @Throttle({ default: { limit: 10, ttl: 3600000 } })
   async emailInvoice(
@@ -249,6 +259,7 @@ export class InvoicesController {
   }
 
   @Delete(':id')
+  @Audited('invoice.deleted', { target: 'invoice' })
   @RequirePermissions('invoices:delete')
   async remove(
     @Param('id', ParseUUIDPipe) id: string,

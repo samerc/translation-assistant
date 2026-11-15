@@ -22,8 +22,13 @@ export class NotificationsScheduler {
 
     try {
       this.logger.log('Starting daily checks...');
-      await this.notificationsService.checkDeadlines();
-      await this.notificationsService.checkOverdueInvoices();
+      const deadlines = await this.notificationsService.checkDeadlines();
+      const overdue = await this.notificationsService.checkOverdueInvoices();
+      const emailed = await this.notificationsService.emailReminders([
+        ...deadlines,
+        ...overdue,
+      ]);
+      if (emailed) this.logger.log(`Reminder emails sent: ${emailed}`);
       this.logger.log(`Daily checks completed in ${Date.now() - start}ms`);
     } catch (error) {
       this.logger.error(

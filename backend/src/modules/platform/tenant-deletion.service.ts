@@ -1,3 +1,4 @@
+import { AuditLog } from '../audit/audit-log.entity.js';
 import {
   BadRequestException,
   Injectable,
@@ -298,6 +299,7 @@ export class TenantDeletionService {
         await m.delete(Notification, mine);
         await m.delete(User, { id: In(userIds) });
       }
+      await m.delete(AuditLog, where);
       await m.delete(TenantSettings, where);
       await m.delete(Tenant, tenantId);
     });

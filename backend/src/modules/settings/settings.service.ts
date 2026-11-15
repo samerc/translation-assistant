@@ -1,3 +1,5 @@
+import { InjectDataSource } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
 import {
   BadRequestException,
   Injectable,
@@ -36,7 +38,39 @@ export class SettingsService {
     @InjectRepository(FreeformJobType)
     private readonly freeformJobTypeRepository: Repository<FreeformJobType>,
     private readonly tenantsService: TenantsService,
+    @InjectDataSource() private readonly dataSource: DataSource,
   ) {}
+
+  /**
+   * The dashboard's Getting started checklist in one request (was six):
+   * which first steps the organization has done.
+   */
+  async gettingStarted(tenantId: string) {
+    const settings = await this.getTenantSettings(tenantId);
+    const count = async (sql: string) => {
+      const rows: { n: string | number }[] = await this.dataSource.query(sql, [
+        tenantId,
+      ]);
+      return Number(rows[0]?.n ?? 0);
+    };
+    const [templates, clients, users, invites] = await Promise.all([
+      count('SELECT COUNT(*) AS n FROM templates WHERE tenant_id = ?'),
+      count('SELECT COUNT(*) AS n FROM clients WHERE tenant_id = ?'),
+      count('SELECT COUNT(*) AS n FROM users WHERE tenant_id = ?'),
+      count(
+        'SELECT COUNT(*) AS n FROM invite_tokens WHERE tenant_id = ? AND used = 0 AND expiresAt > NOW()',
+      ),
+    ]);
+    return {
+      companyDetails: Boolean(
+        settings.companyName?.trim() && settings.companyAddress?.trim(),
+      ),
+      template: templates > 0,
+      client: clients > 0,
+      team: users > 1 || invites > 0,
+      googleTranslate: Boolean(settings.googleTranslateApiKey),
+    };
+  }
 
   // ── Platform settings (single row) ──
 

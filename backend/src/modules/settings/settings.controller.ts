@@ -29,6 +29,7 @@ import { AdminGuard } from '../../common/guards/admin.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 /**
  * The caller's tenant settings. Languages and labels are read here (global +
@@ -51,6 +52,7 @@ export class SettingsController {
   }
 
   @Patch()
+  @Audited('settings.updated', { bodyKeys: true })
   @RequirePermissions('settings:update')
   @AdminOnly()
   async updateSettings(
@@ -67,6 +69,7 @@ export class SettingsController {
   // Stored inline as a base64 data URL; PNG/JPEG only (the formats both the PDF
   // and Word exporters embed), max 1 MB.
   @Patch('logo')
+  @Audited('settings.logo_changed')
   @RequirePermissions('settings:update')
   @AdminOnly()
   @UseInterceptors(
@@ -100,6 +103,7 @@ export class SettingsController {
   }
 
   @Delete('logo')
+  @Audited('settings.logo_removed')
   @RequirePermissions('settings:update')
   @AdminOnly()
   async removeLogo(@CurrentActor() actor: Actor) {
@@ -119,6 +123,14 @@ export class SettingsController {
   }
 
   // ── Languages & labels (read: global + the tenant's own) ──
+
+  /** Dashboard checklist: which first steps are done (Admin). */
+  @Get('getting-started')
+  @RequirePermissions('settings:update')
+  @AdminOnly()
+  gettingStarted(@CurrentActor() actor: Actor) {
+    return this.settingsService.gettingStarted(actor.tenantId);
+  }
 
   @Get('languages')
   @RequirePermissions('settings:read')
@@ -156,6 +168,7 @@ export class SettingsController {
   }
 
   @Post('freeform-job-types')
+  @Audited('freeform_type.created', { target: 'freeformType' })
   @RequirePermissions('settings:create')
   @AdminOnly()
   createFreeformJobType(
@@ -166,6 +179,7 @@ export class SettingsController {
   }
 
   @Patch('freeform-job-types/:id')
+  @Audited('freeform_type.updated', { target: 'freeformType', bodyKeys: true })
   @RequirePermissions('settings:update')
   @AdminOnly()
   updateFreeformJobType(
@@ -177,6 +191,7 @@ export class SettingsController {
   }
 
   @Delete('freeform-job-types/:id')
+  @Audited('freeform_type.deleted', { target: 'freeformType' })
   @RequirePermissions('settings:delete')
   @AdminOnly()
   removeFreeformJobType(

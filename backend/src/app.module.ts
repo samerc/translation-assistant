@@ -30,6 +30,7 @@ import { ReportsModule } from './modules/reports/reports.module.js';
 import { SearchModule } from './modules/search/search.module.js';
 import { TenantsModule } from './modules/tenants/tenants.module.js';
 import { PlatformModule } from './modules/platform/platform.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { PlatformModule } from './modules/platform/platform.module.js';
     SearchModule,
     TenantsModule,
     PlatformModule,
+    AuditModule,
   ],
   controllers: [],
   providers: [

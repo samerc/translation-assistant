@@ -1,5 +1,6 @@
 'use client';
 
+import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -200,9 +201,9 @@ export default function CalendarPage() {
                       </span>
                     </div>
                     <div className="text-sm font-medium text-text">{ev.title}</div>
-                    <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-semibold
-                      ${isOverdue(ev) ? 'tone tone-danger' : ev.type === 'job_deadline' ? 'tone tone-primary' : 'tone tone-warning'}
-                    `}>{isOverdue(ev) && ev.status !== 'overdue' ? `Overdue · ${humanize(ev.status)}` : humanize(ev.status)}</span>
+                    <Badge className="mt-1" tone={isOverdue(ev) ? 'tone tone-danger' : ev.type === 'job_deadline' ? 'tone tone-primary' : 'tone tone-warning'}>
+                      {isOverdue(ev) && ev.status !== 'overdue' ? `Overdue · ${humanize(ev.status)}` : humanize(ev.status)}
+                    </Badge>
                   </button>
                 ))}
               </div>

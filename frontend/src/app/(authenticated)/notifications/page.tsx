@@ -1,11 +1,14 @@
 'use client';
 
+import { Button } from '@/components/ui/Button';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { formatTimeAgo } from '@/lib/format';
 import { useNow } from '@/lib/use-now';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { useAuth } from '@/lib/auth-context';
+import { toast } from '@/lib/toast';
 
 interface NotificationItem {
   id: string;
@@ -33,6 +36,20 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const router = useRouter();
   const now = useNow();
+  const { user, refreshUser } = useAuth();
+  const [savingEmail, setSavingEmail] = useState(false);
+  const toggleEmail = async (on: boolean) => {
+    setSavingEmail(true);
+    try {
+      await api.patch('/users/profile/me', { emailReminders: on });
+      await refreshUser();
+      toast.success(on ? 'You’ll get reminders by email too.' : 'No more reminder emails.');
+    } catch {
+      toast.error('Couldn’t change the setting. Please try again.');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   const loadNotifications = () => {
     const params = new URLSearchParams();
@@ -74,10 +91,9 @@ export default function NotificationsPage() {
     <div className="max-w-3xl">
       <div className="flex justify-between items-center gap-3 mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-text">Notifications</h1>
-        <button onClick={handleMarkAllRead}
-          className="btn btn-secondary">
+        <Button onClick={handleMarkAllRead}>
           Mark all as read
-        </button>
+        </Button>
       </div>
 
       {/* Filter tabs */}
@@ -89,6 +105,18 @@ export default function NotificationsPage() {
           options={[{ value: 'all', label: 'All' }, { value: 'unread', label: 'Unread' }]}
         />
       </div>
+
+      {user && !user.isPlatformAdmin && (
+        <label className="card px-4 py-3 mb-4 flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 w-4 h-4 rounded border-border text-primary focus:ring-primary"
+            checked={user.emailReminders !== false} disabled={savingEmail}
+            onChange={(e) => toggleEmail(e.target.checked)} />
+          <span className="text-sm">
+            <span className="font-medium text-text block">Email me reminders</span>
+            <span className="text-text-secondary">Each morning, when one of your jobs is due within 3 days or an invoice you created becomes overdue.</span>
+          </span>
+        </label>
+      )}
 
       <span className="text-sm text-text-muted mb-4 block">{total} notification{total !== 1 ? 's' : ''}</span>
 
@@ -118,11 +146,9 @@ export default function NotificationsPage() {
 
       {totalPages > 1 && (
         <div className="flex justify-center items-center gap-2 mt-4">
-          <button disabled={page <= 1} onClick={() => setPage(page - 1)}
-            className="btn btn-secondary btn-sm">Previous</button>
+          <Button size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
           <span className="text-sm text-text-secondary">Page {page} of {totalPages}</span>
-          <button disabled={page >= totalPages} onClick={() => setPage(page + 1)}
-            className="btn btn-secondary btn-sm">Next</button>
+          <Button size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
         </div>
       )}
     </div>

@@ -52,6 +52,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   darkMode?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  emailReminders?: boolean;
 }
 
 export class ChangePasswordDto {

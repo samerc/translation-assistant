@@ -42,6 +42,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard.js';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
 import { tenantDiskStorage } from '../../common/tenancy/tenant-upload-storage.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 const templateStorage = tenantDiskStorage('templates');
 
@@ -107,12 +108,14 @@ export class TemplatesController {
   }
 
   @Post()
+  @Audited('template.created', { target: 'template' })
   @RequirePermissions('templates:create')
   create(@Body() dto: CreateTemplateDto, @CurrentActor() actor: Actor) {
     return this.templatesService.create(dto, actor.tenantId);
   }
 
   @Patch(':id')
+  @Audited('template.updated', { target: 'template', bodyKeys: true })
   @RequirePermissions('templates:update')
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -124,6 +127,7 @@ export class TemplatesController {
   }
 
   @Delete(':id')
+  @Audited('template.deleted', { target: 'template' })
   @RequirePermissions('templates:delete')
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentActor() actor: Actor) {
     return this.templatesService.remove(id, actor.tenantId);
@@ -132,6 +136,7 @@ export class TemplatesController {
   // ── Word Template ──
 
   @Post(':id/upload-word')
+  @Audited('template.word_uploaded', { target: 'template' })
   @RequirePermissions('templates:update')
   @UseInterceptors(
     FileInterceptor('file', {

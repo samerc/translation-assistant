@@ -326,6 +326,38 @@ export class MailService {
     );
   }
 
+  /** The day's reminders (deadlines, overdue invoices) for one person. */
+  async sendReminders(
+    to: string,
+    firstName: string,
+    items: { title: string; message: string; link: string | null }[],
+  ): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    const list = items
+      .map((n) => {
+        const text = `<strong>${escapeHtml(n.title)}</strong><br>${escapeHtml(n.message)}`;
+        return n.link
+          ? para(
+              `${text}<br><a href="${baseUrl}${encodeURI(n.link)}" style="color:${BRAND}">Open</a>`,
+            )
+          : para(text);
+      })
+      .join('');
+    await this.sendMail(
+      to,
+      items.length === 1
+        ? `Reminder: ${items[0].title.toLowerCase()}`
+        : `${items.length} reminders for today`,
+      heading(`Good morning${firstName ? `, ${escapeHtml(firstName)}` : ''}`) +
+        list +
+        button(`${baseUrl}/notifications`, 'See all notifications') +
+        para(
+          'You get this email when one of your jobs is nearly due or an invoice you created is overdue. Turn it off on the Notifications page.',
+          true,
+        ),
+    );
+  }
+
   async sendTenantApproved(to: string, organization: string): Promise<void> {
     const { baseUrl } = await this.resolveConfig();
     await this.sendMail(

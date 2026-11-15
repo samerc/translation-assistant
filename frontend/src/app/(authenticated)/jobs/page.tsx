@@ -106,7 +106,15 @@ export default function JobsPage() {
     return () => { ignore = true; };
   };
 
-  useEffect(() => loadJobs(), [debouncedSearch, statusFilter, sortBy, sortOrder, page, searchParams]);
+  // Wait for the profile: until it's there we don't know whether ?assignee applies
+  // (admins only) — loading before that showed everyone's jobs.
+  useEffect(() => (user ? loadJobs() : undefined), [user, assignee, debouncedSearch, statusFilter, sortBy, sortOrder, page, searchParams]);
+  // Opened from the Team page (a member's jobs): offer the way back.
+  const fromTeam = searchParams.get('from') === 'team';
+  const backToTeam = () => {
+    if (window.history.length > 1) router.back();
+    else router.push('/team');
+  };
 
   const handleSort = (field: string) => {
     if (sortBy === field) { setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC'); }
@@ -128,6 +136,11 @@ export default function JobsPage() {
 
   return (
     <div>
+      {fromTeam && (
+        <button type="button" onClick={backToTeam} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
+          ← Back to Team
+        </button>
+      )}
       <PageHeader
         title="Jobs"
         description="Quotes, translations in progress, and delivered work."

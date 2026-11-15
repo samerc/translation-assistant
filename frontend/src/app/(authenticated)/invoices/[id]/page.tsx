@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/Button';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -296,35 +297,29 @@ function InvoiceDetailPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.color}`}>{badge.label}</span>
-          <button onClick={() => handleExport('pdf')}
-            className="btn btn-secondary btn-sm">
+          <Button size="sm" onClick={() => handleExport('pdf')}>
             <ExportIcon className="w-4 h-4" /> PDF
-          </button>
-          <button onClick={() => handleExport('word')}
-            className="btn btn-secondary btn-sm">
+          </Button>
+          <Button size="sm" onClick={() => handleExport('word')}>
             <ExportIcon className="w-4 h-4" /> Word
-          </button>
-          <button onClick={() => { setEmailTo(''); setEmailMessage(''); setShowEmailModal(true); }}
-            className="btn btn-secondary btn-sm">
+          </Button>
+          <Button size="sm" onClick={() => { setEmailTo(''); setEmailMessage(''); setShowEmailModal(true); }}>
             <EmailIcon className="w-4 h-4" /> Email
-          </button>
+          </Button>
           {invoice.status === 'draft' && !editing && (
-            <button onClick={startEditing}
-              className="btn btn-secondary btn-sm">
+            <Button size="sm" onClick={startEditing}>
               Edit
-            </button>
+            </Button>
           )}
           {invoice.status === 'draft' && !editing && (
-            <button onClick={markSent}
-              className="btn btn-primary btn-sm">
+            <Button variant="primary" size="sm" onClick={markSent}>
               Mark as sent
-            </button>
+            </Button>
           )}
           {canPay && (
-            <button onClick={openPaymentModal}
-              className="btn btn-primary btn-sm">
+            <Button variant="primary" size="sm" onClick={openPaymentModal}>
               Record Payment
-            </button>
+            </Button>
           )}
           {otherStatuses.length > 0 && (
             <select value="" onChange={(e) => e.target.value && handleStatusChange(e.target.value)}
@@ -337,10 +332,9 @@ function InvoiceDetailPage() {
             </select>
           )}
           {invoice.status === 'draft' && (
-            <button onClick={handleDelete}
-              className="btn btn-danger btn-sm">
+            <Button variant="danger" size="sm" onClick={handleDelete}>
               Delete
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -375,12 +369,10 @@ function InvoiceDetailPage() {
                   className="input w-full resize-y" />
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={saveEdit} disabled={saving}
-                  className="btn btn-primary">
+                <Button variant="primary" onClick={saveEdit} disabled={saving}>
                   {saving ? 'Saving...' : 'Save'}
-                </button>
-                <button onClick={() => setEditing(false)}
-                  className="btn btn-secondary">Cancel</button>
+                </Button>
+                <Button onClick={() => setEditing(false)}>Cancel</Button>
               </div>
             </div>
           ) : (
@@ -514,14 +506,12 @@ function InvoiceDetailPage() {
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={handleRecordPayment} disabled={saving}
-                className="btn btn-primary">
+              <Button variant="primary" onClick={handleRecordPayment} disabled={saving}>
                 {saving ? 'Saving...' : 'Record Payment'}
-              </button>
-              <button onClick={() => setShowPaymentModal(false)}
-                className="btn btn-secondary">
+              </Button>
+              <Button onClick={() => setShowPaymentModal(false)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -548,14 +538,12 @@ function InvoiceDetailPage() {
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={handleEmailInvoice} disabled={sendingEmail}
-                className="btn btn-primary">
+              <Button variant="primary" onClick={handleEmailInvoice} disabled={sendingEmail}>
                 {sendingEmail ? 'Sending...' : 'Send'}
-              </button>
-              <button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}
-                className="btn btn-secondary">
+              </Button>
+              <Button onClick={() => setShowEmailModal(false)} disabled={sendingEmail}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         </div>

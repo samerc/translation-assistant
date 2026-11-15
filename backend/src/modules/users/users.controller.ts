@@ -22,6 +22,7 @@ import { AdminOnly } from '../../common/decorators/admin-only.decorator.js';
 import { CurrentUser } from '../../common/decorators/current-user.decorator.js';
 import { User } from './entities/user.entity.js';
 import { CurrentActor, type Actor } from '../../common/tenancy/actor.js';
+import { Audited } from '../audit/audited.decorator.js';
 
 @Controller('users')
 @UseGuards(AuthGuard('jwt'), PermissionsGuard, AdminGuard)
@@ -49,6 +50,11 @@ export class UsersController {
   }
 
   @Post()
+  @Audited('user.created', {
+    target: 'user',
+    body: ['email'],
+    refs: [{ key: 'role', type: 'role', from: 'body', name: 'roleId' }],
+  })
   @RequirePermissions('users:create')
   @AdminOnly()
   create(@Body() dto: CreateUserDto, @CurrentActor() actor: Actor) {
@@ -56,6 +62,11 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @Audited('user.updated', {
+    target: 'user',
+    bodyKeys: true,
+    refs: [{ key: 'role', type: 'role', from: 'body', name: 'roleId' }],
+  })
   @RequirePermissions('users:update')
   @AdminOnly()
   update(
@@ -88,12 +99,14 @@ export class UsersController {
   }
 
   @Post('change-password')
+  @Audited('user.password_changed')
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
     return this.usersService.changePassword(user.id, dto);
   }
 
   @Patch(':id/activate')
+  @Audited('user.activated', { target: 'user' })
   @RequirePermissions('users:update')
   @AdminOnly()
   activate(
@@ -104,6 +117,7 @@ export class UsersController {
   }
 
   @Patch(':id/deactivate')
+  @Audited('user.deactivated', { target: 'user' })
   @RequirePermissions('users:update')
   @AdminOnly()
   deactivate(
@@ -117,6 +131,7 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
+  @Audited('user.password_reset', { target: 'user' })
   @RequirePermissions('users:update')
   @AdminOnly()
   @Throttle({ default: { limit: 10, ttl: 3600000 } })
@@ -133,6 +148,7 @@ export class UsersController {
   }
 
   @Delete(':id')
+  @Audited('user.deleted', { target: 'user' })
   @RequirePermissions('users:delete')
   @AdminOnly()
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentActor() actor: Actor) {

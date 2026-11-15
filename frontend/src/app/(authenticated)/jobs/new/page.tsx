@@ -63,6 +63,13 @@ interface LineItem {
   useDiscountedPrice: boolean;
 }
 
+function blankRow(): LineItem {
+  return {
+    key: uid('li'), description: '', templateId: undefined,
+    pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
+  };
+}
+
 export default function NewJobPage() {
   const { baseCurrency } = useSettings();
   const router = useRouter();
@@ -105,7 +112,9 @@ export default function NewJobPage() {
     notes: '',
   });
 
-  const [lineItems, setLineItems] = useState<LineItem[]>([]);
+  // Most jobs are one template for one client: start with an empty row.
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => [blankRow()]);
+  const [showDescription, setShowDescription] = useState(false);
 
   useEffect(() => {
     api.get<Language[]>('/settings/languages').then((langs) => setLanguages(langs.filter((l) => l.isActive)))
@@ -134,12 +143,7 @@ export default function NewJobPage() {
     return () => { ignore = true; };
   }, [form.clientId, isCompany]);
 
-  const addLineItem = () => {
-    setLineItems([...lineItems, {
-      key: uid('li'), description: '', templateId: undefined,
-      pageCount: 1, pricePerPage: 0, discountedPricePerPage: 0, useDiscountedPrice: false,
-    }]);
-  };
+  const addLineItem = () => setLineItems([...lineItems, blankRow()]);
 
   const updateLineItem = (key: string, updates: Partial<LineItem>) => {
     setLineItems(lineItems.map((li) => li.key === key ? { ...li, ...updates } : li));
@@ -235,6 +239,14 @@ export default function NewJobPage() {
     }
   };
 
+  // Left empty, the title is made from the documents and the client:
+  // "Birth certificate + Diploma — Karim Nassar".
+  const documentNames = [...new Set(lineItems.map((li) => li.description.trim()).filter(Boolean))];
+  const suggestedTitle = [
+    documentNames.length > 2 ? `${documentNames.slice(0, 2).join(' + ')} + ${documentNames.length - 2} more` : documentNames.join(' + '),
+    selectedClient?.name,
+  ].filter(Boolean).join(' — ').slice(0, 255);
+
   // Rows nobody filled in would be saved as "Untitled" at 0 — say so instead.
   const lineItemProblem = (): string | null => {
     if (form.type === 'template' && lineItems.some((li) => !li.templateId)) {
@@ -266,12 +278,17 @@ export default function NewJobPage() {
       setError('Choose the job’s languages.');
       return;
     }
+    const title = form.title.trim() || suggestedTitle;
+    if (!title) {
+      setError('Give the job a title.');
+      return;
+    }
     setSaving(true);
 
     try {
       const body: Record<string, unknown> = {
         type: form.type,
-        title: form.title,
+        title,
         clientId: form.clientId,
         sourceLanguageId: sourceId,
         status: form.status,
@@ -316,7 +333,7 @@ export default function NewJobPage() {
           <h3 className="font-semibold text-text">Job Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Type" htmlFor="job-type">
-              <Select id="job-type" value={form.type} onChange={(e) => { setForm({ ...form, type: e.target.value as 'template' | 'freeform' }); setLineItems([]); }}>
+              <Select id="job-type" value={form.type} onChange={(e) => { setForm({ ...form, type: e.target.value as 'template' | 'freeform' }); setLineItems([blankRow()]); }}>
                 <option value="template">Template-based</option>
                 <option value="freeform">Free-form</option>
               </Select>
@@ -339,12 +356,20 @@ export default function NewJobPage() {
               </Field>
             )}
           </div>
-          <Field label="Title" htmlFor="job-title" required>
-            <Input id="job-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required maxLength={255} />
+          <Field label="Title" htmlFor="job-title"
+            hint={form.title.trim() ? undefined : suggestedTitle ? 'Leave it empty to use the one shown.' : 'Leave it empty: it is made from the documents and the client.'}>
+            <Input id="job-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} maxLength={255}
+              placeholder={suggestedTitle || 'e.g. Birth certificate — Karim Nassar'} />
           </Field>
-          <Field label="Description" htmlFor="job-description">
-            <Textarea id="job-description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
-          </Field>
+          {showDescription || form.description ? (
+            <Field label="Description" htmlFor="job-description">
+              <Textarea id="job-description" autoFocus={!form.description} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
+            </Field>
+          ) : (
+            <button type="button" onClick={() => setShowDescription(true)} className="text-sm font-medium text-primary-text hover:underline">
+              + Add a description
+            </button>
+          )}
         </div>
 
         {/* Client & Language */}

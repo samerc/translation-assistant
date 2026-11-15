@@ -43,8 +43,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
     }
   };
 
-  const inputClass =
-    'w-full px-3 py-2 bg-bg border border-border rounded-lg text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary';
+  const inputClass = 'input';
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
