@@ -1,5 +1,6 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
 import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -311,9 +312,7 @@ export default function DocumentFillPage() {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={async () => { if (await confirmLeave()) router.push(`/jobs/${doc.jobId}`); }} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
-            ← Back to {job.jobNumber} — {job.title}
-          </button>
+          <BackLink href={`/jobs/${doc.jobId}`} label={`${job.jobNumber} — ${job.title}`} beforeLeave={confirmLeave} />
           <h1 className="text-2xl font-bold tracking-tight text-text">{doc.template.name}</h1>
           <p className="text-sm text-text-secondary mt-1">
             {sourceLang.name}{targetLang ? ` → ${targetLang.name}` : ''}

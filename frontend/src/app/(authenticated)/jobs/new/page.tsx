@@ -1,5 +1,7 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
+import { useGoBack } from '@/lib/go-back';
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -73,6 +75,7 @@ function blankRow(): LineItem {
 export default function NewJobPage() {
   const { baseCurrency } = useSettings();
   const router = useRouter();
+  const back = useGoBack('/jobs', 'Jobs');
   const searchParams = useSearchParams();
   const [languages, setLanguages] = useState<Language[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -312,7 +315,8 @@ export default function NewJobPage() {
       if (isAdmin && assignTo) body.assignToUserId = assignTo;
 
       const job = await api.post<{ id: string }>('/jobs', body);
-      router.push(`/jobs/${job.id}`);
+      // replace: Back on the new job returns to where the form was opened from, not the form.
+      router.replace(`/jobs/${job.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create job');
     } finally {
@@ -322,7 +326,7 @@ export default function NewJobPage() {
 
   return (
     <div>
-      <button onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Jobs</button>
+      <BackLink href="/jobs" label="Jobs" />
       <h1 className="text-2xl font-bold tracking-tight text-text mb-6">New Job</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
@@ -622,7 +626,7 @@ export default function NewJobPage() {
           <Button type="submit" variant="primary" disabled={saving}>
             {saving ? 'Creating...' : 'Create Job'}
           </Button>
-          <Button onClick={() => router.push('/jobs')}>Cancel</Button>
+          <Button onClick={() => void back.go()}>Cancel</Button>
         </div>
       </form>
     </div>

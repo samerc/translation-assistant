@@ -1,5 +1,6 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -283,9 +284,7 @@ function InvoiceDetailPage() {
 
   return (
     <div className="max-w-4xl">
-      <button onClick={() => router.push('/invoices')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
-        &larr; Back to Invoices
-      </button>
+      <BackLink href="/invoices" label="Invoices" />
 
       {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
 

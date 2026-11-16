@@ -1,5 +1,7 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
+import { useGoBack } from '@/lib/go-back';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -45,6 +47,7 @@ const jobLine = (job: JobDetail): LineItem => ({
 
 function NewInvoicePage() {
   const router = useRouter();
+  const back = useGoBack('/invoices', 'Invoices');
   const searchParams = useSearchParams();
   const prefillJobId = searchParams.get('jobId');
   const [clientJobs, setClientJobs] = useState<{ clientId: string; jobs: JobOption[] }>({ clientId: '', jobs: [] });
@@ -149,7 +152,8 @@ function NewInvoicePage() {
         })),
       });
       toast.success('Invoice created');
-      router.push(`/invoices/${invoice.id}`);
+      // replace: Back on the new invoice returns to where the form was opened from, not the form.
+      router.replace(`/invoices/${invoice.id}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to create invoice';
       setError(msg);
@@ -161,9 +165,7 @@ function NewInvoicePage() {
 
   return (
     <div className="max-w-4xl">
-      <button onClick={() => router.push('/invoices')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
-        &larr; Back to Invoices
-      </button>
+      <BackLink href="/invoices" label="Invoices" />
       <h1 className="text-2xl font-bold tracking-tight text-text mb-6">New Invoice</h1>
 
       {error && <div className="mb-4 p-3 tone tone-danger rounded-lg text-sm">{error}</div>}
@@ -277,7 +279,7 @@ function NewInvoicePage() {
             className="btn btn-primary">
             {saving ? 'Creating...' : 'Create Invoice'}
           </button>
-          <button type="button" onClick={() => router.push('/invoices')}
+          <button type="button" onClick={() => void back.go()}
             className="btn btn-secondary">
             Cancel
           </button>
