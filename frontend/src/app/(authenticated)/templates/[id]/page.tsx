@@ -1,5 +1,6 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
@@ -85,7 +86,7 @@ export default function TemplateDetailPage() {
     <div>
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={() => router.push('/templates')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Templates</button>
+          <BackLink href="/templates" label="Templates" />
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-text">{template.name}</h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium ${

@@ -1,5 +1,6 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
 import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -174,7 +175,7 @@ export default function JobDetailPage() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-end gap-4 mb-6">
         <div className="min-w-0 flex-1">
-          <button onClick={() => router.push('/jobs')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">← Back to Jobs</button>
+          <BackLink href="/jobs" label="Jobs" />
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono text-text-muted">{job.jobNumber}</span>
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-text break-words min-w-0">{job.title}</h1>

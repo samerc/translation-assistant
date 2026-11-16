@@ -1,5 +1,6 @@
 'use client';
 
+import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -73,9 +74,7 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>
-          <button onClick={() => router.push('/clients')} className="inline-flex items-center gap-1 text-sm font-medium text-text-muted hover:text-text transition-colors mb-3">
-            ← Back to Clients
-          </button>
+          <BackLink href="/clients" label="Clients" />
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-text">{client.name}</h1>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
