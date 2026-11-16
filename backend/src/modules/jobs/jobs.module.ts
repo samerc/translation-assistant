@@ -14,6 +14,7 @@ import { User } from '../users/entities/user.entity.js';
 import { FileValidationPipe } from '../../common/pipes/file-validation.pipe.js';
 import { JobAccessGuard } from '../../common/guards/job-access.guard.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
+import { JobStatusesModule } from '../job-statuses/job-statuses.module.js';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { NotificationsModule } from '../notifications/notifications.module.js';
       User,
     ]),
     forwardRef(() => NotificationsModule),
+    JobStatusesModule,
   ],
   controllers: [JobsController],
   providers: [JobsService, FileValidationPipe, JobAccessGuard],

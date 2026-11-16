@@ -1,4 +1,5 @@
 import { Role } from '../roles/entities/role.entity.js';
+import { JobStatus } from '../job-statuses/entities/job-status.entity.js';
 import { AuditLog } from '../audit/audit-log.entity.js';
 import {
   BadRequestException,
@@ -302,6 +303,7 @@ export class TenantDeletionService {
       }
       // The organization's own roles (its people are gone).
       await m.delete(Role, where);
+      await m.delete(JobStatus, where); // after the jobs that used them
       await m.delete(AuditLog, where);
       await m.delete(TenantSettings, where);
       await m.delete(Tenant, tenantId);

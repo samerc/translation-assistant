@@ -14,6 +14,8 @@ interface CalendarEvent {
   title: string;
   date: string;
   status: string;
+  /** A job's status within its stage. */
+  statusName?: string | null;
   color: string;
   link: string;
 }
@@ -202,7 +204,7 @@ export default function CalendarPage() {
                     </div>
                     <div className="text-sm font-medium text-text">{ev.title}</div>
                     <Badge className="mt-1" tone={isOverdue(ev) ? 'tone tone-danger' : ev.type === 'job_deadline' ? 'tone tone-primary' : 'tone tone-warning'}>
-                      {isOverdue(ev) && ev.status !== 'overdue' ? `Overdue · ${humanize(ev.status)}` : humanize(ev.status)}
+                      {isOverdue(ev) && ev.status !== 'overdue' ? `Overdue · ${ev.statusName ?? humanize(ev.status)}` : (ev.statusName ?? humanize(ev.status))}
                     </Badge>
                   </button>
                 ))}

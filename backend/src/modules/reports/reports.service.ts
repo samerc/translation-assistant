@@ -236,14 +236,22 @@ export class ReportsService {
     }));
   }
 
+  /** Jobs per stage, with the statuses within each stage (`statuses`, by name). */
   async getJobStatus(actor: Actor) {
     const { userId, seesAll, tenantId } = actor;
     const qb = this.jobRepository
       .createQueryBuilder('job')
+      .leftJoin('job.customStatus', 'cs')
       .where('job.tenant_id = :tenantId', { tenantId })
       .select('job.status', 'status')
+      .addSelect('cs.id', 'statusId')
+      .addSelect('cs.name', 'name')
+      .addSelect('cs.tone', 'tone')
       .addSelect('COUNT(*)', 'count')
-      .groupBy('job.status');
+      .groupBy('job.status')
+      .addGroupBy('cs.id')
+      .addGroupBy('cs.name')
+      .addGroupBy('cs.tone');
 
     if (!seesAll) {
       qb.innerJoin('job.assignedUsers', 'ju', 'ju.user_id = :userId', {
@@ -251,13 +259,37 @@ export class ReportsService {
       });
     }
 
-    const results = await qb.getRawMany<{
+    const rows = await qb.getRawMany<{
       status: string;
+      statusId: string | null;
+      name: string | null;
+      tone: string | null;
       count: string | number;
     }>();
-    return results.map((r) => ({
-      status: r.status,
-      count: Number(r.count),
-    }));
+    const stages = new Map<
+      string,
+      {
+        status: string;
+        count: number;
+        statuses: { id: string; name: string; tone: string; count: number }[];
+      }
+    >();
+    for (const r of rows) {
+      const stage = stages.get(r.status) ?? {
+        status: r.status,
+        count: 0,
+        statuses: [],
+      };
+      stage.count += Number(r.count);
+      if (r.statusId)
+        stage.statuses.push({
+          id: r.statusId,
+          name: r.name ?? '',
+          tone: r.tone ?? 'neutral',
+          count: Number(r.count),
+        });
+      stages.set(r.status, stage);
+    }
+    return [...stages.values()];
   }
 }

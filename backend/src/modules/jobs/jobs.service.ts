@@ -35,6 +35,13 @@ import { NotificationsService } from '../notifications/notifications.service.js'
 import { CreateJobDto, UpdateJobDto } from './dto/job.dto.js';
 import { clientVisibleSql } from '../clients/client-access.js';
 import { FreeformJobType } from '../settings/entities/freeform-job-type.entity.js';
+import { JobStatusesService } from '../job-statuses/job-statuses.service.js';
+import {
+  CREATE_STAGES,
+  LOCKED_STAGES,
+  STAGE_TRANSITIONS,
+  stageLabel,
+} from '../../common/tenancy/job-stages.js';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -63,26 +70,11 @@ export class JobsService {
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
     private readonly dataSource: DataSource,
+    private readonly jobStatuses: JobStatusesService,
   ) {}
 
-  private static readonly LOCKED_STATUSES = ['delivered', 'invoiced', 'paid'];
-
-  // Allowed manual status transitions (PATCH /:id/status). Invoice automation moves
-  // jobs via direct batch updates and is intentionally not constrained here.
-  // Backward moves out of a locked state go through reopenJob() instead.
-  private static readonly STATUS_TRANSITIONS: Record<string, string[]> = {
-    quote: ['accepted', 'in_progress', 'lost', 'cancelled'],
-    accepted: ['in_progress', 'lost', 'cancelled'],
-    in_progress: ['delivered', 'lost', 'cancelled'],
-    delivered: ['invoiced', 'cancelled'],
-    invoiced: ['paid', 'cancelled'],
-    paid: [],
-    lost: ['quote', 'in_progress'],
-    cancelled: ['quote', 'in_progress'],
-  };
-
   private isLocked(job: Job): boolean {
-    return JobsService.LOCKED_STATUSES.includes(job.status);
+    return LOCKED_STAGES.includes(job.status);
   }
 
   // Files of a delivered/invoiced/paid job are frozen like the rest of the job.
@@ -194,6 +186,8 @@ export class JobsService {
   async findAll(query: {
     search?: string;
     status?: string;
+    /** Statuses within a stage, comma-separated ids. */
+    statusId?: string;
     clientId?: string;
     type?: string;
     hasDeadline?: boolean;
@@ -221,6 +215,7 @@ export class JobsService {
       .leftJoinAndSelect('job.client', 'client')
       .leftJoinAndSelect('job.sourceLanguage', 'sourceLang')
       .leftJoinAndSelect('job.targetLanguage', 'targetLang')
+      .leftJoinAndSelect('job.customStatus', 'customStatus')
       .where('job.tenant_id = :tenantId', { tenantId: query.actor.tenantId });
 
     // Non-admin users can only see jobs they are assigned to
@@ -243,6 +238,13 @@ export class JobsService {
     const statuses = (status ?? '').split(',').filter(Boolean).slice(0, 8);
     if (statuses.length) {
       qb.andWhere('job.status IN (:...statuses)', { statuses });
+    }
+    const statusIds = (query.statusId ?? '')
+      .split(',')
+      .filter((x) => UUID_RE.test(x))
+      .slice(0, 20);
+    if (statusIds.length) {
+      qb.andWhere('job.custom_status_id IN (:...statusIds)', { statusIds });
     }
     if (query.hasDeadline) {
       qb.andWhere('job.deadline IS NOT NULL');
@@ -333,6 +335,7 @@ export class JobsService {
         sourceLanguage: true,
         targetLanguage: true,
         lineItems: true,
+        customStatus: true,
 
         assignedUsers: {
           user: true,
@@ -421,6 +424,19 @@ export class JobsService {
         );
     }
 
+    // A status within the stage (its stage must be one a job can start in).
+    let stage = dto.status || 'in_progress';
+    let customStatusId: string | null = null;
+    if (dto.statusId) {
+      const st = await this.jobStatuses.assertUsable(tenantId, dto.statusId);
+      if (!CREATE_STAGES.includes(st.stage))
+        throw new BadRequestException(
+          'A new job can only start as a quote, accepted or in progress',
+        );
+      stage = st.stage;
+      customStatusId = st.id;
+    }
+
     // Wrap all writes in a transaction
     const savedId = await this.dataSource.transaction(async (manager) => {
       const jobNumber = await this.generateJobNumber(manager, tenantId);
@@ -434,7 +450,8 @@ export class JobsService {
         contactId: dto.contactId,
         sourceLanguageId: dto.sourceLanguageId,
         targetLanguageId: dto.targetLanguageId,
-        status: dto.status || 'in_progress',
+        status: stage,
+        customStatusId,
         deadline: dto.deadline,
         finalPrice: dto.finalPrice,
         isFreeOfCharge: dto.isFreeOfCharge,
@@ -522,7 +539,7 @@ export class JobsService {
     Object.assign(job, rest);
     await this.jobRepository.save(job);
     if (status && status !== job.status) {
-      return this.updateStatus(id, status);
+      return this.updateStatus(id, { status });
     }
     return this.findOne(id);
   }
@@ -704,33 +721,63 @@ export class JobsService {
 
   // ── Status ──
 
+  /**
+   * Move a job to a stage (`status`) or to a status within a stage (`statusId`).
+   * Moves inside the same stage are free; between stages they follow
+   * STAGE_TRANSITIONS. Who is notified depends on the status (core stages: the
+   * job's people).
+   */
   async updateStatus(
     id: string,
-    status: string,
+    target: { status?: string; statusId?: string },
     changedByUserId?: string,
   ): Promise<Job> {
     const job = await this.findOne(id);
-    const oldStatus = job.status;
+    const from = { stage: job.status, custom: job.customStatus };
 
-    if (status !== oldStatus) {
-      const allowed = JobsService.STATUS_TRANSITIONS[oldStatus] ?? [];
-      if (!allowed.includes(status)) {
+    let stage = target.status;
+    let custom: Awaited<ReturnType<JobStatusesService['assertUsable']>> | null =
+      null;
+    if (target.statusId) {
+      custom = await this.jobStatuses.assertUsable(
+        job.tenantId,
+        target.statusId,
+      );
+      if (stage && stage !== custom.stage)
+        throw new BadRequestException('That status belongs to another stage');
+      stage = custom.stage;
+    }
+    if (!stage) throw new BadRequestException('Choose a status');
+
+    if (stage === from.stage && (custom?.id ?? null) === job.customStatusId)
+      return job;
+    if (stage !== from.stage) {
+      const allowed = STAGE_TRANSITIONS[from.stage] ?? [];
+      if (!allowed.includes(stage)) {
         throw new BadRequestException(
-          `Invalid status change from '${oldStatus}' to '${status}'.`,
+          `A job can't go from ${stageLabel(from.stage)} to ${stageLabel(stage)}.`,
         );
       }
     }
 
-    job.status = status;
-    await this.jobRepository.save(job);
+    // update(), not save(): the job is loaded with its relations.
+    await this.jobRepository.update(id, {
+      status: stage,
+      customStatusId: custom?.id ?? null,
+    });
 
-    // Notify assigned users about status change
-    if (changedByUserId && oldStatus !== status) {
+    if (changedByUserId) {
       this.notificationsService
         .notifyJobStatusChange(
-          { id: job.id, jobNumber: job.jobNumber, title: job.title },
-          oldStatus,
-          status,
+          {
+            id: job.id,
+            jobNumber: job.jobNumber,
+            title: job.title,
+            tenantId: job.tenantId,
+          },
+          { stage: from.stage, name: from.custom?.name ?? null },
+          { stage, name: custom?.name ?? null },
+          custom ? custom.notify : 'assignees',
           changedByUserId,
         )
         .catch(() => {});
@@ -740,12 +787,14 @@ export class JobsService {
   }
 
   async reopenJob(id: string): Promise<Job> {
-    const job = await this.findOne(id);
+    const job = await this.findOneBasic(id);
     if (!this.isLocked(job)) {
       throw new BadRequestException('Job is not in a completed state');
     }
-    job.status = 'in_progress';
-    await this.jobRepository.save(job);
+    await this.jobRepository.update(id, {
+      status: 'in_progress',
+      customStatusId: null,
+    });
     return this.findOne(id);
   }
 

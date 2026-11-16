@@ -521,13 +521,13 @@ export class InvoicesService {
       if (status === 'sent') {
         await this.jobRepository.update(
           { id: In(jobIds), status: 'delivered' },
-          { status: 'invoiced' },
+          { status: 'invoiced', customStatusId: null },
         );
       }
       if (status === 'cancelled' && ['sent', 'overdue'].includes(oldStatus)) {
         await this.jobRepository.update(
           { id: In(jobIds), status: 'invoiced' },
-          { status: 'delivered' },
+          { status: 'delivered', customStatusId: null },
         );
       }
     }
@@ -635,13 +635,13 @@ export class InvoicesService {
       await manager.update(
         Job,
         { id: In(jobIds), status: In(['invoiced', 'delivered']) },
-        { status: 'paid' },
+        { status: 'paid', customStatusId: null },
       );
     } else if (invoice.status === 'paid') {
       await manager.update(
         Job,
         { id: In(jobIds), status: 'paid' },
-        { status: 'invoiced' },
+        { status: 'invoiced', customStatusId: null },
       );
     }
   }

@@ -85,6 +85,11 @@ export class CreateJobDto {
   @IsIn(['quote', 'accepted', 'in_progress'])
   status?: string;
 
+  /** A status within that stage (the organization's or a default); sets the stage too. */
+  @IsOptional()
+  @IsUUID()
+  statusId?: string;
+
   @IsOptional()
   @IsDateString()
   deadline?: string;
@@ -193,7 +198,9 @@ export class UpdateJobDto {
 
 // ── DTOs for inline @Body() endpoints ──
 
+/** `status` = a stage; `statusId` = a status within a stage (its stage is implied). One of them. */
 export class UpdateJobStatusDto {
+  @IsOptional()
   @IsIn([
     'quote',
     'accepted',
@@ -204,7 +211,11 @@ export class UpdateJobStatusDto {
     'lost',
     'cancelled',
   ])
-  status: string;
+  status?: string;
+
+  @IsOptional()
+  @IsUUID()
+  statusId?: string;
 }
 
 export class CreateJobLineItemDto {

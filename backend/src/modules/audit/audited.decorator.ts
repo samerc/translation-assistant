@@ -12,6 +12,7 @@ export type AuditTargetType =
   | 'freeformType'
   | 'tenant'
   | 'role'
+  | 'jobStatus'
   | 'language'
   | 'label';
 

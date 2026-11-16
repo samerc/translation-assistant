@@ -457,6 +457,68 @@ console.log('== custom roles ==');
   check('role changes in the activity log', log?.data?.some((e) => e.action === 'role.created') && log.data.some((e) => e.action === 'role.reset'));
 }
 
+console.log('== job statuses ==');
+{
+  const cat = (await req(a.A, 'GET', '/job-statuses')).data;
+  check('stages listed with the platform default', Array.isArray(cat) && cat.length === 8 && cat.find((s) => s.stage === 'in_progress')?.statuses.some((x) => x.source === 'default'), JSON.stringify(cat).slice(0, 200));
+  const own = await req(a.A, 'POST', '/job-statuses', { stage: 'accepted', name: `Waiting ${RUN}`, tone: 'warning', notify: 'both' });
+  check('admin adds a status', ok(own), show(own));
+  check('…same name in the stage refused', (await req(a.A, 'POST', '/job-statuses', { stage: 'accepted', name: `waiting ${RUN}`, tone: 'info', notify: 'none' })).status === 400);
+  check('…a stage name refused', (await req(a.A, 'POST', '/job-statuses', { stage: 'quote', name: 'Quote', tone: 'info', notify: 'none' })).status === 400);
+  check('…bad colour refused', (await req(a.A, 'POST', '/job-statuses', { stage: 'quote', name: 'X', tone: 'pink', notify: 'none' })).status === 400);
+  check('translator reads but can not add', ok(await req(a.T, 'GET', '/job-statuses')) && (await req(a.T, 'POST', '/job-statuses', { stage: 'quote', name: 'X', tone: 'info', notify: 'none' })).status === 403);
+  const bCat = (await req(b.A, 'GET', '/job-statuses')).data;
+  check("other organization doesn't see it", !bCat.some((s) => s.statuses.some((x) => x.id === own.data.id)));
+  check("…can't change it (404)", (await req(b.A, 'PATCH', `/job-statuses/${own.data.id}`, { name: 'x' })).status === 404);
+  check("…can't delete it (404)", (await req(b.A, 'DELETE', `/job-statuses/${own.data.id}`)).status === 404);
+  const bJob = (await req(b.A, 'POST', '/jobs', { title: `B status ${RUN}`, clientId: b.ids.client, sourceLanguageId: b.en, lineItems: [{ description: 'x', pageCount: 1, pricePerPage: 1 }] })).data;
+  check("…can't put its jobs in it", (await req(b.A, 'PATCH', `/jobs/${bJob.id}/status`, { statusId: own.data.id })).status === 400);
+  check('…nor create a job with it', (await req(b.A, 'POST', '/jobs', { title: 'x', clientId: b.ids.client, sourceLanguageId: b.en, statusId: own.data.id, lineItems: [{ description: 'x', pageCount: 1, pricePerPage: 1 }] })).status === 400);
+
+  // A job through the statuses.
+  const job = await req(a.A, 'POST', '/jobs', { title: `Status ${RUN}`, clientId: a.ids.client, sourceLanguageId: a.en, statusId: own.data.id, assignToUserId: a.ids.translator, lineItems: [{ description: 'x', pageCount: 1, pricePerPage: 1 }] });
+  check('job created in a status', ok(job) && job.data.status === 'accepted' && job.data.customStatus?.id === own.data.id, show(job));
+  const proof = cat.find((s) => s.stage === 'in_progress').statuses[0];
+  const moved = await req(a.A, 'PATCH', `/jobs/${job.data.id}/status`, { statusId: proof.id });
+  check('moved to a default status of the next stage', ok(moved) && moved.data.status === 'in_progress' && moved.data.customStatus?.id === proof.id, show(moved));
+  check('back to an earlier stage refused', (await req(a.A, 'PATCH', `/jobs/${job.data.id}/status`, { statusId: own.data.id })).status === 400);
+  check('stage/status mismatch refused', (await req(a.A, 'PATCH', `/jobs/${job.data.id}/status`, { status: 'quote', statusId: proof.id })).status === 400);
+  const tNotes = (await req(a.T, 'GET', '/notifications')).data;
+  check('the job people notified', (tNotes.data ?? []).some((x) => x.link === `/jobs/${job.data.id}` && x.message.includes(proof.name)));
+  check('filter by status', (await req(a.A, 'GET', `/jobs?statusId=${proof.id}`)).data.data.some((j) => j.id === job.data.id));
+  check("other organization's filter finds nothing", (await req(b.A, 'GET', `/jobs?statusId=${proof.id}`)).data.data.every((j) => j.id !== job.data.id));
+  const rep = (await req(a.A, 'GET', '/reports/job-status')).data;
+  check('report counts the status inside its stage', rep.find((r) => r.status === 'in_progress')?.statuses.some((x) => x.id === proof.id && x.count >= 1), JSON.stringify(rep));
+  check('default in use: delete refused', (await req(P, 'DELETE', `/platform/job-statuses/${proof.id}`)).status === 400);
+  const deliv = await req(a.A, 'PATCH', `/jobs/${job.data.id}/status`, { status: 'delivered' });
+  check('a new stage clears the status', ok(deliv) && deliv.data.customStatus === null, show(deliv));
+  const reopened = await req(a.A, 'POST', `/jobs/${job.data.id}/reopen`);
+  check('reopen: In Progress', ok(reopened) && reopened.data.status === 'in_progress' && !reopened.data.customStatus, show(reopened));
+
+  // Hiding a default is per organization.
+  check('organization can not rename a default', (await req(a.A, 'PATCH', `/job-statuses/${proof.id}`, { name: 'x' })).status === 400);
+  check('…hides it', ok(await req(a.A, 'PATCH', `/job-statuses/${proof.id}`, { hidden: true })));
+  check('…then can not use it', (await req(a.A, 'PATCH', `/jobs/${job.data.id}/status`, { statusId: proof.id })).status === 400);
+  check('…other organization still can', ok(await req(b.A, 'PATCH', `/jobs/${bJob.id}/status`, { statusId: proof.id })));
+  await req(a.A, 'PATCH', `/job-statuses/${proof.id}`, { hidden: false });
+  check('stage colour per organization', ok(await req(a.A, 'PATCH', '/job-statuses/stages/quote', { tone: 'accent' })) && (await req(b.A, 'GET', '/job-statuses')).data.find((s) => s.stage === 'quote').tone === 'neutral');
+  check('unknown stage: 400', (await req(a.A, 'PATCH', '/job-statuses/stages/nope', { tone: 'accent' })).status === 400);
+
+  // Platform defaults.
+  check('tenant admin can not reach platform statuses', (await req(a.A, 'GET', '/platform/job-statuses')).status === 403);
+  check('platform admin can not reach an organization list', (await req(P, 'GET', '/job-statuses')).status === 403);
+  const def = await req(P, 'POST', '/platform/job-statuses', { stage: 'delivered', name: `Ready ${RUN}`, tone: 'success', notify: 'admins' });
+  check('platform adds a default', ok(def), show(def));
+  const has = async (tok) => (await req(tok, 'GET', '/job-statuses')).data.find((s) => s.stage === 'delivered').statuses.some((x) => x.id === def.data.id);
+  check('…every organization gets it', (await has(a.A)) && (await has(b.A)));
+  check('…platform list shows defaults only', !(await req(P, 'GET', '/platform/job-statuses')).data.some((s) => s.statuses.some((x) => x.id === own.data.id)));
+  check('unused default deleted', ok(await req(P, 'DELETE', `/platform/job-statuses/${def.data.id}`)));
+  const j2 = await req(a.A, 'POST', '/jobs', { title: `Status2 ${RUN}`, clientId: a.ids.client, sourceLanguageId: a.en, statusId: own.data.id, lineItems: [{ description: 'x', pageCount: 1, pricePerPage: 1 }] });
+  check('own status in use: delete refused', ok(j2) && (await req(a.A, 'DELETE', `/job-statuses/${own.data.id}`)).status === 400);
+  const log = (await req(a.A, 'GET', '/audit-log?action=jobStatus')).data;
+  check('status changes in the activity log', log.data.some((e) => e.action === 'jobStatus.created' && e.targetId === own.data.id));
+}
+
 console.log('== platform admin vs tenant endpoints ==');
 for (const path of ['/clients', '/jobs', '/invoices', '/templates', '/users', '/settings', '/reports/dashboard-stats', '/search?q=Client', '/calendar/events?month=11&year=2026']) {
   const r = await req(P, 'GET', path);
