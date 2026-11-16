@@ -82,6 +82,7 @@ export class JobsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('assignee') assignee?: string,
+    @Query('statusId') statusId?: string,
   ) {
     // Sorting by a hidden price would still reveal it.
     if (
@@ -93,6 +94,7 @@ export class JobsController {
       assignee: assignee || undefined,
       search,
       status,
+      statusId: statusId || undefined,
       type,
       hasDeadline: hasDeadline === 'true',
       sortBy,
@@ -158,14 +160,22 @@ export class JobsController {
   }
 
   @Patch(':id/status')
-  @Audited('job.status_changed', { target: 'job', body: ['status'] })
+  @Audited('job.status_changed', {
+    target: 'job',
+    body: ['status'],
+    refs: [{ key: 'to', type: 'jobStatus', from: 'body', name: 'statusId' }],
+  })
   @RequirePermissions('jobs:update')
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJobStatusDto,
     @CurrentUser() user: User,
   ) {
-    return this.jobsService.updateStatus(id, dto.status, user.id);
+    return this.jobsService.updateStatus(
+      id,
+      { status: dto.status, statusId: dto.statusId },
+      user.id,
+    );
   }
 
   @Post(':id/reopen')

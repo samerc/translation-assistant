@@ -4,6 +4,7 @@ import { Permission } from '../modules/roles/entities/permission.entity.js';
 import { Role } from '../modules/roles/entities/role.entity.js';
 import { User } from '../modules/users/entities/user.entity.js';
 import { LabelOption } from '../modules/settings/entities/label-option.entity.js';
+import { JobStatus } from '../modules/job-statuses/entities/job-status.entity.js';
 import { Language } from '../modules/settings/entities/language.entity.js';
 import { AppSettings } from '../modules/settings/entities/app-settings.entity.js';
 import {
@@ -242,5 +243,19 @@ export async function seed(dataSource: DataSource) {
     ];
     await labelRepo.save(defaults.map((d) => ({ ...d, tenantId: null })));
     console.log('Seeded global label options');
+  }
+
+  // ── Default job statuses (a fresh database; prod got them from the JobStatuses migration) ──
+  const statusRepo = dataSource.getRepository(JobStatus);
+  if ((await statusRepo.count()) === 0) {
+    await statusRepo.save({
+      tenantId: null,
+      stage: 'in_progress',
+      name: 'Proofreading',
+      tone: 'accent',
+      sortOrder: 1,
+      notify: 'assignees',
+    });
+    console.log('Seeded default job statuses');
   }
 }

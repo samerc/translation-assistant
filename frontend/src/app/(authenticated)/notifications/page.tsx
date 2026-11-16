@@ -113,7 +113,7 @@ export default function NotificationsPage() {
             onChange={(e) => toggleEmail(e.target.checked)} />
           <span className="text-sm">
             <span className="font-medium text-text block">Email me reminders</span>
-            <span className="text-text-secondary">Each morning, when one of your jobs is due within 3 days or an invoice you created becomes overdue.</span>
+            <span className="text-text-secondary">Each morning, when one of your jobs is due within 3 days or an invoice you created becomes overdue — and when a job moves to a status your organization set to notify you.</span>
           </span>
         </label>
       )}

@@ -326,6 +326,26 @@ export class MailService {
     );
   }
 
+  /** A job moved to an organization status that notifies people. */
+  async sendJobStatusChange(
+    to: string,
+    firstName: string,
+    item: { title: string; message: string; link: string },
+  ): Promise<void> {
+    const { baseUrl } = await this.resolveConfig();
+    await this.sendMail(
+      to,
+      item.title,
+      heading(`Hi${firstName ? ` ${escapeHtml(firstName)}` : ''}`) +
+        para(escapeHtml(item.message)) +
+        button(`${baseUrl}${encodeURI(item.link)}`, 'Open the job') +
+        para(
+          'You get this email because this status notifies you. Turn emails off on the Notifications page.',
+          true,
+        ),
+    );
+  }
+
   /** The day's reminders (deadlines, overdue invoices) for one person. */
   async sendReminders(
     to: string,

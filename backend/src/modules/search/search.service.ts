@@ -51,6 +51,8 @@ export class SearchService {
     const jobQb = this.jobRepository
       .createQueryBuilder('j')
       .select(['j.id', 'j.jobNumber', 'j.title', 'j.status'])
+      .leftJoin('j.customStatus', 'cs')
+      .addSelect(['cs.id', 'cs.name'])
       .leftJoin('j.client', 'client')
       .addSelect(['client.name'])
       .where(
@@ -151,6 +153,7 @@ export class SearchService {
         jobNumber: j.jobNumber,
         title: j.title,
         status: j.status,
+        statusName: j.customStatus?.name ?? null,
         clientName: j.client?.name,
       })),
       templates: templates.map((t) => ({

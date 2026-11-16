@@ -1,5 +1,6 @@
 'use client';
 
+import { useJobStatuses, type StatusDef } from '@/lib/job-statuses';
 import { BackLink } from '@/components/ui/BackLink';
 import { useGoBack } from '@/lib/go-back';
 import { useState, useEffect, FormEvent } from 'react';
@@ -76,6 +77,7 @@ export default function NewJobPage() {
   const { baseCurrency } = useSettings();
   const router = useRouter();
   const back = useGoBack('/jobs', 'Jobs');
+  const statusCatalogue = useJobStatuses();
   const searchParams = useSearchParams();
   const [languages, setLanguages] = useState<Language[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -294,7 +296,7 @@ export default function NewJobPage() {
         title,
         clientId: form.clientId,
         sourceLanguageId: sourceId,
-        status: form.status,
+        ...(form.status.startsWith('s:') ? { statusId: form.status.slice(2) } : { status: form.status }),
         isFreeOfCharge: form.isFreeOfCharge,
         lineItems: lineItems.map((li) => ({
           description: li.description.trim(),
@@ -344,9 +346,19 @@ export default function NewJobPage() {
             </Field>
             <Field label="Status" htmlFor="job-status">
               <Select id="job-status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                <option value="quote">Quote</option>
-                <option value="accepted">Accepted</option>
-                <option value="in_progress">In Progress</option>
+                {(statusCatalogue?.filter((st) => st.open) ?? [
+                  { stage: 'quote', label: 'Quote', statuses: [] as StatusDef[] },
+                  { stage: 'accepted', label: 'Accepted', statuses: [] as StatusDef[] },
+                  { stage: 'in_progress', label: 'In Progress', statuses: [] as StatusDef[] },
+                ]).map((st) => {
+                  const own = st.statuses.filter((x) => !x.hidden);
+                  return own.length ? (
+                    <optgroup key={st.stage} label={st.label}>
+                      <option value={st.stage}>{st.label}</option>
+                      {own.map((x) => <option key={x.id} value={`s:${x.id}`}>{x.name}</option>)}
+                    </optgroup>
+                  ) : <option key={st.stage} value={st.stage}>{st.label}</option>;
+                })}
               </Select>
             </Field>
             {isAdmin && (

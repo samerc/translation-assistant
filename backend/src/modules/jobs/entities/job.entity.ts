@@ -16,6 +16,8 @@ import { Language } from '../../settings/entities/language.entity.js';
 import { JobUser } from './job-user.entity.js';
 import { JobFile } from './job-file.entity.js';
 import { JobLineItem } from './job-line-item.entity.js';
+import { JobStatus } from '../../job-statuses/entities/job-status.entity.js';
+import { JOB_STAGES } from '../../../common/tenancy/job-stages.js';
 
 // Job numbers restart per tenant (each starts at JOB-0001).
 @Index('UQ_jobs_tenant_number', ['tenantId', 'jobNumber'], { unique: true })
@@ -73,21 +75,17 @@ export class Job {
   @Column({ name: 'target_language_id', nullable: true })
   targetLanguageId: string;
 
-  @Column({
-    type: 'enum',
-    enum: [
-      'quote',
-      'accepted',
-      'in_progress',
-      'delivered',
-      'invoiced',
-      'paid',
-      'lost',
-      'cancelled',
-    ],
-    default: 'in_progress',
-  })
+  /** The job's stage (see common/tenancy/job-stages.ts) — drives locking, open/overdue, invoicing. */
+  @Column({ type: 'enum', enum: JOB_STAGES, default: 'in_progress' })
   status: string;
+
+  /** The status within the stage (null = the stage itself). Reset whenever the stage changes. */
+  @ManyToOne(() => JobStatus, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'custom_status_id' })
+  customStatus: JobStatus | null;
+
+  @Column({ name: 'custom_status_id', type: 'uuid', nullable: true })
+  customStatusId: string | null;
 
   @Column({ type: 'date', nullable: true })
   deadline: string;

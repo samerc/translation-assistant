@@ -47,6 +47,10 @@ const VERBS: Record<string, string> = {
   'role.updated': 'changed the role',
   'role.reset': 'reset to the default the role',
   'role.deleted': 'deleted the role',
+  'jobStatus.created': 'added the job status',
+  'jobStatus.updated': 'changed the job status',
+  'jobStatus.deleted': 'deleted the job status',
+  'jobStatus.stage_colour': 'changed the colour of a stage',
   'invite.created': 'invited',
   'invite.resent': 'resent the invitation to',
   'invite.cancelled': 'cancelled the invitation to',
@@ -111,6 +115,7 @@ const AREAS: { value: string; label: string; platform?: boolean }[] = [
   { value: 'user', label: 'Team members' },
   { value: 'invite', label: 'Invitations' },
   { value: 'role', label: 'Roles' },
+  { value: 'jobStatus', label: 'Job statuses' },
   { value: 'settings', label: 'Settings' },
   { value: 'organization', label: 'Organization' },
   { value: 'tenant', label: 'Organizations', platform: true },
@@ -134,7 +139,12 @@ function linkFor(e: AuditEntry, platform: boolean): string | null {
 function detailText(e: AuditEntry): string[] {
   const d = e.details ?? {};
   const out: string[] = [];
-  if (typeof d.status === 'string') out.push(`to ${humanize(d.status)}`);
+  if (typeof d.to === 'string') out.push(`to ${d.to}`);
+  else if (typeof d.status === 'string') out.push(`to ${humanize(d.status)}`);
+  if (typeof d.stage === 'string') out.push(`in ${humanize(d.stage)}`);
+  if (typeof d.notify === 'string') out.push(`notifies: ${humanize(d.notify)}`);
+  if (typeof d.hidden === 'boolean') out.push(d.hidden ? 'hidden' : 'shown');
+  if (typeof d.tone === 'string') out.push(`colour: ${d.tone}`);
   if (typeof d.user === 'string') out.push(`user: ${d.user}`);
   if (typeof d.permissionLevel === 'string') out.push(`can ${d.permissionLevel}`);
   if (typeof d.role === 'string') out.push(`role: ${d.role}`);
@@ -195,7 +205,7 @@ export function ActivityLog({ endpoint, platform = false }: { endpoint: string; 
         <SearchInput placeholder="Search names, numbers…" value={search} aria-label="Search the activity"
           onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         <Select aria-label="What" className="w-auto" value={area} onChange={(e) => { setArea(e.target.value); setPage(1); }}>
-          {AREAS.filter((a) => !a.value || !!a.platform === platform || (platform && (a.value === 'user' || a.value === 'role'))).map((a) => (
+          {AREAS.filter((a) => !a.value || !!a.platform === platform || (platform && (a.value === 'user' || a.value === 'role' || a.value === 'jobStatus'))).map((a) => (
             <option key={a.value} value={a.value}>{a.label}</option>
           ))}
         </Select>

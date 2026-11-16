@@ -1,5 +1,6 @@
 'use client';
 
+import { JobStatusesEditor } from '@/components/JobStatusesEditor';
 import Link from 'next/link';
 import { useState, useEffect, Suspense, FormEvent, ChangeEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -51,7 +52,7 @@ interface LabelOption {
   sortOrder: number;
 }
 
-type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'freeform';
+type Tab = 'general' | 'languages' | 'labels' | 'uploads' | 'appearance' | 'security' | 'email' | 'freeform' | 'statuses';
 
 export default function SettingsPage() {
   // useSearchParams needs a Suspense boundary for the static build.
@@ -97,6 +98,7 @@ function SettingsTabs() {
         { id: 'security', label: 'Security' },
         ...(isAdmin
           ? [
+              { id: 'statuses' as Tab, label: 'Job Statuses' },
               { id: 'freeform' as Tab, label: 'Freeform Types' },
             ]
           : []),
@@ -132,6 +134,7 @@ function SettingsTabs() {
       {activeTab === 'appearance' && <AppearanceSettings />}
       {activeTab === 'security' && <SecuritySettings />}
       {activeTab === 'freeform' && isAdmin && <FreeformTypesSettings />}
+      {activeTab === 'statuses' && isAdmin && <JobStatusesEditor />}
       {activeTab === 'email' && isPlatformAdmin && <EmailSettings />}
     </div>
   );

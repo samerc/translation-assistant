@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge } from '@/components/ui/Badge';
+import { JobStatusBadge } from '@/components/JobStatusBadge';
 import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format';
 import { useNow } from '@/lib/use-now';
-import { JOB_STATUS_BADGE, OPEN_JOB_STATUSES, badgeClass, isJobOverdue } from '@/lib/status';
+import { OPEN_JOB_STATUSES, isJobOverdue } from '@/lib/status';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
@@ -22,9 +22,7 @@ interface DashboardStats {
   currency: string;
 }
 
-interface UpcomingJob { id: string; jobNumber: string; title: string; status: string; deadline: string | null; client: { name: string } | null; }
-
-const STATUS_LABEL: Record<string, string> = { quote: 'Quote', accepted: 'Accepted', in_progress: 'In Progress' };
+interface UpcomingJob { id: string; jobNumber: string; title: string; status: string; customStatus?: { id: string; name: string; tone: string } | null; deadline: string | null; client: { name: string } | null; }
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -143,9 +141,7 @@ function UpcomingDeadlines() {
                     <div className="text-sm font-medium text-text truncate">{job.title}</div>
                     <div className="text-xs text-text-muted truncate">{job.jobNumber}{job.client ? ` · ${job.client.name}` : ''}</div>
                   </div>
-                  <Badge className="hidden sm:inline-flex" tone={badgeClass(JOB_STATUS_BADGE, job.status)}>
-                    {STATUS_LABEL[job.status] ?? job.status}
-                  </Badge>
+                  <JobStatusBadge className="hidden sm:inline-flex" job={job} />
                   <span className={`text-xs font-semibold tabular-nums whitespace-nowrap ${overdue ? 'text-danger' : dueToday ? 'text-warning' : 'text-text-secondary'}`}>
                     {overdue ? 'Overdue · ' : dueToday ? 'Today · ' : ''}{formatDate(job.deadline)}
                   </span>

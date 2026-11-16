@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Badge } from '@/components/ui/Badge';
+import { toneClass } from '@/lib/job-statuses';
+import { Fragment, useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
 import { useSettings } from '@/lib/settings-context';
@@ -18,7 +20,7 @@ const StatusChart = dynamic(() => import('./charts').then((m) => m.StatusChart),
 
 interface RevenueData { period: string; revenue: number; }
 interface ClientData { clientId: string; clientName: string; invoiceCount: number; totalRevenue: number; }
-interface StatusData { status: string; count: number; }
+interface StatusData { status: string; count: number; statuses?: { id: string; name: string; tone: string; count: number }[] }
 
 const STATUS_COLORS: Record<string, string> = {
   quote: '#0ea5e9',
@@ -219,13 +221,22 @@ function ReportsPage() {
                   </thead>
                   <tbody>
                     {statusData.map((s) => (
-                      <tr key={s.status} className="border-b border-border last:border-0">
-                        <td className="py-2 flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.status] || '#9ca3af' }} />
-                          <span className="text-text">{STATUS_LABELS[s.status] || s.status}</span>
-                        </td>
-                        <td className="py-2 text-text font-medium text-right">{s.count}</td>
-                      </tr>
+                      <Fragment key={s.status}>
+                        <tr className="border-b border-border last:border-0">
+                          <td className="py-2 flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.status] || '#9ca3af' }} />
+                            <span className="text-text">{STATUS_LABELS[s.status] || s.status}</span>
+                          </td>
+                          <td className="py-2 text-text font-medium text-right">{s.count}</td>
+                        </tr>
+                        {/* The statuses within the stage (the rest of its jobs have the stage itself). */}
+                        {(s.statuses ?? []).map((x) => (
+                          <tr key={x.id} className="border-b border-border last:border-0">
+                            <td className="py-1.5 pl-5"><Badge tone={toneClass(x.tone)}>{x.name}</Badge></td>
+                            <td className="py-1.5 text-text-secondary text-right">{x.count}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

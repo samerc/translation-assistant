@@ -1,12 +1,12 @@
 'use client';
 
+import { JobStatusBadge } from '@/components/JobStatusBadge';
 import { BackLink } from '@/components/ui/BackLink';
 import { Button } from '@/components/ui/Button';
 import { useState, useEffect, FormEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
-import { JOB_STATUS_BADGE } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { useAuth } from '@/lib/auth-context';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -612,14 +612,13 @@ function PassportsTab({ clientId, copies, onUpdate }: { clientId: string; copies
 function JobsTab({ clientId }: { clientId: string }) {
   const { baseCurrency } = useSettings();
   const pricesHidden = !!useAuth().user?.tenant?.pricesHidden;
-  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; sourceLanguage: { code: string } | null; targetLanguage: { code: string } | null; calculatedTotal: number; createdAt: string }[]>([]);
+  const [jobs, setJobs] = useState<{ id: string; title: string; status: string; customStatus?: { id: string; name: string; tone: string } | null; sourceLanguage: { code: string } | null; targetLanguage: { code: string } | null; calculatedTotal: number; createdAt: string }[]>([]);
   const router = useRouter();
 
   useEffect(() => {
     api.get<{ data: typeof jobs }>(`/jobs?clientId=${clientId}&limit=100`).then((res) => setJobs(res.data)).catch((err) => logger.error('Failed to load client jobs', err, 'clients'));
   }, [clientId]);
 
-  const statusColor = JOB_STATUS_BADGE;
 
   return (
     <div className="max-w-3xl">
@@ -645,7 +644,7 @@ function JobsTab({ clientId }: { clientId: string }) {
                 <tr key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} className="border-b border-border last:border-0 hover:bg-bg/50 cursor-pointer">
                   <td className="px-4 py-3 font-medium text-text">{j.title}</td>
                   <td className="px-4 py-3 text-text-secondary text-xs">{j.sourceLanguage?.code?.toUpperCase() ?? '—'} → {j.targetLanguage?.code?.toUpperCase() ?? '—'}</td>
-                  <td className="px-4 py-3"><span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor[j.status] || ''}`}>{j.status.replace('_', ' ')}</span></td>
+                  <td className="px-4 py-3"><JobStatusBadge job={j} /></td>
                   {!pricesHidden && <td className="px-4 py-3 text-text-secondary">{formatCurrency(j.calculatedTotal, baseCurrency)}</td>}
                   <td className="px-4 py-3 text-text-secondary">{formatDate(j.createdAt)}</td>
                 </tr>

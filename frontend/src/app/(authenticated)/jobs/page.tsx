@@ -1,5 +1,6 @@
 'use client';
 
+import { jobStatusLabel, jobStatusTone, useJobStatuses, type StatusDef } from '@/lib/job-statuses';
 import { BackLink } from '@/components/ui/BackLink';
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -25,6 +26,7 @@ interface Job {
   type: 'template' | 'freeform';
   title: string;
   status: string;
+  customStatus?: { id: string; name: string; tone: string } | null;
   client: { id: string; name: string };
   sourceLanguage: { code: string; name: string };
   targetLanguage: { code: string; name: string } | null;
@@ -65,6 +67,7 @@ export default function JobsPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
+  const statusCatalogue = useJobStatuses();
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [loadError, setLoadError] = useState(false);
@@ -88,7 +91,8 @@ export default function JobsPage() {
     let ignore = false;
     const params = new URLSearchParams();
     if (debouncedSearch) params.set('search', debouncedSearch);
-    if (statusFilter) params.set('status', statusFilter);
+    if (statusFilter.startsWith('s:')) params.set('statusId', statusFilter.slice(2));
+    else if (statusFilter) params.set('status', statusFilter);
     const clientId = searchParams.get('clientId');
     if (clientId) params.set('clientId', clientId);
     if (assignee) params.set('assignee', assignee);
@@ -116,11 +120,6 @@ export default function JobsPage() {
   const handleSort = (field: string) => {
     if (sortBy === field) { setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC'); }
     else { setSortBy(field); setSortOrder('DESC'); }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const s = STATUSES.find((st) => st.value === status);
-    return s || { label: status, color: 'bg-bg text-text-secondary' };
   };
 
   const getPrice = (job: Job) => {
@@ -152,7 +151,14 @@ export default function JobsPage() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         <Select aria-label="Status" className="!w-auto" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}>
           <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          {(statusCatalogue ?? STATUSES.map((s) => ({ stage: s.value, label: s.label, statuses: [] as StatusDef[] }))).map((st) => (
+            st.statuses.length ? (
+              <optgroup key={st.stage} label={st.label}>
+                <option value={st.stage}>All {st.label}</option>
+                {st.statuses.map((x) => <option key={x.id} value={`s:${x.id}`}>{x.name}</option>)}
+              </optgroup>
+            ) : <option key={st.stage} value={st.stage}>{st.label}</option>
+          ))}
         </Select>
         {isAdmin && (
           <Select aria-label="Assigned to" className="!w-auto" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
@@ -200,7 +206,6 @@ export default function JobsPage() {
             </tr>
           )}
           {jobs.map((job) => {
-            const badge = getStatusBadge(job.status);
             return (
               <tr key={job.id} data-href onClick={() => router.push(`/jobs/${job.id}`)}>
                 {/* On phones the cell takes the leftover width so the client name truncates. */}
@@ -224,7 +229,7 @@ export default function JobsPage() {
                     : <span className="text-text-muted">Unassigned</span>}
                 </td>
                 <td>
-                  <Badge dot tone={badge.color}>{badge.label}</Badge>
+                  <Badge dot tone={jobStatusTone(job, statusCatalogue)}>{jobStatusLabel(job)}</Badge>
                   {job.deadline && (
                     <div className={`sm:hidden mt-1 text-xs tabular-nums whitespace-nowrap ${isJobOverdue(job, today) ? 'text-danger font-semibold' : 'text-text-muted'}`}>
                       Due {formatDate(job.deadline)}

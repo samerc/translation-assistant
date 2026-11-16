@@ -55,6 +55,10 @@ export class TenantSettings {
   @Column({ length: 10, default: 'USD' })
   baseCurrency: string;
 
+  /** Job statuses: platform defaults this organization hides, and its colours for the stages. */
+  @Column({ type: 'simple-json', nullable: true })
+  jobStatusPrefs: JobStatusPrefs | null;
+
   @Column({ type: 'varchar', length: 50, nullable: true })
   invoicePrefix: string | null;
 
@@ -71,4 +75,9 @@ export class TenantSettings {
 
   @UpdateDateColumn()
   updatedAt: Date;
+}
+
+export interface JobStatusPrefs {
+  hidden?: string[];
+  stageTones?: Record<string, string>;
 }

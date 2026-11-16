@@ -17,6 +17,7 @@ import { MailModule } from './modules/mail/mail.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { RolesModule } from './modules/roles/roles.module.js';
+import { JobStatusesModule } from './modules/job-statuses/job-statuses.module.js';
 import { SettingsModule } from './modules/settings/settings.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { TemplatesModule } from './modules/templates/templates.module.js';
@@ -53,6 +54,7 @@ import { AuditModule } from './modules/audit/audit.module.js';
     AuthModule,
     UsersModule,
     RolesModule,
+    JobStatusesModule,
     SettingsModule,
     ClientsModule,
     TemplatesModule,

@@ -1,5 +1,6 @@
 'use client';
 
+import { forgetJobStatuses } from './job-statuses';
 import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { api, ApiError, maybeSignedIn, restoreSession, setAccessToken } from './api';
 import { logger } from './logger';
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<LoginResponse>('/auth/login', { email, password });
     setAccessToken(data.accessToken); // memory only; the refresh token is an httpOnly cookie
+    forgetJobStatuses();
     setUser(data.user);
   }, [setUser]);
 
@@ -106,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (dto: RegisterData) => {
     const data = await api.post<LoginResponse>('/auth/register', dto);
     setAccessToken(data.accessToken);
+    forgetJobStatuses();
     setUser(data.user);
   }, [setUser]);
 
@@ -116,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logger.error('Logout request failed', err, 'auth');
     }
     setAccessToken(null);
+    forgetJobStatuses();
     setUser(null);
   }, [setUser]);
 
@@ -126,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logger.error('Logout everywhere failed', err, 'auth');
     }
     setAccessToken(null);
+    forgetJobStatuses();
     setUser(null);
   }, [setUser]);
 

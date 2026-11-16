@@ -1,5 +1,7 @@
 'use client';
 
+import { JobStatusBadge } from '@/components/JobStatusBadge';
+import { jobStatusLabel, optionKey, statusOptions, useJobStatuses } from '@/lib/job-statuses';
 import { BackLink } from '@/components/ui/BackLink';
 import { Badge } from '@/components/ui/Badge';
 import { useState, useEffect, FormEvent } from 'react';
@@ -7,7 +9,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { useAuth } from '@/lib/auth-context';
-import { JOB_STATUS_BADGE, badgeClass } from '@/lib/status';
 import { useSettings } from '@/lib/settings-context';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirm';
@@ -32,30 +33,8 @@ interface Job {
   lineItems: JobLineItem[]; assignedUsers: JobUser[]; files: JobFile[]; createdAt: string;
   /** What the caller may do: 'view' = a view-only assignment. */
   myAccess?: 'edit' | 'view';
+  customStatus?: { id: string; name: string; tone: string } | null;
 }
-
-const STATUSES = [
-  { value: 'quote', label: 'Quote' }, { value: 'accepted', label: 'Accepted' },
-  { value: 'in_progress', label: 'In Progress' }, { value: 'delivered', label: 'Delivered' },
-  { value: 'invoiced', label: 'Invoiced' }, { value: 'paid', label: 'Paid' },
-  { value: 'lost', label: 'Lost' }, { value: 'cancelled', label: 'Cancelled' },
-];
-
-// Valid next statuses from each state — mirrors JobsService.STATUS_TRANSITIONS
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  quote: ['accepted', 'in_progress', 'lost', 'cancelled'],
-  accepted: ['in_progress', 'lost', 'cancelled'],
-  in_progress: ['delivered', 'lost', 'cancelled'],
-  delivered: ['invoiced', 'cancelled'],
-  invoiced: ['paid', 'cancelled'],
-  paid: [],
-  lost: ['quote', 'in_progress'],
-  cancelled: ['quote', 'in_progress'],
-};
-
-const statusColor = (s: string) => {
-  return badgeClass(JOB_STATUS_BADGE, s);
-};
 
 type Tab = 'details' | 'documents' | 'source-files' | 'translated-files';
 
@@ -67,6 +46,8 @@ export default function JobDetailPage() {
   const { hasPermission } = useAuth();
   const canReadInvoices = hasPermission('invoices:read');
   const [job, setJob] = useState<Job | null>(null);
+  const statusCatalogue = useJobStatuses();
+  const statusMenu = job ? statusOptions(statusCatalogue, job) : [];
   const [activeTab, setActiveTab] = useState<Tab>('details');
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([]);
 
@@ -107,8 +88,10 @@ export default function JobDetailPage() {
     }
   };
 
-  const handleStatusChange = async (status: string) => {
-    if (status === 'delivered') {
+  const handleStatusChange = async (key: string) => {
+    const opt = statusMenu.flatMap((g) => g.options).find((o) => o.key === key);
+    if (!opt) return;
+    if (opt.stage === 'delivered' && job?.status !== 'delivered') {
       // Delivering locks the documents — catch unfinished ones first.
       const docs = await api.get<{ status: string }[]>(`/documents/by-job/${id}`).catch(() => []);
       const drafts = docs.filter((d) => d.status !== 'completed').length;
@@ -120,7 +103,7 @@ export default function JobDetailPage() {
       }))) return;
     }
     try {
-      await api.patch(`/jobs/${id}/status`, { status });
+      await api.patch(`/jobs/${id}/status`, opt.statusId ? { statusId: opt.statusId } : { status: opt.stage });
       loadJob();
     } catch (err) {
       logger.error('Failed to update job status', err, 'jobs');
@@ -158,7 +141,7 @@ export default function JobDetailPage() {
       {isLocked && (
         <div className="mb-4 px-3.5 py-2.5 tone tone-warning rounded-lg flex flex-wrap gap-2 justify-between items-center">
           <span className="text-sm font-medium">
-            This job is locked ({STATUSES.find((s) => s.value === job.status)?.label}). Reopen to make changes.
+            This job is locked ({jobStatusLabel(job)}). Reopen to make changes.
           </span>
           {!readOnly && (
             <Button size="sm" onClick={handleReopen}>Reopen Job</Button>
@@ -179,9 +162,7 @@ export default function JobDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono text-text-muted">{job.jobNumber}</span>
             <h1 className="text-xl md:text-2xl font-bold tracking-tight text-text break-words min-w-0">{job.title}</h1>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusColor(job.status)}`}>
-              {STATUSES.find((s) => s.value === job.status)?.label}
-            </span>
+            <JobStatusBadge job={job} />
             {job.isFreeOfCharge && <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold tone tone-accent">Pro Bono</span>}
           </div>
           <p className="text-sm text-text-secondary mt-1">
@@ -210,12 +191,13 @@ export default function JobDetailPage() {
             </Button>
           )}
           {!readOnly && (
-            <select value={job.status} onChange={(e) => handleStatusChange(e.target.value)}
+            <select value={optionKey(job.status, job.customStatus?.id ?? null)} onChange={(e) => handleStatusChange(e.target.value)}
               aria-label="Job status" className="input w-auto min-w-[10rem]">
-              {STATUSES.map((s) => {
-                const allowed = s.value === job.status || (VALID_TRANSITIONS[job.status] || []).includes(s.value);
-                return <option key={s.value} value={s.value} disabled={!allowed}>{s.label}{!allowed ? ' (N/A)' : ''}</option>;
-              })}
+              {statusMenu.map((g) => g.options.length > 1 ? (
+                <optgroup key={g.label} label={g.label}>
+                  {g.options.map((o) => <option key={o.key} value={o.key} disabled={!o.allowed}>{o.label}{!o.allowed ? ' (N/A)' : ''}</option>)}
+                </optgroup>
+              ) : g.options.map((o) => <option key={o.key} value={o.key} disabled={!o.allowed}>{o.label}{!o.allowed ? ' (N/A)' : ''}</option>))}
             </select>
           )}
           {hasPermission('jobs:delete') && (

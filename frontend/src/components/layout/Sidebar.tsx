@@ -54,6 +54,7 @@ const platformGroups: { label?: string; items: NavItem[] }[] = [
     items: [
       { label: 'Organizations', href: '/platform', icon: BuildingIcon },
       { label: 'Roles', href: '/platform/roles', icon: KeyIcon },
+      { label: 'Job statuses', href: '/platform/job-statuses', icon: BriefcaseIcon },
       { label: 'Activity', href: '/platform/activity', icon: ClockIcon },
     ],
   },

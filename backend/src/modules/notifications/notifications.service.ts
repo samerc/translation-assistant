@@ -9,6 +9,7 @@ import { User } from '../users/entities/user.entity.js';
 import { TenantSettings } from '../tenants/entities/tenant-settings.entity.js';
 import { MailService } from '../mail/mail.service.js';
 import { formatDateOnly } from '../../common/utils/display-format.js';
+import { ROLE_ADMIN } from '../../common/tenancy/roles.js';
 
 const JOB_STATUS_LABELS: Record<string, string> = {
   quote: 'Quote',
@@ -84,34 +85,74 @@ export class NotificationsService {
 
   // ── Notification creators (called by other services) ──
 
+  /**
+   * A job moved to another status. `notify` comes from the new status: the job's
+   * people, the organization's admins, both, or nobody (core stages: the job's
+   * people). Organization statuses also email the recipients who keep
+   * "Email me reminders" on.
+   */
   async notifyJobStatusChange(
-    job: { id: string; jobNumber: string; title: string },
-    oldStatus: string,
-    newStatus: string,
+    job: { id: string; jobNumber: string; title: string; tenantId: string },
+    from: { stage: string; name: string | null },
+    to: { stage: string; name: string | null },
+    notify: string,
     changedByUserId: string,
   ): Promise<void> {
-    const assignments = await this.jobUserRepository.find({
-      where: { jobId: job.id },
+    if (notify === 'none') return;
+    const users = this.notificationRepository.manager.getRepository(User);
+    const ids = new Set<string>();
+    if (notify === 'assignees' || notify === 'both') {
+      const assignments = await this.jobUserRepository.find({
+        where: { jobId: job.id },
+      });
+      assignments.forEach((a) => ids.add(a.userId));
+    }
+    if (notify === 'admins' || notify === 'both') {
+      const admins = await users.find({
+        where: {
+          tenantId: job.tenantId,
+          isActive: true,
+          role: { name: ROLE_ADMIN, isBuiltIn: true },
+        },
+        relations: { role: true },
+      });
+      admins.forEach((u) => ids.add(u.id));
+    }
+    ids.delete(changedByUserId);
+    if (ids.size === 0) return;
+
+    const recipients = await users.find({
+      where: { id: In([...ids]), tenantId: job.tenantId, isActive: true },
     });
-    const recipients = assignments.filter((a) => a.userId !== changedByUserId);
     if (recipients.length === 0) return;
-    const changer = changedByUserId
-      ? await this.notificationRepository.manager
-          .getRepository(User)
-          .findOne({ where: { id: changedByUserId } })
-      : null;
+    const changer = await users.findOne({ where: { id: changedByUserId } });
     const by = changer ? ` by ${changer.firstName} ${changer.lastName}` : '';
-    const notifications = recipients.map((a) =>
-      this.notificationRepository.create({
-        userId: a.userId,
-        type: 'job_status_change',
-        title: `Job status updated`,
-        message: `${job.jobNumber} "${job.title}" moved from ${statusLabel(oldStatus)} to ${statusLabel(newStatus)}${by}`,
-        link: `/jobs/${job.id}`,
-      }),
+    const label = (x: { stage: string; name: string | null }) =>
+      x.name ?? statusLabel(x.stage);
+    const message = `${job.jobNumber} "${job.title}" moved from ${label(from)} to ${label(to)}${by}`;
+    const link = `/jobs/${job.id}`;
+    await this.notificationRepository.save(
+      recipients.map((u) =>
+        this.notificationRepository.create({
+          userId: u.id,
+          type: 'job_status_change',
+          title: to.name ? `Job is now ${to.name}` : 'Job status updated',
+          message,
+          link,
+        }),
+      ),
     );
-    if (notifications.length > 0) {
-      await this.notificationRepository.save(notifications);
+    if (!to.name) return;
+    for (const u of recipients.filter((r) => r.emailReminders)) {
+      this.mailService
+        .sendJobStatusChange(u.email, u.firstName, {
+          title: `${job.jobNumber} is now ${to.name}`,
+          message,
+          link,
+        })
+        .catch((err: Error) =>
+          this.logger.warn(`Status email to ${u.id} failed: ${err.message}`),
+        );
     }
   }
 

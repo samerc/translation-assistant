@@ -45,6 +45,11 @@ const TARGETS: Record<
   },
   tenant: { table: 'tenants', label: 'x.name', tenant: 'x.id' },
   role: { table: 'roles', label: 'x.name', tenant: 'x.tenant_id' },
+  jobStatus: {
+    table: 'job_statuses',
+    label: 'x.name',
+    tenant: 'x.tenant_id',
+  },
   language: { table: 'languages', label: 'x.name', tenant: 'x.tenant_id' },
   label: { table: 'label_options', label: 'x.value', tenant: 'x.tenant_id' },
 };

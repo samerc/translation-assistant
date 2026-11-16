@@ -12,6 +12,8 @@ export interface CalendarEvent {
   title: string;
   date: string;
   status: string;
+  /** A job's status within its stage, when it has one. */
+  statusName?: string | null;
   color: string;
   link: string;
 }
@@ -47,6 +49,8 @@ export class CalendarService {
         'job.deadline',
         'job.status',
       ])
+      .leftJoin('job.customStatus', 'cs')
+      .addSelect(['cs.id', 'cs.name'])
       .where('job.deadline BETWEEN :start AND :end', {
         start: startDate,
         end: endDate,
@@ -100,6 +104,7 @@ export class CalendarService {
       title: `${job.jobNumber} — ${job.title}`,
       date: job.deadline,
       status: job.status,
+      statusName: job.customStatus?.name ?? null,
       color: 'primary',
       link: `/jobs/${job.id}`,
     }));
