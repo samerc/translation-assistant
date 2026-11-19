@@ -495,8 +495,8 @@ function WordStep({ tpl, firstLanguageId, onChanged, onBack, onNext }: {
               Keep one example row only. <CopyCode text="{no}" /> in that row numbers the entries 1, 2, 3…
             </li>
             <li>
-              A value that changes per page (a seal number, for example) goes in the footer: <CopyCode text="{#pages}{seal_number}{/pages}" />.
-              The document form then asks for one per page, and each page shows its own.
+              Make the template <em>one page</em>. A document gets one page per page of the original (Page 1, Page 2… in the document form),
+              each with its own values — a seal number, its members. Anything only on the last page goes between <CopyCode text="{#last}" /> and <CopyCode text="{/last}" /> (or <CopyCode text="{#first}" /> … <CopyCode text="{/first}" />).
             </li>
             <li>Upload the file — the fields are picked up automatically, and you can still add more on the page.</li>
           </ol>

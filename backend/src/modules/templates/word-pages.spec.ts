@@ -1,87 +1,113 @@
 import PizZip from 'pizzip';
-import { Document, Footer, Packer, Paragraph, TextRun } from 'docx';
-import { expandPerPageValues } from './word-pages.js';
-import { headerFooterText } from './word-text.js';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+} from 'docx';
+import { PAGES_KEY, wrapInPages } from './word-pages.js';
 import { scanWordPlaceholders } from './word-placeholders.js';
 
-async function withFooter(): Promise<Buffer> {
+const cell = (text: string) =>
+  new TableCell({
+    children: [new Paragraph({ children: [new TextRun(text)] })],
+  });
+
+/** One page of a family extract: a heading value, the members, a last-page signature. */
+async function onePage(): Promise<Buffer> {
   const doc = new Document({
     sections: [
       {
-        footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({ text: 'Seal ', italics: true }),
-                  new TextRun('{#pages}{seal_number}{/pages}'),
-                  new TextRun(' - end'),
-                ],
+        children: [
+          new Paragraph('Caza {caza}'),
+          new Table({
+            rows: [
+              new TableRow({ children: [cell('No.'), cell('Name')] }),
+              new TableRow({
+                children: [cell('{#members}{no}'), cell('{name}{/members}')],
               }),
             ],
           }),
-        },
-        children: [new Paragraph('Body {name}')],
+          new Paragraph('Seal {seal_number}'),
+          new Paragraph('{#last}'),
+          new Paragraph('Signed {signatory}'),
+          new Paragraph('{/last}'),
+        ],
       },
     ],
   });
   return Packer.toBuffer(doc);
 }
 
-const footerXml = (zip: PizZip) =>
-  Object.keys(zip.files)
-    .filter((n) => /^word\/footer\d*\.xml$/.test(n))
-    .map((n) => zip.file(n)!.asText())
-    .join('');
+const bodyText = (buf: Buffer) =>
+  new PizZip(buf)
+    .file('word/document.xml')!
+    .asText()
+    .replace(/<w:p[ >]/g, '\n$&')
+    .replace(/<[^>]+>/g, '');
 
-describe('per-page values in footers', () => {
-  it('are found by the scan as a group', async () => {
-    const buf = await withFooter();
-    const scan = scanWordPlaceholders(headerFooterText(buf));
-    expect(scan.groupOf).toEqual({ seal_number: 'pages' });
+describe('pages', () => {
+  it('{#last}/{#first} are sections, not lists; fields inside stay single values', () => {
+    const scan = scanWordPlaceholders(
+      '{caza} {#members}{no}{name}{/members} {#last}{signatory}{/last}',
+    );
     expect(scan.malformed).toEqual([]);
+    expect(scan.groups).toEqual(['members']);
+    expect(scan.groupOf).toEqual({ name: 'members' });
+    expect(scan.fields).toContain('signatory');
+    expect(
+      scanWordPlaceholders('{#members}{#last}{/last}{/members}').malformed[0]
+        ?.reason,
+    ).toMatch(/repeating row/);
+    expect(scanWordPlaceholders('{#last} x').malformed[0]?.reason).toMatch(
+      /Never closed/,
+    );
   });
 
-  it('become one IF { PAGE } field per entry, keeping the text around them', async () => {
-    const zip = new PizZip(await withFooter());
-    expandPerPageValues(
-      zip,
-      new Map([
-        [
-          'pages',
-          [
-            { seal_number: '004106283' },
-            { seal_number: '004106282' },
-            { seal_number: 'with "quotes"' },
-          ],
-        ],
-      ]),
-    );
-    const xml = footerXml(zip);
-    expect(xml).not.toContain('{#pages}');
-    const instr = [...xml.matchAll(/<w:instrText[^>]*>([^<]*)</g)].map(
-      (m) => m[1],
-    );
-    expect(instr.filter((t) => t.trim() === 'IF')).toHaveLength(3);
-    expect(instr).toContain(' = 1 "004106283" "" ');
-    expect(instr).toContain(' = 2 "004106282" "" ');
-    expect(instr).toContain(' = 3 "with ”quotes”" "" ');
-    const shown = [...xml.matchAll(/<w:t[^>]*>([^<]*)</g)].map((m) => m[1]);
-    expect(shown.join('')).toContain('Seal ');
-    expect(shown.join('')).toContain(' - end');
-
-    // docxtemplater has nothing left to trip over.
+  it('renders the page once per page: own members, numbers continue, last-page part once, page 1 values fill in', async () => {
+    const zip = new PizZip(await onePage());
+    wrapInPages(zip);
     const Docxtemplater = (await import('docxtemplater')).default;
     const t = new Docxtemplater(zip, {
       paragraphLoop: true,
       delimiters: { start: '{', end: '}' },
+      nullGetter: () => '',
     });
-    expect(() => t.render({ name: 'x' })).not.toThrow();
-  });
+    const page1 = {
+      caza: 'Chouf',
+      seal_number: '004106283',
+      signatory: 'Rajeh NASR',
+      members: [
+        { no: '1', name: 'Bechara' },
+        { no: '2', name: 'Gladys' },
+      ],
+      first: true,
+      last: false,
+    };
+    // Page 2 has its own seal and members, no caza (→ page 1's).
+    const page2 = {
+      seal_number: '004106282',
+      members: [{ no: '3', name: 'Jessica' }],
+      first: false,
+      last: true,
+    };
+    t.render({ ...page1, [PAGES_KEY]: [page1, page2] });
+    const out = t.getZip().generate({ type: 'nodebuffer' });
+    const text = bodyText(out);
+    const xml = new PizZip(out).file('word/document.xml')!.asText();
 
-  it('no entries → the loop just disappears', async () => {
-    const zip = new PizZip(await withFooter());
-    expandPerPageValues(zip, new Map());
-    expect(footerXml(zip)).not.toMatch(/[{}]/);
+    expect(text).not.toMatch(/[{}]/);
+    expect(text.match(/Caza Chouf/g)).toHaveLength(2);
+    expect(text).toMatch(/1\s*Bechara[\s\S]*2\s*Gladys[\s\S]*Seal 004106283/);
+    expect(text).toMatch(
+      /Seal 004106283[\s\S]*3\s*Jessica[\s\S]*Seal 004106282/,
+    );
+    expect(text.match(/Signed Rajeh NASR/g)).toHaveLength(1);
+    expect(text.indexOf('Signed')).toBeGreaterThan(text.indexOf('004106282'));
+    // One new page (before page 2), none before page 1.
+    expect(xml.match(/<w:pageBreakBefore\/>/g)).toHaveLength(1);
   });
 });

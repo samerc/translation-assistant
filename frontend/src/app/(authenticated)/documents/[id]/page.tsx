@@ -9,6 +9,7 @@ import { useUnsavedChangesGuard, confirmLeave } from '@/lib/unsaved-changes';
 import { logger } from '@/lib/logger';
 import { useAuth } from '@/lib/auth-context';
 import { toast } from '@/lib/toast';
+import { confirmDialog } from '@/lib/confirm';
 import { humanize } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -62,7 +63,11 @@ export default function DocumentFillPage() {
   const [gtConfigured, setGtConfigured] = useState<boolean | null>(null);
   const [gtSetupOpen, setGtSetupOpen] = useState(false);
   const [gtOpen, setGtOpen] = useState<{ fieldKey: string; fieldId: string; page: number; entry?: number } | null>(null);
+  // Entries per group on each page: "groupKey_page" → count.
   const [groupEntries, setGroupEntries] = useState<Record<string, number>>({});
+  // A document has as many pages as the original (Word templates); each page has its own values.
+  const [pageCount, setPageCount] = useState(1);
+  const [page, setPage] = useState(1);
   const [dirty, setDirty] = useState(false);
 
   // Warn on unsaved changes (browser close, sidebar links, search, notifications)
@@ -137,18 +142,18 @@ export default function DocumentFillPage() {
         if (!groupFields[f.groupKey!]) groupFields[f.groupKey!] = [];
         groupFields[f.groupKey!].push(f);
       });
+      const pages = Math.max(1, ...d.fieldValues.map((fv) => fv.pageNumber || 1));
+      setPageCount(pages);
       const counts: Record<string, number> = {};
-      Object.keys(groupFields).forEach((gk) => {
-        const firstField = groupFields[gk][0];
-        let max = 0;
-        Object.keys(map).forEach((k) => {
-          if (k.startsWith(`${firstField.id}_`)) {
-            const parts = k.split('_');
-            const entry = parseInt(parts[2]) || 0;
-            if (entry > max) max = entry;
+      Object.entries(groupFields).forEach(([gk, gf]) => {
+        const ids = new Set(gf.map((f) => f.id));
+        for (let pg = 1; pg <= pages; pg++) {
+          let n = 0;
+          for (const fv of d.fieldValues) {
+            if (ids.has(fv.templateFieldId) && (fv.pageNumber || 1) === pg && fv.entryIndex !== null) n = Math.max(n, fv.entryIndex + 1);
           }
-        });
-        counts[gk] = Math.max(max + 1, 1);
+          counts[`${gk}_${pg}`] = Math.max(n, 1);
+        }
       });
       setGroupEntries(counts);
     }).catch((err) => {
@@ -235,13 +240,29 @@ export default function DocumentFillPage() {
 
   // Repeatable group entries tracking (state initialized in useEffect above)
 
+  const entriesOn = (groupKey: string, pg: number) => groupEntries[`${groupKey}_${pg}`] || 1;
   const addGroupEntry = (groupKey: string) => {
-    setGroupEntries({ ...groupEntries, [groupKey]: (groupEntries[groupKey] || 1) + 1 });
+    setGroupEntries({ ...groupEntries, [`${groupKey}_${page}`]: entriesOn(groupKey, page) + 1 });
+  };
+
+  const multiPage = doc.template.type === 'word';
+  const addPage = () => { setPageCount(pageCount + 1); setPage(pageCount + 1); };
+  /** Remove the last page and its values. */
+  const removeLastPage = async () => {
+    if (pageCount < 2) return;
+    if (!(await confirmDialog({ title: `Remove page ${pageCount}?`, message: 'Everything filled in on that page is removed.', confirmText: 'Remove page' }))) return;
+    setValues((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => k.split('_')[1] !== String(pageCount))));
+    setPageCount(pageCount - 1);
+    setPage(Math.min(page, pageCount - 1));
+    edits.current += 1;
+    setDirty(true);
   };
 
   const renderField = (field: TemplateField, pageNum: number, entryIdx?: number) => {
     const labels = getFieldLabel(field);
     const val = getValue(field.id, pageNum, entryIdx);
+    // Later pages reuse page 1's value for anything left empty (e.g. the place of registry).
+    const inherited = pageNum > 1 && entryIdx === undefined ? getValue(field.id, 1) : '';
     const key = getValueKey(field.id, pageNum, entryIdx);
 
     const inputId = `f-${key}`;
@@ -274,6 +295,7 @@ export default function DocumentFillPage() {
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             rows={3}
             dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
+            placeholder={inherited ? `Same as page 1: ${inherited}` : undefined}
             className="input w-full resize-none"
           />
         ) : field.fieldType === 'date' ? (
@@ -300,6 +322,7 @@ export default function DocumentFillPage() {
             disabled={locked}
             onChange={(e) => setValue(field.id, pageNum, e.target.value, entryIdx)}
             dir={targetLang?.direction === 'rtl' ? 'rtl' : 'ltr'}
+            placeholder={inherited ? `Same as page 1: ${inherited}` : undefined}
             className="input w-full"
           />
         )}
@@ -370,17 +393,40 @@ export default function DocumentFillPage() {
 
       {/* Fields */}
       <div className="max-w-2xl">
+        {multiPage && (
+          <div className="mb-4">
+            <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Pages">
+              {Array.from({ length: pageCount }, (_, i) => (
+                <button key={i} type="button" role="tab" aria-selected={page === i + 1} onClick={() => setPage(i + 1)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${page === i + 1 ? 'tone tone-primary border-transparent' : 'border-border text-text-secondary hover:text-text'}`}>
+                  Page {i + 1}
+                </button>
+              ))}
+              {!locked && <Button size="sm" variant="ghost" onClick={addPage}>+ Add page</Button>}
+              {!locked && pageCount > 1 && page === pageCount && (
+                <Button size="sm" variant="ghost" onClick={() => void removeLastPage()}>Remove page {pageCount}</Button>
+              )}
+            </div>
+            <p className="text-xs text-text-muted mt-2">
+              One page here for each page of the original — each starts a new page in the translation.
+              {pageCount > 1 && ' Fields left empty on a later page use page 1’s value.'}
+            </p>
+          </div>
+        )}
         {/* Fixed fields */}
         {fixedFields.length > 0 && (
           <div className="card p-6 mb-6">
-            {fixedFields.map((field) => renderField(field, 1))}
+            {fixedFields.map((field) => renderField(field, page))}
           </div>
         )}
 
         {/* Grouped fields */}
         {Object.entries(groups).map(([groupKey, groupFields]) => {
-          const entryCount = groupEntries[groupKey] || 1;
-          // "members" → "Member 1", "+ Add member"; "pages" (one per page) → "Page 1".
+          const entryCount = entriesOn(groupKey, page);
+          // Numbers continue from the earlier pages, as on the original (page 2 starts at 6…).
+          let offset = 0;
+          for (let pg = 1; pg < page; pg++) offset += entriesOn(groupKey, pg);
+          // "members" → "Member 1", "+ Add member".
           const one = singular(humanize(groupKey));
           return (
             <div key={groupKey} className="mb-6">
@@ -398,9 +444,9 @@ export default function DocumentFillPage() {
 
               {Array.from({ length: entryCount }, (_, entryIdx) => (
                 <div key={entryIdx} className="card p-6 mb-3">
-                  <div className="text-xs text-text-muted mb-3 font-medium">{one} {entryIdx + 1}</div>
+                  <div className="text-xs text-text-muted mb-3 font-medium">{one} {offset + entryIdx + 1}</div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
-                    {groupFields.map((field) => renderField(field, 1, entryIdx))}
+                    {groupFields.map((field) => renderField(field, page, entryIdx))}
                   </div>
                 </div>
               ))}

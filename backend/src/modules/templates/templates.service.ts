@@ -20,9 +20,11 @@ import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
 import {
   noPlaceholdersMessage,
+  PAGE_SECTIONS,
   ROW_NUMBER,
   scanWordPlaceholders,
 } from './word-placeholders.js';
+import { PAGES_KEY } from './word-pages.js';
 import { wordTemplateText } from './word-text.js';
 import {
   markField,
@@ -542,6 +544,10 @@ export class TemplatesService {
     dto: { spot: WordSpot; groupKey: string; removeBelow?: number },
     tenantId: string,
   ): Promise<Template> {
+    if ([...PAGE_SECTIONS, PAGES_KEY].includes(dto.groupKey))
+      throw new BadRequestException(
+        `“${dto.groupKey}” is a built-in name — choose another list name`,
+      );
     const { template, scan } = await this.editWordFile(id, tenantId, (b) => ({
       buffer: repeatRow(b, dto.spot, dto.groupKey, dto.removeBelow ?? 0),
       extra: null,

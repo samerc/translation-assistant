@@ -127,6 +127,12 @@ export class TestExportValueDto {
   @Min(0)
   @Max(499)
   entryIndex?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  pageNumber?: number;
 }
 
 export class TestExportDto {
