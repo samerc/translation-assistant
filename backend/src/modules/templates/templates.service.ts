@@ -20,8 +20,12 @@ import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
 import {
   noPlaceholdersMessage,
+  PAGE_SECTIONS,
+  ROW_NUMBER,
   scanWordPlaceholders,
 } from './word-placeholders.js';
+import { PAGES_KEY } from './word-pages.js';
+import { wordTemplateText } from './word-text.js';
 import {
   markField,
   repeatRow,
@@ -260,16 +264,11 @@ export class TemplatesService {
         'The uploaded file is not a valid .docx document',
       );
     }
-    const result = await mammoth.convertToHtml({ buffer }).catch(() => {
+    const text = await wordTemplateText(buffer).catch(() => {
       throw new BadRequestException(
         'The uploaded file could not be read as a Word document',
       );
     });
-    const text = result.value
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
     const scan = scanWordPlaceholders(text);
 
     if (scan.malformed.length > 0) {
@@ -315,7 +314,7 @@ export class TemplatesService {
 
     const buffer = readFileSync(template.wordFilePath);
     const result = await mammoth.convertToHtml({ buffer });
-    const scan = scanWordPlaceholders(result.value.replace(/<[^>]*>/g, ''));
+    const scan = scanWordPlaceholders(await wordTemplateText(buffer));
     const foundValid = scan.fields;
     const malformed = [...scan.malformed];
 
@@ -375,11 +374,8 @@ export class TemplatesService {
       throw new BadRequestException('Not a Word template or no file uploaded');
     }
     // Fields that sit inside a {#group} loop in the file are created in that group.
-    const result = await mammoth.convertToHtml({
-      buffer: readFileSync(template.wordFilePath),
-    });
     const { groupOf } = scanWordPlaceholders(
-      result.value.replace(/<[^>]*>/g, ''),
+      await wordTemplateText(readFileSync(template.wordFilePath)),
     );
 
     // Fields already there but in the wrong (or no) group for the loop they
@@ -451,8 +447,7 @@ export class TemplatesService {
       }
       throw new BadRequestException('The Word file could not be edited.');
     }
-    const html = await mammoth.convertToHtml({ buffer: result.buffer });
-    const scan = scanWordPlaceholders(html.value.replace(/<[^>]*>/g, ''));
+    const scan = scanWordPlaceholders(await wordTemplateText(result.buffer));
     if (scan.malformed.length > 0) {
       throw new BadRequestException(
         `That would break the Word file: ${scan.malformed.map((m) => `${m.text} (${m.reason})`).join('; ')}`,
@@ -498,7 +493,11 @@ export class TemplatesService {
       buffer: markField(b, dto.spot, dto.fieldKey),
       extra: null,
     }));
-    if (!template.fields.some((f) => f.fieldKey === dto.fieldKey)) {
+    // {no} is built in (the entry's number), not a field.
+    if (
+      dto.fieldKey !== ROW_NUMBER &&
+      !template.fields.some((f) => f.fieldKey === dto.fieldKey)
+    ) {
       const label = dto.label?.trim();
       await this.addField(
         id,
@@ -542,11 +541,15 @@ export class TemplatesService {
   /** Make the table row at `spot` repeat once per entry of `groupKey`. */
   async repeatWordRow(
     id: string,
-    dto: { spot: WordSpot; groupKey: string },
+    dto: { spot: WordSpot; groupKey: string; removeBelow?: number },
     tenantId: string,
   ): Promise<Template> {
+    if ([...PAGE_SECTIONS, PAGES_KEY].includes(dto.groupKey))
+      throw new BadRequestException(
+        `“${dto.groupKey}” is a built-in name — choose another list name`,
+      );
     const { template, scan } = await this.editWordFile(id, tenantId, (b) => ({
-      buffer: repeatRow(b, dto.spot, dto.groupKey),
+      buffer: repeatRow(b, dto.spot, dto.groupKey, dto.removeBelow ?? 0),
       extra: null,
     }));
     await this.syncGroups(template, scan.groupOf);

@@ -1,3 +1,5 @@
+import { ROW_NUMBER } from '../templates/word-placeholders.js';
+import { PAGES_KEY, wrapInPages } from '../templates/word-pages.js';
 import {
   Injectable,
   NotFoundException,
@@ -78,7 +80,11 @@ export function fieldLabelResolver(doc: Document): (key: string) => string {
  * Group fields (groupKey set) are stored once per entry (entryIndex 0..n-1);
  * rows come back in entry order, with empty entries dropped.
  */
-export function collectFieldValues(doc: Document): {
+export function collectFieldValues(
+  doc: Document,
+  /** Only this page's values (documents have one page per page of the original). */
+  page?: number,
+): {
   fixed: Map<string, string>;
   groups: Map<string, GroupRow[]>;
   groupOf: Map<string, string>;
@@ -92,6 +98,7 @@ export function collectFieldValues(doc: Document): {
   for (const fv of doc.fieldValues) {
     const field = fv.templateField;
     if (!field) continue;
+    if (page !== undefined && (fv.pageNumber || 1) !== page) continue;
     const group = groupOf.get(field.fieldKey);
     if (group && fv.entryIndex !== null && fv.entryIndex !== undefined) {
       const rows = byEntry.get(group) ?? [];
@@ -104,6 +111,13 @@ export function collectFieldValues(doc: Document): {
   const groups = new Map<string, GroupRow[]>();
   for (const [group, rows] of byEntry) groups.set(group, rows.filter(Boolean));
   return { fixed, groups, groupOf };
+}
+
+/** The document's pages, in order (at least page 1). */
+export function pageNumbers(doc: Document): number[] {
+  const pages = new Set(doc.fieldValues.map((fv) => fv.pageNumber || 1));
+  pages.add(1);
+  return [...pages].sort((a, b) => a - b);
 }
 
 @Injectable()
@@ -124,7 +138,12 @@ export class ExportService {
   async exportTest(
     templateId: string,
     tenantId: string,
-    values: { templateFieldId: string; value: string; entryIndex?: number }[],
+    values: {
+      templateFieldId: string;
+      value: string;
+      entryIndex?: number;
+      pageNumber?: number;
+    }[],
     languageId?: string,
   ): Promise<{ filePath: string; fileName: string; downloadName: string }> {
     const template = await this.templateRepository.findOne({
@@ -147,6 +166,7 @@ export class ExportService {
           templateField: field,
           value: v.value,
           entryIndex: field.groupKey ? (v.entryIndex ?? 0) : null,
+          pageNumber: v.pageNumber ?? 1,
         };
       });
     const doc = {
@@ -216,6 +236,10 @@ export class ExportService {
 
     const templateBuffer = readFileSync(doc.template.wordFilePath);
     const zip = new PizZip(templateBuffer);
+    // One copy of the template per page (see word-pages.ts); a one-page
+    // document renders the template as it is.
+    const pages = pageNumbers(doc);
+    if (pages.length > 1) wrapInPages(zip);
     const docx = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
@@ -224,17 +248,40 @@ export class ExportService {
       nullGetter: () => '',
     });
 
-    // Fixed fields by key; each group as an array of rows for {#group}…{/group}.
-    // A group field used outside a loop (templates written before loops were
-    // supported) gets the first entry's value.
-    const { fixed, groups } = collectFieldValues(doc);
-    const data: Record<string, string | GroupRow[]> = Object.fromEntries(fixed);
-    for (const [group, rows] of groups) {
-      data[group] = rows;
-      for (const [key, value] of Object.entries(rows[0] ?? {})) {
-        if (!(key in data)) data[key] = value;
+    const groupKeys = [
+      ...new Set(
+        (doc.template.fields ?? [])
+          .map((f) => f.groupKey)
+          .filter((g): g is string => !!g),
+      ),
+    ];
+    // Row numbers ({no}) continue across pages, as on the original.
+    const numbered = new Map<string, number>();
+    const pageData = (page: number, index: number) => {
+      const { fixed, groups } = collectFieldValues(doc, page);
+      // Empty values are left out, so a later page falls back to page 1's.
+      const data: Record<string, string | boolean | GroupRow[]> =
+        Object.fromEntries([...fixed].filter(([, v]) => v !== ''));
+      for (const group of groupKeys) {
+        const rows = groups.get(group) ?? [];
+        const start = numbered.get(group) ?? 0;
+        numbered.set(group, start + rows.length);
+        data[group] = rows.map((r, i) => ({
+          ...r,
+          [ROW_NUMBER]: String(start + i + 1),
+        }));
+        // A group field used outside any loop (older templates): the first entry.
+        for (const [key, value] of Object.entries(rows[0] ?? {})) {
+          if (!(key in data)) data[key] = value;
+        }
       }
-    }
+      data.first = index === 0;
+      data.last = index === pages.length - 1;
+      return data;
+    };
+    const perPage = pages.map((p, i) => pageData(p, i));
+    const data =
+      pages.length > 1 ? { ...perPage[0], [PAGES_KEY]: perPage } : perPage[0];
 
     try {
       docx.render(data);
@@ -275,7 +322,8 @@ export class ExportService {
     const blocks = (doc.template.layoutJson as LayoutBlock[]) || [];
     // Render right-to-left when the job's target language is RTL (e.g. Arabic).
     const isRtl = doc.job?.targetLanguage?.direction === 'rtl';
-    const { fixed, groups, groupOf } = collectFieldValues(doc);
+    // Designer documents have one page.
+    const { fixed, groups, groupOf } = collectFieldValues(doc, 1);
     const labelOf = fieldLabelResolver(doc);
 
     const paragraphs: (Paragraph | Table)[] = [];

@@ -18,7 +18,8 @@ import { Input } from '@/components/ui/Field';
 export interface WordSpot { paragraphText: string; occurrence: number; start: number; end: number; text: string }
 export interface EditorField { fieldKey: string; groupKey: string | null; labels: { languageId: string; label: string }[] }
 
-interface RowInfo { spot: WordSpot; group: string | null }
+/** `similarBelow`: rows right below with the same cells and no fields — filled-in examples of this row. */
+interface RowInfo { spot: WordSpot; group: string | null; similarBelow: number }
 type Picked =
   | { kind: 'none' }
   | { kind: 'error'; message: string }
@@ -85,7 +86,13 @@ function rowInfo(root: HTMLElement, node: Node): RowInfo | null {
   const text = squash(p.textContent ?? '');
   // The repeat tags sit in the row's own cells, or in an earlier row of a multi-row repeat.
   const group = tr.classList.contains('ta-repeat') ? (tr.getAttribute('data-group') ?? null) : null;
-  return { spot: spotIn(root, p, 0, 1, text[0]), group };
+  // Mirrors similarRowsBelow() on the server.
+  let similarBelow = 0;
+  for (let n = tr.nextElementSibling; n instanceof HTMLTableRowElement; n = n.nextElementSibling) {
+    if (n.cells.length !== tr.cells.length || /[{}]/.test(n.textContent ?? '')) break;
+    similarBelow++;
+  }
+  return { spot: spotIn(root, p, 0, 1, text[0]), group, similarBelow };
 }
 
 function chipPick(root: HTMLElement, chip: HTMLElement): Picked {
@@ -324,7 +331,11 @@ export function WordDocEditor({ templateId, fields, firstLanguageId, version, on
   const removeField = (spot: WordSpot, key: string) =>
     run('unmark', { spot, restore: originals.current.get(key) ?? '' });
 
-  const repeatRow = (row: RowInfo, name: string) => run('repeat', { spot: row.spot, groupKey: toFieldKey(name) });
+  const repeatRow = (row: RowInfo, name: string, removeBelow: number) =>
+    run('repeat', { spot: row.spot, groupKey: toFieldKey(name), ...(removeBelow ? { removeBelow } : {}) });
+  /** The selected text (in a repeating row) → {no}: 1, 2, 3… per entry. */
+  const markRowNumber = (spot: WordSpot) =>
+    run('mark', { spot, fieldKey: 'no' }, () => originals.current.set('no', spot.text));
   const stopRepeating = (row: RowInfo) => run('unrepeat', { spot: row.spot });
 
   const panelKey = picked.kind === 'none' || picked.kind === 'error' ? picked.kind : JSON.stringify(picked);
@@ -346,23 +357,26 @@ export function WordDocEditor({ templateId, fields, firstLanguageId, version, on
         onRemove={removeField}
         onRepeat={repeatRow}
         onStopRepeating={stopRepeating}
+        onRowNumber={markRowNumber}
       />
     </div>
   );
 }
 
-function ActionPanel({ picked, busy, fields, labelOf, onMake, onRemove, onRepeat, onStopRepeating }: {
+function ActionPanel({ picked, busy, fields, labelOf, onMake, onRemove, onRepeat, onStopRepeating, onRowNumber }: {
   picked: Picked;
   busy: boolean;
   fields: EditorField[];
   labelOf: (key: string) => string;
   onMake: (spot: WordSpot, name: string) => void;
   onRemove: (spot: WordSpot, key: string) => void;
-  onRepeat: (row: RowInfo, name: string) => void;
+  onRepeat: (row: RowInfo, name: string, removeBelow: number) => void;
   onStopRepeating: (row: RowInfo) => void;
+  onRowNumber: (spot: WordSpot) => void;
 }) {
   const [name, setName] = useState('');
   const [listName, setListName] = useState('');
+  const [removeExamples, setRemoveExamples] = useState(true);
   const row = picked.kind === 'text' || picked.kind === 'field' || picked.kind === 'row' ? picked.row : null;
 
   const submitField = (e: FormEvent) => {
@@ -371,7 +385,7 @@ function ActionPanel({ picked, busy, fields, labelOf, onMake, onRemove, onRepeat
   };
   const submitRow = (e: FormEvent) => {
     e.preventDefault();
-    if (row && listName.trim()) onRepeat(row, listName);
+    if (row && listName.trim()) onRepeat(row, listName, removeExamples ? row.similarBelow : 0);
   };
 
   return (
@@ -403,6 +417,13 @@ function ActionPanel({ picked, busy, fields, labelOf, onMake, onRemove, onRepeat
             {fields.map((f) => <option key={f.fieldKey} value={labelOf(f.fieldKey)} />)}
           </datalist>
           <Button type="submit" variant="primary" size="sm" disabled={busy || !name.trim()}>{busy ? 'Saving…' : 'Make a field'}</Button>
+          {picked.row?.group && (
+            <>
+              <span className="text-text-muted">or</span>
+              <Button size="sm" disabled={busy} onClick={() => onRowNumber(picked.spot)}
+                title="Numbers the entries 1, 2, 3… in the exported document">Row number</Button>
+            </>
+          )}
         </form>
       )}
 
@@ -425,6 +446,12 @@ function ActionPanel({ picked, busy, fields, labelOf, onMake, onRemove, onRepeat
               <span className="text-text-secondary">Repeat this table row for each entry of a list called</span>
               <Input aria-label="List name" className="w-44" placeholder="e.g. Children" value={listName} onChange={(e) => setListName(e.target.value)} maxLength={100} />
               <Button type="submit" size="sm" disabled={busy || !listName.trim()}>Repeat row</Button>
+              {row.similarBelow > 0 && (
+                <label className="flex items-center gap-2 basis-full text-text-secondary">
+                  <input type="checkbox" checked={removeExamples} onChange={(e) => setRemoveExamples(e.target.checked)} />
+                  Also remove the {row.similarBelow} row{row.similarBelow === 1 ? '' : 's'} below — {row.similarBelow === 1 ? 'it’s a filled-in example' : 'they’re filled-in examples'} of this one
+                </label>
+              )}
             </form>
           )}
         </div>

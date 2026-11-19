@@ -492,6 +492,11 @@ function WordStep({ tpl, firstLanguageId, onChanged, onBack, onNext }: {
             </li>
             <li>
               For a table row that repeats (one per child, for example), put <CopyCode text="{#children}" /> in its first cell and <CopyCode text="{/children}" /> in its last.
+              Keep one example row only. <CopyCode text="{no}" /> in that row numbers the entries 1, 2, 3…
+            </li>
+            <li>
+              Make the template <em>one page</em>. A document gets one page per page of the original (Page 1, Page 2… in the document form),
+              each with its own values — a seal number, its members. Anything only on the last page goes between <CopyCode text="{#last}" /> and <CopyCode text="{/last}" /> (or <CopyCode text="{#first}" /> … <CopyCode text="{/first}" />).
             </li>
             <li>Upload the file — the fields are picked up automatically, and you can still add more on the page.</li>
           </ol>

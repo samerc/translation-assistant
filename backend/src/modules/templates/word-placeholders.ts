@@ -4,8 +4,18 @@
  *   {#group_key} … {/group_key}   repeat the enclosed content once per entry of a
  *                          repeatable group (fields sharing that groupKey); works
  *                          around paragraphs and table rows
+ *   {no}                   inside a loop: the entry's number (1, 2, 3…) — built in, not a field
+ *   {#last} … {/last}      only on the document's last page ({#first} … {/first}:
+ *                          only on the first) — documents have one page per page of
+ *                          the original; the template is one page, repeated (word-pages.ts)
  * Groups don't nest — documents only have one level of repeatable entries.
  */
+
+/** Built-in placeholder: the entry's number inside a {#group} loop. */
+export const ROW_NUMBER = 'no';
+
+/** Built-in sections: shown only on the first / last page of the document. */
+export const PAGE_SECTIONS = ['first', 'last'];
 
 const NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -76,6 +86,7 @@ export function scanWordPlaceholders(text: string): PlaceholderScan {
     malformed: [],
   };
   let open: string | null = null;
+  let section: string | null = null;
   const tagRegex = /\{([^}]*)\}/g;
   let match: RegExpExecArray | null;
 
@@ -87,6 +98,25 @@ export function scanWordPlaceholders(text: string): PlaceholderScan {
 
     if (!NAME.test(name)) {
       scan.malformed.push({ text: raw, reason: reasonFor(name) });
+      continue;
+    }
+
+    if (kind && PAGE_SECTIONS.includes(name)) {
+      if (kind === '#') {
+        if (section || open)
+          scan.malformed.push({
+            text: raw,
+            reason: section
+              ? `Close {/${section}} first`
+              : `{#${name}} can't be inside a repeating row`,
+          });
+        else section = name;
+      } else if (section !== name) {
+        scan.malformed.push({
+          text: raw,
+          reason: `Closes {#${name}}, which isn't open`,
+        });
+      } else section = null;
       continue;
     }
 
@@ -111,12 +141,24 @@ export function scanWordPlaceholders(text: string): PlaceholderScan {
         continue;
       }
       open = null;
+    } else if (name === ROW_NUMBER) {
+      if (!open)
+        scan.malformed.push({
+          text: raw,
+          reason: 'The row number only works inside a repeating row',
+        });
     } else {
       if (!scan.fields.includes(name)) scan.fields.push(name);
       if (open && !scan.groupOf[name]) scan.groupOf[name] = open;
     }
   }
 
+  if (section) {
+    scan.malformed.push({
+      text: `{#${section}}`,
+      reason: `Never closed — add {/${section}}`,
+    });
+  }
   if (open) {
     scan.malformed.push({
       text: `{#${open}}`,
