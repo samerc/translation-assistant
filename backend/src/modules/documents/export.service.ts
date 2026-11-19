@@ -1,4 +1,5 @@
 import { ROW_NUMBER } from '../templates/word-placeholders.js';
+import { expandPerPageValues } from '../templates/word-pages.js';
 import {
   Injectable,
   NotFoundException,
@@ -217,6 +218,9 @@ export class ExportService {
 
     const templateBuffer = readFileSync(doc.template.wordFilePath);
     const zip = new PizZip(templateBuffer);
+    const { fixed, groups } = collectFieldValues(doc);
+    // Header/footer {#group}…{/group}: one entry per page (Word picks it by page number).
+    expandPerPageValues(zip, groups);
     const docx = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
@@ -228,10 +232,9 @@ export class ExportService {
     // Fixed fields by key; each group as an array of rows for {#group}…{/group}.
     // A group field used outside a loop (templates written before loops were
     // supported) gets the first entry's value.
-    const { fixed, groups } = collectFieldValues(doc);
     const data: Record<string, string | GroupRow[]> = Object.fromEntries(fixed);
     for (const [group, rows] of groups) {
-      // {row_number} inside the loop: the entry's number.
+      // {no} inside the loop: the entry's number.
       data[group] = rows.map((r, i) => ({ ...r, [ROW_NUMBER]: String(i + 1) }));
       for (const [key, value] of Object.entries(rows[0] ?? {})) {
         if (!(key in data)) data[key] = value;

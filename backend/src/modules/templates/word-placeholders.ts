@@ -4,12 +4,14 @@
  *   {#group_key} … {/group_key}   repeat the enclosed content once per entry of a
  *                          repeatable group (fields sharing that groupKey); works
  *                          around paragraphs and table rows
- *   {row_number}           inside a loop: the entry's number (1, 2, 3…) — built in, not a field
+ *   {no}                   inside a loop: the entry's number (1, 2, 3…) — built in, not a field
+ *   in a header/footer, {#pages}{seal_number}{/pages} = one entry per page
+ *                          (page 1 shows the first entry…), see word-pages.ts
  * Groups don't nest — documents only have one level of repeatable entries.
  */
 
 /** Built-in placeholder: the entry's number inside a {#group} loop. */
-export const ROW_NUMBER = 'row_number';
+export const ROW_NUMBER = 'no';
 
 const NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 

@@ -23,6 +23,7 @@ import {
   ROW_NUMBER,
   scanWordPlaceholders,
 } from './word-placeholders.js';
+import { wordTemplateText } from './word-text.js';
 import {
   markField,
   repeatRow,
@@ -261,16 +262,11 @@ export class TemplatesService {
         'The uploaded file is not a valid .docx document',
       );
     }
-    const result = await mammoth.convertToHtml({ buffer }).catch(() => {
+    const text = await wordTemplateText(buffer).catch(() => {
       throw new BadRequestException(
         'The uploaded file could not be read as a Word document',
       );
     });
-    const text = result.value
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&');
     const scan = scanWordPlaceholders(text);
 
     if (scan.malformed.length > 0) {
@@ -316,7 +312,7 @@ export class TemplatesService {
 
     const buffer = readFileSync(template.wordFilePath);
     const result = await mammoth.convertToHtml({ buffer });
-    const scan = scanWordPlaceholders(result.value.replace(/<[^>]*>/g, ''));
+    const scan = scanWordPlaceholders(await wordTemplateText(buffer));
     const foundValid = scan.fields;
     const malformed = [...scan.malformed];
 
@@ -376,11 +372,8 @@ export class TemplatesService {
       throw new BadRequestException('Not a Word template or no file uploaded');
     }
     // Fields that sit inside a {#group} loop in the file are created in that group.
-    const result = await mammoth.convertToHtml({
-      buffer: readFileSync(template.wordFilePath),
-    });
     const { groupOf } = scanWordPlaceholders(
-      result.value.replace(/<[^>]*>/g, ''),
+      await wordTemplateText(readFileSync(template.wordFilePath)),
     );
 
     // Fields already there but in the wrong (or no) group for the loop they
@@ -452,8 +445,7 @@ export class TemplatesService {
       }
       throw new BadRequestException('The Word file could not be edited.');
     }
-    const html = await mammoth.convertToHtml({ buffer: result.buffer });
-    const scan = scanWordPlaceholders(html.value.replace(/<[^>]*>/g, ''));
+    const scan = scanWordPlaceholders(await wordTemplateText(result.buffer));
     if (scan.malformed.length > 0) {
       throw new BadRequestException(
         `That would break the Word file: ${scan.malformed.map((m) => `${m.text} (${m.reason})`).join('; ')}`,
@@ -499,7 +491,7 @@ export class TemplatesService {
       buffer: markField(b, dto.spot, dto.fieldKey),
       extra: null,
     }));
-    // {row_number} is built in (the entry's number), not a field.
+    // {no} is built in (the entry's number), not a field.
     if (
       dto.fieldKey !== ROW_NUMBER &&
       !template.fields.some((f) => f.fieldKey === dto.fieldKey)

@@ -380,6 +380,8 @@ export default function DocumentFillPage() {
         {/* Grouped fields */}
         {Object.entries(groups).map(([groupKey, groupFields]) => {
           const entryCount = groupEntries[groupKey] || 1;
+          // "members" → "Member 1", "+ Add member"; "pages" (one per page) → "Page 1".
+          const one = singular(humanize(groupKey));
           return (
             <div key={groupKey} className="mb-6">
               <div className="flex items-center justify-between mb-3">
@@ -389,14 +391,14 @@ export default function DocumentFillPage() {
                 </div>
                 {!locked && (
                   <Button size="sm" onClick={() => addGroupEntry(groupKey)}>
-                    + Add Entry
+                    + Add {one.toLowerCase()}
                   </Button>
                 )}
               </div>
 
               {Array.from({ length: entryCount }, (_, entryIdx) => (
                 <div key={entryIdx} className="card p-6 mb-3">
-                  <div className="text-xs text-text-muted mb-3 font-medium">Entry {entryIdx + 1}</div>
+                  <div className="text-xs text-text-muted mb-3 font-medium">{one} {entryIdx + 1}</div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
                     {groupFields.map((field) => renderField(field, 1, entryIdx))}
                   </div>
@@ -528,4 +530,12 @@ function GTPopup({ sourceLanguage, targetLanguage, onCopy, onClose }: {
       </div>
     </div>
   );
+}
+
+/** "Members" → "Member", "Children" → "Child", "Pages" → "Page"; anything else as is. */
+function singular(label: string): string {
+  if (/children$/i.test(label)) return label.replace(/ren$/i, '');
+  if (/ies$/i.test(label)) return label.replace(/ies$/i, 'y');
+  if (/[^s]s$/i.test(label)) return label.slice(0, -1);
+  return label || 'Entry';
 }

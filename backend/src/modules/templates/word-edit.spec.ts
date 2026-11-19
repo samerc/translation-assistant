@@ -7,6 +7,7 @@ import {
   TableCell,
   TableRow,
   TextRun,
+  WidthType,
 } from 'docx';
 import {
   markField,
@@ -16,6 +17,12 @@ import {
   WordEditError,
 } from './word-edit.js';
 import { scanWordPlaceholders } from './word-placeholders.js';
+
+const narrow = (text: string) =>
+  new TableCell({
+    width: { size: 500, type: WidthType.DXA },
+    children: [new Paragraph({ children: [new TextRun(text)] })],
+  });
 
 const cell = (text: string) =>
   new TableCell({
@@ -180,8 +187,8 @@ describe('word-edit', () => {
           children: [
             new Table({
               rows: [
-                new TableRow({ children: [cell('No.'), cell('Name')] }),
-                new TableRow({ children: [cell('1'), cell('Bechara')] }),
+                new TableRow({ children: [narrow('No.'), cell('Name')] }),
+                new TableRow({ children: [narrow('1'), cell('Bechara')] }),
                 new TableRow({ children: [cell('2'), cell('Gladys')] }),
                 new TableRow({ children: [cell('3'), cell('Marc')] }),
                 new TableRow({ children: [cell('Total: 3 people')] }),
@@ -202,7 +209,12 @@ describe('word-edit', () => {
     expect(text).not.toContain('Gladys');
     expect(text).not.toContain('Marc');
     expect(text).toContain('Total: 3 people'); // a different row stays
-    buf = markField(buf, spot('{#members}1', '1'), 'row_number');
+    // {#members} opens the row, as hidden text (a narrow "No." column stays narrow).
+    expect(bodyText(buf)).toMatch(/\n\{#members\}1\n/);
+    expect(new PizZip(buf).file('word/document.xml')!.asText()).toMatch(
+      /<w:vanish\/>[\s\S]{0,200}\{#members\}/,
+    );
+    buf = markField(buf, spot('{#members}1', '1'), 'no');
     text = bodyText(buf);
     expect(scanWordPlaceholders(text).fields).toEqual(['member_name']);
 
@@ -213,8 +225,8 @@ describe('word-edit', () => {
     });
     t.render({
       members: [
-        { member_name: 'A', row_number: '1' },
-        { member_name: 'B', row_number: '2' },
+        { member_name: 'A', no: '1' },
+        { member_name: 'B', no: '2' },
       ],
     });
     const filled = bodyText(t.getZip().generate({ type: 'nodebuffer' }));

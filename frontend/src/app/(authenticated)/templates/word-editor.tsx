@@ -333,9 +333,9 @@ export function WordDocEditor({ templateId, fields, firstLanguageId, version, on
 
   const repeatRow = (row: RowInfo, name: string, removeBelow: number) =>
     run('repeat', { spot: row.spot, groupKey: toFieldKey(name), ...(removeBelow ? { removeBelow } : {}) });
-  /** The selected text (in a repeating row) → {row_number}: 1, 2, 3… per entry. */
+  /** The selected text (in a repeating row) → {no}: 1, 2, 3… per entry. */
   const markRowNumber = (spot: WordSpot) =>
-    run('mark', { spot, fieldKey: 'row_number' }, () => originals.current.set('row_number', spot.text));
+    run('mark', { spot, fieldKey: 'no' }, () => originals.current.set('no', spot.text));
   const stopRepeating = (row: RowInfo) => run('unrepeat', { spot: row.spot });
 
   const panelKey = picked.kind === 'none' || picked.kind === 'error' ? picked.kind : JSON.stringify(picked);

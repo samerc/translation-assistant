@@ -93,13 +93,11 @@ describe('double braces', () => {
     expect(malformed[0].reason).toMatch(/single braces: \{full_name\}/);
   });
 
-  it('treats {row_number} as built in, only inside a loop', () => {
-    const inLoop = scanWordPlaceholders(
-      '{#members}{row_number} {name}{/members}',
-    );
+  it('treats {no} as built in, only inside a loop', () => {
+    const inLoop = scanWordPlaceholders('{#members}{no} {name}{/members}');
     expect(inLoop.fields).toEqual(['name']);
     expect(inLoop.malformed).toEqual([]);
-    expect(scanWordPlaceholders('{row_number}').malformed[0]?.reason).toMatch(
+    expect(scanWordPlaceholders('{no}').malformed[0]?.reason).toMatch(
       /repeating row/,
     );
   });

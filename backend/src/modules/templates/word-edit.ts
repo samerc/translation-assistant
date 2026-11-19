@@ -237,6 +237,48 @@ function tagRun(doc: XmlDocument, p: Element, text: string): Element {
   return r;
 }
 
+const VANISH_BEFORE = [
+  'webHidden',
+  'color',
+  'spacing',
+  'w',
+  'kern',
+  'position',
+  'sz',
+  'szCs',
+  'highlight',
+  'u',
+  'effect',
+  'bdr',
+  'shd',
+  'fitText',
+  'vertAlign',
+  'rtl',
+  'cs',
+  'em',
+  'lang',
+  'eastAsianLayout',
+  'specVanish',
+  'oMath',
+];
+
+/** Word's hidden text: the run takes no room on the page (the loop tags). */
+function hidden(doc: XmlDocument, r: Element): Element {
+  let rPr = Array.from(r.childNodes).find((n): n is Element => isW(n, 'rPr'));
+  if (!rPr) {
+    rPr = doc.createElementNS(W, 'w:rPr');
+    r.insertBefore(rPr, r.firstChild);
+  }
+  if (!Array.from(rPr.childNodes).some((n) => isW(n, 'vanish'))) {
+    // Word wants rPr children in schema order: vanish goes before these.
+    const later = Array.from(rPr.childNodes).find((n) =>
+      VANISH_BEFORE.some((name) => isW(n, name)),
+    );
+    rPr.insertBefore(doc.createElementNS(W, 'w:vanish'), later ?? null);
+  }
+  return r;
+}
+
 const cellsOf = (row: Element) =>
   Array.from(row.childNodes).filter((n): n is Element => isW(n, 'tc'));
 
@@ -277,16 +319,18 @@ export function repeatRow(
     for (const r of below.slice(0, removeBelow)) r.parentNode?.removeChild(r);
   }
   const cells = cellsOf(row);
+  // {#group} must open the row (Word repeats the row from there); it's hidden
+  // text so a narrow "No." column stays narrow.
   const firstP = cells.length ? list(cells[0], 'p')[0] : undefined;
   const lastCellPs = cells.length ? list(cells[cells.length - 1], 'p') : [];
   const lastP = lastCellPs[lastCellPs.length - 1];
   if (!firstP || !lastP)
     throw new WordEditError('This row has no cells to repeat.');
 
-  const open = tagRun(doc, firstP, `{#${group}}`);
+  const open = hidden(doc, tagRun(doc, firstP, `{#${group}}`));
   const pPr = Array.from(firstP.childNodes).find((n) => isW(n, 'pPr'));
   firstP.insertBefore(open, pPr ? pPr.nextSibling : firstP.firstChild);
-  lastP.appendChild(tagRun(doc, lastP, `{/${group}}`));
+  lastP.appendChild(hidden(doc, tagRun(doc, lastP, `{/${group}}`)));
   return save(zip, doc);
 }
 
