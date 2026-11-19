@@ -20,6 +20,7 @@ import sanitizeHtml from 'sanitize-html';
 import { sniffType } from '../../common/utils/file-signature.js';
 import {
   noPlaceholdersMessage,
+  ROW_NUMBER,
   scanWordPlaceholders,
 } from './word-placeholders.js';
 import {
@@ -498,7 +499,11 @@ export class TemplatesService {
       buffer: markField(b, dto.spot, dto.fieldKey),
       extra: null,
     }));
-    if (!template.fields.some((f) => f.fieldKey === dto.fieldKey)) {
+    // {row_number} is built in (the entry's number), not a field.
+    if (
+      dto.fieldKey !== ROW_NUMBER &&
+      !template.fields.some((f) => f.fieldKey === dto.fieldKey)
+    ) {
       const label = dto.label?.trim();
       await this.addField(
         id,
@@ -542,11 +547,11 @@ export class TemplatesService {
   /** Make the table row at `spot` repeat once per entry of `groupKey`. */
   async repeatWordRow(
     id: string,
-    dto: { spot: WordSpot; groupKey: string },
+    dto: { spot: WordSpot; groupKey: string; removeBelow?: number },
     tenantId: string,
   ): Promise<Template> {
     const { template, scan } = await this.editWordFile(id, tenantId, (b) => ({
-      buffer: repeatRow(b, dto.spot, dto.groupKey),
+      buffer: repeatRow(b, dto.spot, dto.groupKey, dto.removeBelow ?? 0),
       extra: null,
     }));
     await this.syncGroups(template, scan.groupOf);

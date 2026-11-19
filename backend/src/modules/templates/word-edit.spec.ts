@@ -172,4 +172,52 @@ describe('word-edit', () => {
     expect(group).toBe('children');
     expect(scanWordPlaceholders(bodyText(buffer)).groups).toEqual([]);
   });
+
+  it('removes the filled-in example rows below a repeating row, and numbers the rows', async () => {
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Table({
+              rows: [
+                new TableRow({ children: [cell('No.'), cell('Name')] }),
+                new TableRow({ children: [cell('1'), cell('Bechara')] }),
+                new TableRow({ children: [cell('2'), cell('Gladys')] }),
+                new TableRow({ children: [cell('3'), cell('Marc')] }),
+                new TableRow({ children: [cell('Total: 3 people')] }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+    let buf = await Packer.toBuffer(doc);
+    buf = markField(buf, spot('Bechara', 'Bechara'), 'member_name');
+    // The page counted 2 example rows; it can't ask for more than are there.
+    expect(() =>
+      repeatRow(buf, spot('{member_name}', '{member_name}'), 'members', 3),
+    ).toThrow(/reload/);
+    buf = repeatRow(buf, spot('{member_name}', '{member_name}'), 'members', 2);
+    let text = bodyText(buf);
+    expect(text).not.toContain('Gladys');
+    expect(text).not.toContain('Marc');
+    expect(text).toContain('Total: 3 people'); // a different row stays
+    buf = markField(buf, spot('{#members}1', '1'), 'row_number');
+    text = bodyText(buf);
+    expect(scanWordPlaceholders(text).fields).toEqual(['member_name']);
+
+    const Docxtemplater = (await import('docxtemplater')).default;
+    const t = new Docxtemplater(new PizZip(buf), {
+      paragraphLoop: true,
+      delimiters: { start: '{', end: '}' },
+    });
+    t.render({
+      members: [
+        { member_name: 'A', row_number: '1' },
+        { member_name: 'B', row_number: '2' },
+      ],
+    });
+    const filled = bodyText(t.getZip().generate({ type: 'nodebuffer' }));
+    expect(filled).toMatch(/1\s*A[\s\S]*2\s*B/);
+  });
 });

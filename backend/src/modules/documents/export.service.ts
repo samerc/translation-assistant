@@ -1,3 +1,4 @@
+import { ROW_NUMBER } from '../templates/word-placeholders.js';
 import {
   Injectable,
   NotFoundException,
@@ -230,7 +231,8 @@ export class ExportService {
     const { fixed, groups } = collectFieldValues(doc);
     const data: Record<string, string | GroupRow[]> = Object.fromEntries(fixed);
     for (const [group, rows] of groups) {
-      data[group] = rows;
+      // {row_number} inside the loop: the entry's number.
+      data[group] = rows.map((r, i) => ({ ...r, [ROW_NUMBER]: String(i + 1) }));
       for (const [key, value] of Object.entries(rows[0] ?? {})) {
         if (!(key in data)) data[key] = value;
       }

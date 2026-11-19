@@ -237,19 +237,46 @@ function tagRun(doc: XmlDocument, p: Element, text: string): Element {
   return r;
 }
 
-/** Make a table row repeat once per entry of `group`: {#group} in its first cell, {/group} in its last. */
+const cellsOf = (row: Element) =>
+  Array.from(row.childNodes).filter((n): n is Element => isW(n, 'tc'));
+
+/** The rows right below `row` in its table with the same cells — filled-in examples of it. */
+function similarRowsBelow(row: Element): Element[] {
+  const width = cellsOf(row).length;
+  const out: Element[] = [];
+  for (let n = row.nextSibling; n; n = n.nextSibling) {
+    if (!isW(n, 'tr')) continue;
+    if (cellsOf(n).length !== width || /[{}]/.test(rowText(n))) break;
+    out.push(n);
+  }
+  return out;
+}
+
+/**
+ * Make a table row repeat once per entry of `group`: {#group} in its first
+ * cell, {/group} in its last. `removeBelow` = how many example rows right
+ * below it to delete (the page counted them; a different count → 409).
+ */
 export function repeatRow(
   buffer: Buffer,
   spot: WordSpot,
   group: string,
+  removeBelow = 0,
 ): Buffer {
   const { zip, doc } = load(buffer);
   const row = rowOf(doc, spot);
   if (/\{[#/]/.test(rowText(row)))
     throw new WordEditError('This row already repeats.');
-  const cells = Array.from(row.childNodes).filter((n): n is Element =>
-    isW(n, 'tc'),
-  );
+  if (removeBelow > 0) {
+    const below = similarRowsBelow(row);
+    if (below.length < removeBelow)
+      throw new WordEditError(
+        'The rows below don’t match the page any more — reload and try again.',
+        true,
+      );
+    for (const r of below.slice(0, removeBelow)) r.parentNode?.removeChild(r);
+  }
+  const cells = cellsOf(row);
   const firstP = cells.length ? list(cells[0], 'p')[0] : undefined;
   const lastCellPs = cells.length ? list(cells[cells.length - 1], 'p') : [];
   const lastP = lastCellPs[lastCellPs.length - 1];

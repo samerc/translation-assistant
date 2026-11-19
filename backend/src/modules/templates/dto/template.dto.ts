@@ -240,6 +240,12 @@ export class RepeatWordRowDto {
   @MaxLength(100)
   @Matches(FIELD_KEY_PATTERN)
   groupKey: string;
+  /** Example rows right below to delete (same cells; counted on the page). */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(500)
+  removeBelow?: number;
 }
 
 export class UnrepeatWordRowDto {
